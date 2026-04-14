@@ -203,7 +203,7 @@ makes Jan 2025 and Jan 2026 indistinguishable.
 
 ---
 
-## Step 10 — Handle terminal resize events
+## Step 10 — Handle terminal resize events ✅
 
 **Why:** On resize, the display may lag by up to 250ms (the tick interval).
 Handling `Event::Resize` forces an immediate redraw.

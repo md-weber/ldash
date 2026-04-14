@@ -99,7 +99,11 @@ fn run(terminal: &mut Terminal<CrosstermBackend<io::Stdout>>, journal_path: Path
 
         let timeout = tick.saturating_sub(last_tick.elapsed());
         if event::poll(timeout)? {
-            if let Event::Key(key) = event::read()? {
+            let ev = event::read()?;
+            if matches!(ev, Event::Resize(_, _)) {
+                continue;
+            }
+            if let Event::Key(key) = ev {
                 if key.kind == KeyEventKind::Press {
                     if app.show_help {
                         match key.code {
