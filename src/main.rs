@@ -114,7 +114,15 @@ fn run(terminal: &mut Terminal<CrosstermBackend<io::Stdout>>, journal_path: Path
                         }
                     } else {
                         match key.code {
-                            KeyCode::Char('q') | KeyCode::Esc => break,
+                            KeyCode::Char('q') => break,
+                            KeyCode::Esc => {
+                                if app.account_detail.is_some() {
+                                    app.close_account_detail();
+                                } else {
+                                    break;
+                                }
+                            }
+                            KeyCode::Enter => app.open_account_detail(),
                             KeyCode::Char('?') => app.show_help = true,
                             KeyCode::Tab => app.next_tab(),
                             KeyCode::BackTab => app.prev_tab(),

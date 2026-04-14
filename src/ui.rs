@@ -97,9 +97,11 @@ fn render_help_popup(f: &mut Frame, area: Rect) {
         ("Tab / Shift-Tab", "Next / prev tab"),
         ("↑ k / ↓ j", "Scroll / select"),
         ("← h / → l", "Month navigation"),
+        ("Enter", "Drill into account"),
+        ("Esc", "Back / quit"),
         ("r", "Refresh data"),
         ("?", "Toggle this help"),
-        ("q / Esc", "Quit / close help"),
+        ("q", "Quit"),
     ];
 
     let mut lines = vec![Line::from("")];
@@ -477,7 +479,7 @@ fn render_accounts(f: &mut Frame, app: &App, area: Rect) {
     let chunks = Layout::vertical([
         Constraint::Percentage(40), // net worth chart
         Constraint::Length(3),      // net worth number
-        Constraint::Min(0),         // accounts table
+        Constraint::Min(0),         // accounts table or detail
     ])
     .split(area);
 
@@ -497,21 +499,74 @@ fn render_accounts(f: &mut Frame, app: &App, area: Rect) {
         .border_style(Style::default().fg(MUTED));
     f.render_widget(Paragraph::new(nw_text).block(nw_block), chunks[1]);
 
-    let table_area = chunks[2];
+    if let (Some(txns), Some(name)) = (&app.account_detail, &app.detail_account_name) {
+        render_account_detail(f, txns, name, chunks[2]);
+    } else {
+        render_accounts_table(f, app, chunks[2]);
+    }
+}
 
+fn render_account_detail(f: &mut Frame, txns: &[crate::data::Transaction], name: &str, area: Rect) {
+    let rows: Vec<Row> = txns
+        .iter()
+        .map(|t| {
+            let amt_color = if t.amount >= 0.0 { GREEN } else { RED };
+            Row::new(vec![
+                Cell::from(t.date.format("%Y-%m-%d").to_string()).style(Style::default().fg(MUTED)),
+                Cell::from(t.description.clone()).style(Style::default().fg(FG)),
+                Cell::from(format!("{:>10.2} €", t.amount)).style(Style::default().fg(amt_color)),
+                Cell::from(format!("{:>10.2} €", t.running_total))
+                    .style(Style::default().fg(ACCENT)),
+            ])
+        })
+        .collect();
+
+    let widths = [
+        Constraint::Length(12),
+        Constraint::Min(24),
+        Constraint::Length(14),
+        Constraint::Length(14),
+    ];
+
+    let title = format!(" {} — Recent Transactions  [Esc back] ", name);
+    let table = Table::new(rows, widths)
+        .header(
+            Row::new(vec!["Date", "Description", "Amount", "Balance"])
+                .style(Style::default().fg(MUTED).bold())
+                .bottom_margin(1),
+        )
+        .block(
+            Block::default()
+                .title(Span::styled(title, Style::default().fg(GOLD).bold()))
+                .borders(Borders::ALL)
+                .border_type(BorderType::Rounded)
+                .border_style(Style::default().fg(ACCENT)),
+        );
+
+    f.render_widget(table, area);
+}
+
+fn render_accounts_table(f: &mut Frame, app: &App, area: Rect) {
     let max_amount = app
         .account_balances
         .iter()
         .map(|b| b.amount.abs())
         .fold(0.0_f64, f64::max);
 
-    let bar_width = (table_area.width as f64 * 0.2) as usize;
+    let bar_width = (area.width as f64 * 0.2) as usize;
 
     let rows: Vec<Row> = app
         .account_balances
         .iter()
+        .enumerate()
         .skip(app.account_scroll)
-        .map(|b| {
+        .map(|(i, b)| {
+            let selected = i == app.account_scroll;
+            let name_style = if selected {
+                Style::default().fg(GOLD).bold()
+            } else {
+                Style::default().fg(FG)
+            };
             let amount_style = if b.amount >= 0.0 {
                 Style::default().fg(GREEN)
             } else {
@@ -527,15 +582,17 @@ fn render_accounts(f: &mut Frame, app: &App, area: Rect) {
             };
             let bar = "█".repeat(bar_len);
 
+            let indicator = if selected { "▶ " } else { "  " };
+
             Row::new(vec![
-                Cell::from(b.account.clone()).style(Style::default().fg(FG)),
+                Cell::from(format!("{indicator}{}", b.account)).style(name_style),
                 Cell::from(amount_str).style(amount_style),
                 Cell::from(bar).style(Style::default().fg(Color::Rgb(0, 130, 130))),
             ])
         })
         .collect();
 
-    let widths = [Constraint::Min(36), Constraint::Length(16), Constraint::Min(10)];
+    let widths = [Constraint::Min(38), Constraint::Length(16), Constraint::Min(10)];
 
     let table = Table::new(rows, widths)
         .header(
@@ -546,7 +603,7 @@ fn render_accounts(f: &mut Frame, app: &App, area: Rect) {
         .block(
             Block::default()
                 .title(Span::styled(
-                    " Asset Balances ",
+                    " Asset Balances  [Enter drill-down] ",
                     Style::default().fg(ACCENT).bold(),
                 ))
                 .borders(Borders::ALL)
@@ -554,7 +611,7 @@ fn render_accounts(f: &mut Frame, app: &App, area: Rect) {
                 .border_style(Style::default().fg(MUTED)),
         );
 
-    f.render_widget(table, table_area);
+    f.render_widget(table, area);
 }
 
 // ── Monthly tab ───────────────────────────────────────────────────────────────

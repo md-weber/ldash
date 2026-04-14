@@ -400,6 +400,66 @@ pub fn load_net_worth_history(journal_path: &Path) -> Result<NetWorthSeries> {
     Ok(NetWorthSeries { points, labels })
 }
 
+#[derive(Debug, Clone)]
+pub struct Transaction {
+    pub date: NaiveDate,
+    pub description: String,
+    pub amount: f64,
+    pub running_total: f64,
+}
+
+pub fn load_recent_transactions(
+    journal_path: &Path,
+    account: &str,
+    n: usize,
+) -> Result<Vec<Transaction>> {
+    let output = Command::new("hledger")
+        .args([
+            "-f",
+            journal_path.to_str().unwrap_or("all.journal"),
+            "register",
+            account,
+            "-O",
+            "csv",
+        ])
+        .output()
+        .context("Failed to run hledger register")?;
+
+    let text = String::from_utf8_lossy(&output.stdout);
+    let mut rdr = csv::ReaderBuilder::new().from_reader(text.as_bytes());
+
+    let mut txns = Vec::new();
+    for row in rdr.records() {
+        let fields = match row {
+            Ok(r) => r,
+            Err(_) => continue,
+        };
+        if fields.len() < 6 {
+            continue;
+        }
+
+        let date = match NaiveDate::parse_from_str(fields[1].trim(), "%Y-%m-%d") {
+            Ok(d) => d,
+            Err(_) => continue,
+        };
+        let description = fields[2].trim().to_string();
+        let amount = parse_amount_str(fields[5].trim())
+            .map(|(a, _)| a)
+            .unwrap_or(0.0);
+        let running_total = parse_amount_str(fields[6].trim())
+            .map(|(a, _)| a)
+            .unwrap_or(0.0);
+
+        txns.push(Transaction { date, description, amount, running_total });
+    }
+
+    if txns.len() > n {
+        txns = txns.split_off(txns.len() - n);
+    }
+
+    Ok(txns)
+}
+
 pub fn compute_portfolio(
     crypto_balances: &[AccountBalance],
     latest_prices: &HashMap<String, f64>,

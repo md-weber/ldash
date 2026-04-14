@@ -6,8 +6,8 @@ use std::path::PathBuf;
 use crate::data::{
     compute_portfolio, latest_prices, load_account_balances_eur, load_coin_chart_series,
     load_crypto_balances, load_monthly_data, load_net_worth_history, load_price_history,
-    AccountBalance, CoinChartSeries, CryptoHolding, MonthlyData, NetWorthSeries, PriceEntry,
-    SingleMonth,
+    load_recent_transactions, AccountBalance, CoinChartSeries, CryptoHolding, MonthlyData,
+    NetWorthSeries, PriceEntry, SingleMonth, Transaction,
 };
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -55,6 +55,8 @@ pub struct App {
     pub selected_holding: usize,
     pub account_scroll: usize,
     pub expense_scroll: usize,
+    pub account_detail: Option<Vec<Transaction>>,
+    pub detail_account_name: Option<String>,
     pub status_msg: String,
     pub loading: bool,
     pub show_help: bool,
@@ -81,6 +83,8 @@ impl App {
             selected_holding: 0,
             account_scroll: 0,
             expense_scroll: 0,
+            account_detail: None,
+            detail_account_name: None,
             status_msg: "Loading data…".to_string(),
             loading: true,
             show_help: false,
@@ -279,5 +283,28 @@ impl App {
         {
             self.monthly.selected += 1;
         }
+    }
+
+    pub fn open_account_detail(&mut self) {
+        if self.tab != Tab::Accounts || self.account_detail.is_some() {
+            return;
+        }
+        if let Some(b) = self.account_balances.get(self.account_scroll) {
+            let account = b.account.clone();
+            match load_recent_transactions(&self.journal_path, &account, 30) {
+                Ok(txns) => {
+                    self.detail_account_name = Some(account);
+                    self.account_detail = Some(txns);
+                }
+                Err(e) => {
+                    self.status_msg = format!("Error loading transactions: {e}");
+                }
+            }
+        }
+    }
+
+    pub fn close_account_detail(&mut self) {
+        self.account_detail = None;
+        self.detail_account_name = None;
     }
 }
