@@ -89,12 +89,17 @@ fn main() -> Result<()> {
 }
 
 fn run(terminal: &mut Terminal<CrosstermBackend<io::Stdout>>, journal_path: PathBuf) -> Result<()> {
-    let mut app = App::new(journal_path).context("Failed to load data")?;
+    let mut app = App::new(journal_path).context("Failed to initialize app")?;
+
+    terminal.draw(|f| ui::render(f, &mut app))?;
+    app.start_refresh();
 
     let tick = Duration::from_millis(250);
     let mut last_tick = Instant::now();
 
     loop {
+        app.check_refresh();
+
         terminal.draw(|f| ui::render(f, &mut app))?;
 
         let timeout = tick.saturating_sub(last_tick.elapsed());
@@ -142,11 +147,7 @@ fn run(terminal: &mut Terminal<CrosstermBackend<io::Stdout>>, journal_path: Path
                                 _ => {}
                             },
                             KeyCode::Char('c') => app.expense_colors = !app.expense_colors,
-                            KeyCode::Char('r') => {
-                                if let Err(e) = app.refresh() {
-                                    app.status_msg = format!("Refresh error: {e}");
-                                }
-                            }
+                            KeyCode::Char('r') => app.start_refresh(),
                             _ => {}
                         }
                     }
@@ -159,15 +160,7 @@ fn run(terminal: &mut Terminal<CrosstermBackend<io::Stdout>>, journal_path: Path
         }
 
         if app.last_refresh.elapsed() >= Duration::from_secs(300) {
-            match app.refresh() {
-                Ok(()) => {
-                    let now = chrono::Local::now().format("%H:%M:%S");
-                    app.status_msg = format!("Auto-refreshed at {now}");
-                }
-                Err(e) => {
-                    app.status_msg = format!("Auto-refresh error: {e}");
-                }
-            }
+            app.start_refresh();
         }
     }
 

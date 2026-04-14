@@ -89,6 +89,10 @@ pub fn render(f: &mut Frame, app: &mut App) {
     render_content(f, app, layout[2]);
     render_status(f, app, layout[3]);
 
+    if app.loading {
+        render_loading_overlay(f, area);
+    }
+
     if app.show_help {
         render_help_popup(f, area);
     }
@@ -140,6 +144,29 @@ fn render_content(f: &mut Frame, app: &mut App, area: Rect) {
 }
 
 // ── Status bar ────────────────────────────────────────────────────────────────
+
+fn render_loading_overlay(f: &mut Frame, area: Rect) {
+    let w = 26u16.min(area.width.saturating_sub(4));
+    let h = 3u16.min(area.height.saturating_sub(4));
+    let popup = Rect {
+        x: area.x + (area.width.saturating_sub(w)) / 2,
+        y: area.y + (area.height.saturating_sub(h)) / 2,
+        width: w,
+        height: h,
+    };
+    f.render_widget(Clear, popup);
+    let block = Block::default()
+        .borders(Borders::ALL)
+        .border_type(BorderType::Rounded)
+        .border_style(Style::default().fg(ACCENT));
+    let text = Paragraph::new(Line::from(vec![
+        Span::styled("⏳ ", Style::default().fg(GOLD)),
+        Span::styled("Loading data…", Style::default().fg(FG).bold()),
+    ]))
+    .alignment(Alignment::Center)
+    .block(block);
+    f.render_widget(text, popup);
+}
 
 fn render_help_popup(f: &mut Frame, area: Rect) {
     let w = 44u16.min(area.width.saturating_sub(4));

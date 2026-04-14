@@ -2,7 +2,8 @@ use anyhow::Result;
 use chrono::Local;
 use ratatui::widgets::TableState;
 use std::collections::HashMap;
-use std::path::PathBuf;
+use std::path::{Path, PathBuf};
+use std::sync::mpsc;
 use std::time::Instant;
 
 use crate::data::{
@@ -11,6 +12,112 @@ use crate::data::{
     load_price_history, load_recent_transactions, AccountBalance, CoinChartSeries, CryptoHolding,
     MonthlyData, NetWorthSeries, PriceEntry, SingleMonth, Transaction,
 };
+
+pub struct RefreshResult {
+    pub price_history: Vec<PriceEntry>,
+    pub latest_prices: HashMap<String, f64>,
+    pub holdings: Vec<CryptoHolding>,
+    pub coin_chart_cache: HashMap<String, CoinChartSeries>,
+    pub account_balances: Vec<AccountBalance>,
+    pub net_worth_history: NetWorthSeries,
+    pub monthly: MonthlyData,
+    pub last_year: MonthlyData,
+    pub errors: Vec<String>,
+}
+
+fn load_all_data(journal_path: &Path, journal_dir: &Path, nw_period: &str) -> RefreshResult {
+    let mut errors = Vec::new();
+
+    let price_history = load_price_history(journal_dir);
+    let lp = latest_prices(&price_history);
+
+    let (crypto_res, accounts_res, nw_res, monthly_res, ly_res) = std::thread::scope(|s| {
+        let t_crypto = s.spawn(|| load_crypto_balances(journal_path));
+        let t_accounts = s.spawn(|| load_account_balances_eur(journal_path));
+        let t_nw = s.spawn(|| load_net_worth_history(journal_path, nw_period));
+        let t_monthly = s.spawn(|| load_monthly_data(journal_path));
+        let t_ly = s.spawn(|| load_last_year_monthly(journal_path));
+        (
+            t_crypto.join().unwrap(),
+            t_accounts.join().unwrap(),
+            t_nw.join().unwrap(),
+            t_monthly.join().unwrap(),
+            t_ly.join().unwrap(),
+        )
+    });
+
+    let holdings = match crypto_res {
+        Ok(balances) => compute_portfolio(&balances, &lp),
+        Err(e) => {
+            errors.push(format!("Error loading crypto balances: {e}"));
+            Vec::new()
+        }
+    };
+
+    let coin_chart_cache: HashMap<String, CoinChartSeries> = std::thread::scope(|s| {
+        let handles: Vec<_> = holdings
+            .iter()
+            .map(|h| {
+                let coin = h.commodity.clone();
+                let prices = &price_history;
+                s.spawn(move || {
+                    let series = load_coin_chart_series(journal_path, prices, &coin);
+                    (coin, series)
+                })
+            })
+            .collect();
+        handles.into_iter().map(|h| h.join().unwrap()).collect()
+    });
+
+    let mut account_balances = match accounts_res {
+        Ok(b) => b,
+        Err(e) => {
+            errors.push(format!("Error loading account balances: {e}"));
+            Vec::new()
+        }
+    };
+    account_balances.sort_by(|a, b| {
+        b.amount
+            .partial_cmp(&a.amount)
+            .unwrap_or(std::cmp::Ordering::Equal)
+    });
+
+    let net_worth_history = match nw_res {
+        Ok(s) => s,
+        Err(e) => {
+            errors.push(format!("Error loading net worth history: {e}"));
+            NetWorthSeries::default()
+        }
+    };
+
+    let monthly = match monthly_res {
+        Ok(m) => m,
+        Err(e) => {
+            errors.push(format!("Error loading monthly data: {e}"));
+            MonthlyData::default()
+        }
+    };
+
+    let last_year = match ly_res {
+        Ok(ly) => ly,
+        Err(e) => {
+            errors.push(format!("Error loading last year data: {e}"));
+            MonthlyData::default()
+        }
+    };
+
+    RefreshResult {
+        price_history,
+        latest_prices: lp,
+        holdings,
+        coin_chart_cache,
+        account_balances,
+        net_worth_history,
+        monthly,
+        last_year,
+        errors,
+    }
+}
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum Tab {
@@ -112,6 +219,7 @@ pub struct App {
     pub loading: bool,
     pub show_help: bool,
     pub last_refresh: Instant,
+    refresh_rx: Option<mpsc::Receiver<RefreshResult>>,
 }
 
 impl App {
@@ -121,7 +229,7 @@ impl App {
             .unwrap_or(std::path::Path::new("."))
             .to_path_buf();
 
-        let mut app = Self {
+        Ok(Self {
             journal_path,
             journal_dir,
             tab: Tab::Portfolio,
@@ -144,87 +252,62 @@ impl App {
             loading: true,
             show_help: false,
             last_refresh: Instant::now(),
-        };
-
-        app.refresh()?;
-        Ok(app)
+            refresh_rx: None,
+        })
     }
 
-    pub fn refresh(&mut self) -> Result<()> {
+    pub fn start_refresh(&mut self) {
+        if self.refresh_rx.is_some() {
+            return;
+        }
         self.loading = true;
         self.status_msg = "Refreshing…".to_string();
 
-        self.price_history = load_price_history(&self.journal_dir);
-        self.latest_prices = latest_prices(&self.price_history);
+        let jp = self.journal_path.clone();
+        let jd = self.journal_dir.clone();
+        let nw_period = self.nw_range.period_arg().to_string();
 
-        match load_crypto_balances(&self.journal_path) {
-            Ok(balances) => {
-                self.holdings = compute_portfolio(&balances, &self.latest_prices);
-            }
-            Err(e) => {
-                self.status_msg = format!("Error loading crypto balances: {e}");
-            }
-        }
+        let (tx, rx) = mpsc::channel();
+        self.refresh_rx = Some(rx);
 
-        self.coin_chart_cache.clear();
-        for holding in &self.holdings {
-            let series =
-                load_coin_chart_series(&self.journal_path, &self.price_history, &holding.commodity);
-            self.coin_chart_cache
-                .insert(holding.commodity.clone(), series);
-        }
+        std::thread::spawn(move || {
+            let result = load_all_data(&jp, &jd, &nw_period);
+            let _ = tx.send(result);
+        });
+    }
 
-        match load_account_balances_eur(&self.journal_path) {
-            Ok(mut balances) => {
-                balances.sort_by(|a, b| {
-                    b.amount
-                        .partial_cmp(&a.amount)
-                        .unwrap_or(std::cmp::Ordering::Equal)
-                });
-                self.account_balances = balances;
-            }
-            Err(e) => {
-                self.status_msg = format!("Error loading account balances: {e}");
-            }
-        }
+    pub fn check_refresh(&mut self) -> bool {
+        let result = match self.refresh_rx.as_ref().and_then(|rx| rx.try_recv().ok()) {
+            Some(r) => r,
+            None => return false,
+        };
+        self.refresh_rx = None;
+        self.apply_refresh(result);
+        true
+    }
 
-        match load_net_worth_history(&self.journal_path, self.nw_range.period_arg()) {
-            Ok(series) => {
-                self.net_worth_history = series;
-            }
-            Err(e) => {
-                self.status_msg = format!("Error loading net worth history: {e}");
-            }
-        }
+    fn apply_refresh(&mut self, r: RefreshResult) {
+        self.price_history = r.price_history;
+        self.latest_prices = r.latest_prices;
+        self.holdings = r.holdings;
+        self.coin_chart_cache = r.coin_chart_cache;
+        self.account_balances = r.account_balances;
+        self.net_worth_history = r.net_worth_history;
+        self.monthly = r.monthly;
+        self.last_year = r.last_year;
 
-        match load_monthly_data(&self.journal_path) {
-            Ok(monthly) => {
-                self.monthly = monthly;
-            }
-            Err(e) => {
-                self.status_msg = format!("Error loading monthly data: {e}");
-            }
-        }
-
-        match load_last_year_monthly(&self.journal_path) {
-            Ok(ly) => {
-                self.last_year = ly;
-            }
-            Err(e) => {
-                self.status_msg = format!("Error loading last year data: {e}");
-            }
-        }
-
-        // Clamp selections
         if !self.holdings.is_empty() && self.selected_holding >= self.holdings.len() {
             self.selected_holding = self.holdings.len() - 1;
         }
 
         self.last_refresh = Instant::now();
-        let now = Local::now().format("%H:%M:%S");
-        self.status_msg = format!("Updated at {now}");
+        if r.errors.is_empty() {
+            let now = Local::now().format("%H:%M:%S");
+            self.status_msg = format!("Updated at {now}");
+        } else {
+            self.status_msg = r.errors.last().unwrap().clone();
+        }
         self.loading = false;
-        Ok(())
     }
 
     pub fn next_tab(&mut self) {
