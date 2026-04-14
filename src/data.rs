@@ -434,7 +434,7 @@ pub fn load_recent_transactions(
             Ok(r) => r,
             Err(_) => continue,
         };
-        if fields.len() < 6 {
+        if fields.len() < 7 {
             continue;
         }
 
@@ -442,7 +442,7 @@ pub fn load_recent_transactions(
             Ok(d) => d,
             Err(_) => continue,
         };
-        let description = fields[2].trim().to_string();
+        let description = fields[3].trim().to_string();
         let amount = parse_amount_str(fields[5].trim())
             .map(|(a, _)| a)
             .unwrap_or(0.0);
