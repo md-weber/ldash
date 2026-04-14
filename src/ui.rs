@@ -129,11 +129,18 @@ fn render_holdings_table(f: &mut Frame, app: &App, area: Rect) {
 
             let indicator = if selected { "▶ " } else { "  " };
 
+            let pct = if total > 0.0 {
+                format!("{:.1}%", h.value_eur / total * 100.0)
+            } else {
+                "—".into()
+            };
+
             Row::new(vec![
                 Cell::from(format!("{indicator}{}", h.commodity)).style(coin_style),
                 Cell::from(amt_str).style(Style::default().fg(if selected { GOLD } else { MUTED })),
                 Cell::from(price_str).style(Style::default().fg(ACCENT)),
                 Cell::from(value_str).style(Style::default().fg(GREEN)),
+                Cell::from(pct).style(Style::default().fg(FG)),
             ])
         })
         .collect();
@@ -145,6 +152,7 @@ fn render_holdings_table(f: &mut Frame, app: &App, area: Rect) {
             Cell::from(""),
             Cell::from("Total").style(Style::default().fg(FG).bold()),
             Cell::from(format!("{:.2} €", total)).style(Style::default().fg(GOLD).bold()),
+            Cell::from("100%").style(Style::default().fg(FG).bold()),
         ])
         .height(1),
     );
@@ -153,12 +161,13 @@ fn render_holdings_table(f: &mut Frame, app: &App, area: Rect) {
         Constraint::Length(8),
         Constraint::Length(10),
         Constraint::Length(11),
-        Constraint::Min(10),
+        Constraint::Length(12),
+        Constraint::Length(7),
     ];
 
     let table = Table::new(rows, widths)
         .header(
-            Row::new(vec!["Coin", "Amount", "Price", "Value"])
+            Row::new(vec!["Coin", "Amount", "Price", "Value", "Alloc"])
                 .style(Style::default().fg(MUTED).bold())
                 .bottom_margin(1),
         )

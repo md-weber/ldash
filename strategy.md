@@ -44,7 +44,7 @@ the alternate screen.
 
 ---
 
-## Step 3 — Portfolio allocation % column
+## Step 3 — Portfolio allocation % column ✅
 
 **Why:** Quick win. The holdings table already shows EUR value per coin but
 not what fraction of the portfolio each coin represents. A `%` column makes
