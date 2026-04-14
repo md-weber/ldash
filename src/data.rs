@@ -164,31 +164,24 @@ pub fn load_account_balances_eur(journal_path: &Path) -> Result<Vec<AccountBalan
 
 fn parse_balance_csv(text: &str) -> Result<Vec<AccountBalance>> {
     let mut result = Vec::new();
+    let mut rdr = csv::ReaderBuilder::new().from_reader(text.as_bytes());
 
-    for line in text.lines().skip(1) {
-        let line = line.trim();
-        if line.is_empty() {
+    for row in rdr.records() {
+        let row = match row {
+            Ok(r) => r,
+            Err(_) => continue,
+        };
+        if row.len() < 2 {
             continue;
         }
-
-        // Lines look like: "assets:crypto:exodus:SOL","4,40140000 SOL"
-        // Split on the `","` separator
-        if let Some(sep_pos) = line.find("\",\"") {
-            let account = line[1..sep_pos].to_string(); // strip leading "
-            let balance = &line[sep_pos + 3..line.len() - 1]; // strip trailing "
-
-            if balance == "0" {
-                continue;
-            }
-
-            if let Some((amount, commodity)) = parse_amount_str(balance) {
-                if amount.abs() > 1e-10 {
-                    result.push(AccountBalance {
-                        account,
-                        amount,
-                        commodity,
-                    });
-                }
+        let account = row[0].to_string();
+        let balance = row[1].trim();
+        if balance == "0" || balance.is_empty() {
+            continue;
+        }
+        if let Some((amount, commodity)) = parse_amount_str(balance) {
+            if amount.abs() > 1e-10 {
+                result.push(AccountBalance { account, amount, commodity });
             }
         }
     }
@@ -219,14 +212,11 @@ pub fn load_monthly_data(journal_path: &Path) -> Result<MonthlyData> {
 }
 
 fn parse_monthly_csv(text: &str, current_month: usize) -> Result<MonthlyData> {
-    let lines: Vec<&str> = text.lines().collect();
+    let mut rdr = csv::ReaderBuilder::new()
+        .flexible(true)
+        .from_reader(text.as_bytes());
 
-    // Determine how many month columns exist from the header row
-    let header_fields = lines
-        .iter()
-        .find(|l| parse_csv_line(l).first().map(|f| f.as_str()) == Some("Account"))
-        .map(|l| parse_csv_line(l));
-    let num_cols = header_fields.as_ref().map(|f| f.len()).unwrap_or(2);
+    let num_cols = rdr.headers().map(|h| h.len()).unwrap_or(2);
 
     let mut months_data: Vec<SingleMonth> = (1..num_cols)
         .map(|m| SingleMonth {
@@ -238,22 +228,19 @@ fn parse_monthly_csv(text: &str, current_month: usize) -> Result<MonthlyData> {
     let mut in_revenues = false;
     let mut in_expenses = false;
 
-    for line in &lines {
-        let line = line.trim();
-        if line.is_empty() {
-            continue;
-        }
-
-        let fields = parse_csv_line(line);
+    for row in rdr.records() {
+        let fields = match row {
+            Ok(r) => r,
+            Err(_) => continue,
+        };
         if fields.is_empty() {
             continue;
         }
 
-        let account = fields[0].clone();
+        let account = fields[0].to_string();
 
         match account.as_str() {
             a if a.starts_with("Monthly") => continue,
-            "Account" => continue,
             "Revenues" | "Revenue" => {
                 in_revenues = true;
                 in_expenses = false;
@@ -288,7 +275,6 @@ fn parse_monthly_csv(text: &str, current_month: usize) -> Result<MonthlyData> {
         }
     }
 
-    // Sort each month's entries and drop empty months
     let months: Vec<SingleMonth> = months_data
         .into_iter()
         .filter(|m| m.total_income > 0.0 || m.total_expenses > 0.0)
@@ -299,32 +285,12 @@ fn parse_monthly_csv(text: &str, current_month: usize) -> Result<MonthlyData> {
         })
         .collect();
 
-    // Default selection: current month if present, otherwise last available
     let selected = months
         .iter()
         .position(|m| m.month_name == month_name(current_month))
         .unwrap_or(months.len().saturating_sub(1));
 
     Ok(MonthlyData { months, selected })
-}
-
-fn parse_csv_line(line: &str) -> Vec<String> {
-    let mut fields = Vec::new();
-    let mut current = String::new();
-    let mut in_quotes = false;
-
-    for ch in line.chars() {
-        match ch {
-            '"' => in_quotes = !in_quotes,
-            ',' if !in_quotes => {
-                fields.push(current.clone());
-                current.clear();
-            }
-            _ => current.push(ch),
-        }
-    }
-    fields.push(current);
-    fields
 }
 
 fn month_name(m: usize) -> &'static str {
@@ -401,12 +367,14 @@ fn run_register(journal_path: &Path, args: &[&str]) -> Vec<(NaiveDate, f64, Stri
         Err(_) => return vec![],
     };
 
-    let text = String::from_utf8_lossy(&output.stdout);
     let mut result = Vec::new();
+    let mut rdr = csv::ReaderBuilder::new().from_reader(output.stdout.as_slice());
 
-    // CSV columns: txnidx, date, code, description, account, amount, total
-    for line in text.lines().skip(1) {
-        let fields = parse_csv_line(line);
+    for row in rdr.records() {
+        let fields = match row {
+            Ok(r) => r,
+            Err(_) => continue,
+        };
         if fields.len() < 6 {
             continue;
         }
@@ -416,7 +384,7 @@ fn run_register(journal_path: &Path, args: &[&str]) -> Vec<(NaiveDate, f64, Stri
             Err(_) => continue,
         };
 
-        let amount_str = fields[5].trim().trim_matches('"');
+        let amount_str = fields[5].trim();
         if amount_str.is_empty() || amount_str == "0" {
             continue;
         }
