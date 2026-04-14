@@ -53,8 +53,17 @@ fn find_journal() -> Result<PathBuf> {
     )
 }
 
+fn check_hledger() -> Result<()> {
+    std::process::Command::new("hledger")
+        .arg("--version")
+        .output()
+        .context("hledger not found in PATH. Install it from https://hledger.org")?;
+    Ok(())
+}
+
 fn main() -> Result<()> {
     let journal_path = find_journal().context("Journal file lookup failed")?;
+    check_hledger()?;
 
     enable_raw_mode()?;
 

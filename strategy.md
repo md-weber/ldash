@@ -5,7 +5,7 @@ Each step is self-contained: the app compiles and works after every step.
 
 ---
 
-## Step 1 — Panic hook (safety net)
+## Step 1 — Panic hook (safety net) ✅
 
 **Why:** If anything panics today, the terminal is left in raw mode (no echo,
 no cursor). The user has to blindly type `reset`. This is the single most
@@ -25,7 +25,7 @@ later won't brick the terminal.
 
 ---
 
-## Step 2 — hledger availability check
+## Step 2 — hledger availability check ✅
 
 **Why:** If `hledger` is not in `$PATH`, the app currently starts, enters raw
 mode, and then every `Command::new("hledger")` silently fails or returns an
