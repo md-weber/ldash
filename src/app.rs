@@ -57,6 +57,7 @@ pub struct App {
     pub expense_scroll: usize,
     pub account_detail: Option<Vec<Transaction>>,
     pub detail_account_name: Option<String>,
+    pub expense_colors: bool,
     pub status_msg: String,
     pub loading: bool,
     pub show_help: bool,
@@ -85,6 +86,7 @@ impl App {
             expense_scroll: 0,
             account_detail: None,
             detail_account_name: None,
+            expense_colors: true,
             status_msg: "Loading data…".to_string(),
             loading: true,
             show_help: false,
@@ -112,12 +114,10 @@ impl App {
 
         self.coin_chart_cache.clear();
         for holding in &self.holdings {
-            let series = load_coin_chart_series(
-                &self.journal_path,
-                &self.price_history,
-                &holding.commodity,
-            );
-            self.coin_chart_cache.insert(holding.commodity.clone(), series);
+            let series =
+                load_coin_chart_series(&self.journal_path, &self.price_history, &holding.commodity);
+            self.coin_chart_cache
+                .insert(holding.commodity.clone(), series);
         }
 
         match load_account_balances_eur(&self.journal_path) {
@@ -208,10 +208,7 @@ impl App {
                 }
             }
             Tab::Monthly => {
-                let len = self
-                    .current_month()
-                    .map(|m| m.expenses.len())
-                    .unwrap_or(0);
+                let len = self.current_month().map(|m| m.expenses.len()).unwrap_or(0);
                 if self.expense_scroll + 1 < len {
                     self.expense_scroll += 1;
                 }
@@ -220,7 +217,9 @@ impl App {
     }
 
     pub fn selected_coin(&self) -> Option<&str> {
-        self.holdings.get(self.selected_holding).map(|h| h.commodity.as_str())
+        self.holdings
+            .get(self.selected_holding)
+            .map(|h| h.commodity.as_str())
     }
 
     pub fn total_portfolio_value(&self) -> f64 {

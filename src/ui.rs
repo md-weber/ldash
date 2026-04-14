@@ -10,6 +10,26 @@ const GOLD: Color = Color::Yellow;
 const MUTED: Color = Color::DarkGray;
 const FG: Color = Color::White;
 
+fn expense_color(category: &str) -> Color {
+    let cat = category.to_lowercase();
+    let top = cat.split(':').next().unwrap_or(&cat);
+    match top {
+        "wohnen" | "housing" | "hauskauf" => Color::Blue,
+        "essen" | "food" | "groceries" | "restaurant" => GOLD,
+        "transport" | "car" | "fuel" => Color::Magenta,
+        "gesundheit" | "health" | "hygiene" => Color::LightCyan,
+        "versicherung" | "insurance" => Color::LightBlue,
+        "kommunikation" | "telecom" | "haushalt" => Color::Rgb(180, 140, 255),
+        "freizeit" | "entertainment" | "urlaub" => Color::LightGreen,
+        "kleider" | "kinder" | "shopping" | "clothing" => Color::Rgb(255, 150, 80),
+        "fortbildung" | "education" | "books" => Color::Cyan,
+        "steuer" | "tax" | "fees" | "crypto" => Color::Rgb(200, 200, 100),
+        "abos" | "amazon" => Color::Rgb(255, 120, 200),
+        "spende" | "schenkung" => Color::Rgb(150, 220, 180),
+        _ => FG,
+    }
+}
+
 // ── Entry point ───────────────────────────────────────────────────────────────
 
 pub fn render(f: &mut Frame, app: &App) {
@@ -98,6 +118,7 @@ fn render_help_popup(f: &mut Frame, area: Rect) {
         ("↑ k / ↓ j", "Scroll / select"),
         ("← h / → l", "Month navigation"),
         ("Enter", "Drill into account"),
+        ("c", "Toggle expense colors"),
         ("Esc", "Back / quit"),
         ("r", "Refresh data"),
         ("?", "Toggle this help"),
@@ -861,13 +882,14 @@ fn render_monthly_expenses(f: &mut Frame, app: &App, area: Rect) {
         .skip(app.expense_scroll)
         .map(|(name, amount)| {
             let short = name.strip_prefix("expenses:").unwrap_or(name);
+            let color = if app.expense_colors { expense_color(short) } else { FG };
             let bar_len = ((amount / max_val) * bar_width as f64) as usize;
             let bar = "█".repeat(bar_len.min(bar_width));
 
             Row::new(vec![
-                Cell::from(short.to_string()).style(Style::default().fg(FG)),
+                Cell::from(short.to_string()).style(Style::default().fg(color)),
                 Cell::from(format!("{:.2} €", amount)).style(Style::default().fg(RED)),
-                Cell::from(bar).style(Style::default().fg(Color::Rgb(180, 50, 50))),
+                Cell::from(bar).style(Style::default().fg(if app.expense_colors { color } else { Color::Rgb(180, 50, 50) })),
             ])
         })
         .collect();

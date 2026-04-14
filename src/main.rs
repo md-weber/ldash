@@ -133,6 +133,7 @@ fn run(terminal: &mut Terminal<CrosstermBackend<io::Stdout>>, journal_path: Path
                             KeyCode::Down | KeyCode::Char('j') => app.scroll_down(),
                             KeyCode::Left | KeyCode::Char('h') => app.month_left(),
                             KeyCode::Right | KeyCode::Char('l') => app.month_right(),
+                            KeyCode::Char('c') => app.expense_colors = !app.expense_colors,
                             KeyCode::Char('r') => {
                                 if let Err(e) = app.refresh() {
                                     app.status_msg = format!("Refresh error: {e}");
