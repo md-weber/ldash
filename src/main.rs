@@ -131,8 +131,16 @@ fn run(terminal: &mut Terminal<CrosstermBackend<io::Stdout>>, journal_path: Path
                             KeyCode::Char('3') => app.select_tab(2),
                             KeyCode::Up | KeyCode::Char('k') => app.scroll_up(),
                             KeyCode::Down | KeyCode::Char('j') => app.scroll_down(),
-                            KeyCode::Left | KeyCode::Char('h') => app.month_left(),
-                            KeyCode::Right | KeyCode::Char('l') => app.month_right(),
+                            KeyCode::Left | KeyCode::Char('h') => match app.tab {
+                                app::Tab::Accounts => app.nw_range_left(),
+                                app::Tab::Monthly => app.month_left(),
+                                _ => {}
+                            },
+                            KeyCode::Right | KeyCode::Char('l') => match app.tab {
+                                app::Tab::Accounts => app.nw_range_right(),
+                                app::Tab::Monthly => app.month_right(),
+                                _ => {}
+                            },
                             KeyCode::Char('c') => app.expense_colors = !app.expense_colors,
                             KeyCode::Char('r') => {
                                 if let Err(e) = app.refresh() {

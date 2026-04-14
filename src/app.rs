@@ -32,6 +32,52 @@ impl Tab {
     }
 }
 
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum NetWorthRange {
+    Year1,
+    Year2,
+    Year5,
+    All,
+}
+
+impl NetWorthRange {
+    pub fn period_arg(self) -> &'static str {
+        match self {
+            Self::Year1 => "monthly from 1 year ago",
+            Self::Year2 => "monthly from 2 years ago",
+            Self::Year5 => "monthly from 5 years ago",
+            Self::All => "monthly",
+        }
+    }
+
+    pub fn label(self) -> &'static str {
+        match self {
+            Self::Year1 => "1Y",
+            Self::Year2 => "2Y",
+            Self::Year5 => "5Y",
+            Self::All => "All",
+        }
+    }
+
+    pub fn next(self) -> Self {
+        match self {
+            Self::Year1 => Self::Year2,
+            Self::Year2 => Self::Year5,
+            Self::Year5 => Self::All,
+            Self::All => Self::All,
+        }
+    }
+
+    pub fn prev(self) -> Self {
+        match self {
+            Self::Year1 => Self::Year1,
+            Self::Year2 => Self::Year1,
+            Self::Year5 => Self::Year2,
+            Self::All => Self::Year5,
+        }
+    }
+}
+
 #[derive(Debug, Default)]
 pub struct YtdStats {
     pub total_income: f64,
@@ -53,6 +99,7 @@ pub struct App {
     pub coin_chart_cache: HashMap<String, CoinChartSeries>,
     pub account_balances: Vec<AccountBalance>,
     pub net_worth_history: NetWorthSeries,
+    pub nw_range: NetWorthRange,
     pub monthly: MonthlyData,
     pub selected_holding: usize,
     pub account_state: TableState,
@@ -83,6 +130,7 @@ impl App {
             coin_chart_cache: HashMap::new(),
             account_balances: Vec::new(),
             net_worth_history: NetWorthSeries::default(),
+            nw_range: NetWorthRange::Year2,
             monthly: MonthlyData::default(),
             selected_holding: 0,
             account_state: TableState::default().with_selected(0),
@@ -138,7 +186,7 @@ impl App {
             }
         }
 
-        match load_net_worth_history(&self.journal_path) {
+        match load_net_worth_history(&self.journal_path, self.nw_range.period_arg()) {
             Ok(series) => {
                 self.net_worth_history = series;
             }
@@ -310,6 +358,29 @@ impl App {
         if !self.monthly.months.is_empty() && self.monthly.selected + 1 < self.monthly.months.len()
         {
             self.monthly.selected += 1;
+        }
+    }
+
+    pub fn nw_range_left(&mut self) {
+        let prev = self.nw_range.prev();
+        if prev != self.nw_range {
+            self.nw_range = prev;
+            self.reload_net_worth();
+        }
+    }
+
+    pub fn nw_range_right(&mut self) {
+        let next = self.nw_range.next();
+        if next != self.nw_range {
+            self.nw_range = next;
+            self.reload_net_worth();
+        }
+    }
+
+    fn reload_net_worth(&mut self) {
+        match load_net_worth_history(&self.journal_path, self.nw_range.period_arg()) {
+            Ok(series) => self.net_worth_history = series,
+            Err(e) => self.status_msg = format!("Error loading net worth: {e}"),
         }
     }
 

@@ -178,7 +178,7 @@ line fixes this.
 
 ---
 
-## Step 8 — Scrollable accounts table (proper TableState)
+## Step 8 — Scrollable accounts table (proper TableState) ✅
 
 **Why:** The current account_scroll is manual offset with `.skip()`. This
 means no visual highlight of which row is selected, and no scroll indicator.
@@ -199,7 +199,7 @@ for the drill-down in Step 4.
 
 ---
 
-## Step 9 — Configurable date range for net worth chart
+## Step 9 — Configurable date range for net worth chart ✅
 
 **Why:** Step 1 hardcodes `"from 2024"`. Users with longer histories want to
 see more. Users who started recently don't want empty space. Let `←`/`→`

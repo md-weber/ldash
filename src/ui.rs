@@ -116,7 +116,7 @@ fn render_help_popup(f: &mut Frame, area: Rect) {
         ("1 / 2 / 3", "Switch tab"),
         ("Tab / Shift-Tab", "Next / prev tab"),
         ("↑ k / ↓ j", "Scroll / select"),
-        ("← h / → l", "Month navigation"),
+        ("← h / → l", "Month nav / NW range"),
         ("Enter", "Drill into account"),
         ("c", "Toggle expense colors"),
         ("Esc", "Back / quit"),
@@ -147,7 +147,7 @@ fn render_help_popup(f: &mut Frame, area: Rect) {
 }
 
 fn render_status(f: &mut Frame, app: &App, area: Rect) {
-    let help = "  [1-3] tab  [↑↓/jk] navigate  [←→/hl] month  [r] refresh  [?] help  [q] quit";
+    let help = "  [1-3] tab  [↑↓/jk] navigate  [←→/hl] month/range  [r] refresh  [?] help  [q] quit";
     let text = Line::from(vec![
         Span::styled(&app.status_msg, Style::default().fg(ACCENT)),
         Span::styled(help, Style::default().fg(MUTED)),
@@ -437,9 +437,10 @@ fn render_price_chart(f: &mut Frame, app: &App, area: Rect) {
 // ── Accounts tab ──────────────────────────────────────────────────────────────
 
 fn render_net_worth_chart(f: &mut Frame, app: &App, area: Rect) {
+    let range_label = app.nw_range.label();
     let block = Block::default()
         .title(Span::styled(
-            " Net Worth History ",
+            format!(" Net Worth History [{range_label}]  ◀ ▶ "),
             Style::default().fg(GOLD).bold(),
         ))
         .borders(Borders::ALL)

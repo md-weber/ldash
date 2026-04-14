@@ -317,7 +317,7 @@ pub struct NetWorthSeries {
     pub labels: Vec<(NaiveDate, f64)>,
 }
 
-pub fn load_net_worth_history(journal_path: &Path) -> Result<NetWorthSeries> {
+pub fn load_net_worth_history(journal_path: &Path, period: &str) -> Result<NetWorthSeries> {
     let output = Command::new("hledger")
         .args([
             "-f",
@@ -326,7 +326,7 @@ pub fn load_net_worth_history(journal_path: &Path) -> Result<NetWorthSeries> {
             "assets",
             "-H",
             "-p",
-            "monthly from 2024",
+            period,
             "-O",
             "csv",
             "--layout",
