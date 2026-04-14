@@ -10,7 +10,7 @@ Each step is self-contained: the app compiles and works after every step.
 
 ---
 
-## Step 1 — Net worth history chart (Accounts tab)
+## Step 1 — Net worth history chart (Accounts tab) ✅
 
 **Why:** Net worth is the single most important number. Seeing it as a
 time series reveals whether you're on track. Currently it's a single number

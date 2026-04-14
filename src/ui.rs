@@ -401,8 +401,87 @@ fn render_price_chart(f: &mut Frame, app: &App, area: Rect) {
 
 // ── Accounts tab ──────────────────────────────────────────────────────────────
 
+fn render_net_worth_chart(f: &mut Frame, app: &App, area: Rect) {
+    let block = Block::default()
+        .title(Span::styled(
+            " Net Worth History ",
+            Style::default().fg(GOLD).bold(),
+        ))
+        .borders(Borders::ALL)
+        .border_type(BorderType::Rounded)
+        .border_style(Style::default().fg(MUTED));
+
+    let series = &app.net_worth_history;
+    if series.points.len() < 2 {
+        f.render_widget(
+            Paragraph::new(Span::styled("Not enough data", Style::default().fg(MUTED)))
+                .block(block)
+                .alignment(Alignment::Center),
+            area,
+        );
+        return;
+    }
+
+    let x_min = series.points.first().unwrap().0;
+    let x_max = series.points.last().unwrap().0;
+    let y_min_raw = series.points.iter().map(|p| p.1).fold(f64::INFINITY, f64::min);
+    let y_max_raw = series.points.iter().map(|p| p.1).fold(f64::NEG_INFINITY, f64::max);
+    let padding = ((y_max_raw - y_min_raw) * 0.08).max(100.0);
+    let y_min = y_min_raw - padding;
+    let y_max = y_max_raw + padding;
+
+    let label_count = if area.width < 60 { 3 } else { 5 };
+    let n = series.labels.len();
+    let x_labels: Vec<Span> = (0..label_count)
+        .map(|i| i * n.saturating_sub(1) / (label_count - 1).max(1))
+        .filter_map(|i| series.labels.get(i))
+        .map(|(d, _)| Span::styled(d.format("%b %y").to_string(), Style::default().fg(MUTED)))
+        .collect();
+
+    let y_labels: Vec<Span> = {
+        let step = (y_max - y_min) / 4.0;
+        (0..=4)
+            .map(|i| {
+                let v = y_min + step * i as f64;
+                Span::styled(format!("{:.0}€", v), Style::default().fg(MUTED))
+            })
+            .collect()
+    };
+
+    let dataset = Dataset::default()
+        .name("Net Worth")
+        .marker(symbols::Marker::Braille)
+        .graph_type(GraphType::Line)
+        .style(Style::default().fg(GOLD))
+        .data(&series.points);
+
+    let chart = Chart::new(vec![dataset])
+        .block(block)
+        .x_axis(
+            Axis::default()
+                .style(Style::default().fg(MUTED))
+                .bounds([x_min, x_max])
+                .labels(x_labels),
+        )
+        .y_axis(
+            Axis::default()
+                .style(Style::default().fg(MUTED))
+                .bounds([y_min, y_max])
+                .labels(y_labels),
+        );
+
+    f.render_widget(chart, area);
+}
+
 fn render_accounts(f: &mut Frame, app: &App, area: Rect) {
-    let chunks = Layout::vertical([Constraint::Length(3), Constraint::Min(0)]).split(area);
+    let chunks = Layout::vertical([
+        Constraint::Percentage(40), // net worth chart
+        Constraint::Length(3),      // net worth number
+        Constraint::Min(0),         // accounts table
+    ])
+    .split(area);
+
+    render_net_worth_chart(f, app, chunks[0]);
 
     let net_worth = app.total_net_worth();
     let nw_text = Line::from(vec![
@@ -416,9 +495,9 @@ fn render_accounts(f: &mut Frame, app: &App, area: Rect) {
         .borders(Borders::ALL)
         .border_type(BorderType::Rounded)
         .border_style(Style::default().fg(MUTED));
-    f.render_widget(Paragraph::new(nw_text).block(nw_block), chunks[0]);
+    f.render_widget(Paragraph::new(nw_text).block(nw_block), chunks[1]);
 
-    let table_area = chunks[1];
+    let table_area = chunks[2];
 
     let max_amount = app
         .account_balances

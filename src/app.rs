@@ -5,8 +5,9 @@ use std::path::PathBuf;
 
 use crate::data::{
     compute_portfolio, latest_prices, load_account_balances_eur, load_coin_chart_series,
-    load_crypto_balances, load_monthly_data, load_price_history, AccountBalance, CoinChartSeries,
-    CryptoHolding, MonthlyData, PriceEntry, SingleMonth,
+    load_crypto_balances, load_monthly_data, load_net_worth_history, load_price_history,
+    AccountBalance, CoinChartSeries, CryptoHolding, MonthlyData, NetWorthSeries, PriceEntry,
+    SingleMonth,
 };
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -38,6 +39,7 @@ pub struct App {
     pub holdings: Vec<CryptoHolding>,
     pub coin_chart_cache: HashMap<String, CoinChartSeries>,
     pub account_balances: Vec<AccountBalance>,
+    pub net_worth_history: NetWorthSeries,
     pub monthly: MonthlyData,
     pub selected_holding: usize,
     pub account_scroll: usize,
@@ -63,6 +65,7 @@ impl App {
             holdings: Vec::new(),
             coin_chart_cache: HashMap::new(),
             account_balances: Vec::new(),
+            net_worth_history: NetWorthSeries::default(),
             monthly: MonthlyData::default(),
             selected_holding: 0,
             account_scroll: 0,
@@ -113,6 +116,15 @@ impl App {
             }
             Err(e) => {
                 self.status_msg = format!("Error loading account balances: {e}");
+            }
+        }
+
+        match load_net_worth_history(&self.journal_path) {
+            Ok(series) => {
+                self.net_worth_history = series;
+            }
+            Err(e) => {
+                self.status_msg = format!("Error loading net worth history: {e}");
             }
         }
 

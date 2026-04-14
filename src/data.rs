@@ -311,6 +311,95 @@ fn month_name(m: usize) -> &'static str {
     }
 }
 
+#[derive(Debug, Clone, Default)]
+pub struct NetWorthSeries {
+    pub points: Vec<(f64, f64)>,
+    pub labels: Vec<(NaiveDate, f64)>,
+}
+
+pub fn load_net_worth_history(journal_path: &Path) -> Result<NetWorthSeries> {
+    let output = Command::new("hledger")
+        .args([
+            "-f",
+            journal_path.to_str().unwrap_or("all.journal"),
+            "balance",
+            "assets",
+            "-H",
+            "-p",
+            "monthly from 2024",
+            "-O",
+            "csv",
+            "--layout",
+            "bare",
+            "-V",
+            "--no-total",
+        ])
+        .output()
+        .context("Failed to run hledger balance for net worth history")?;
+
+    let text = String::from_utf8_lossy(&output.stdout);
+    let mut rdr = csv::ReaderBuilder::new()
+        .flexible(true)
+        .from_reader(text.as_bytes());
+
+    let headers = rdr.headers().context("No CSV headers")?.clone();
+    // --layout bare produces: "account", "commodity", "2024-01", "2024-02", …
+    let month_cols: Vec<(usize, NaiveDate)> = headers
+        .iter()
+        .enumerate()
+        .skip(1)
+        .filter_map(|(i, h)| {
+            NaiveDate::parse_from_str(&format!("{}-01", h.trim()), "%Y-%m-%d")
+                .ok()
+                .map(|d| (i, d))
+        })
+        .collect();
+
+    if month_cols.is_empty() {
+        return Ok(NetWorthSeries::default());
+    }
+
+    let mut sums: Vec<f64> = vec![0.0; month_cols.len()];
+
+    for row in rdr.records() {
+        let fields = match row {
+            Ok(r) => r,
+            Err(_) => continue,
+        };
+        // Column 1 is the commodity in bare layout — only sum EUR rows
+        let commodity = fields.get(1).unwrap_or("").trim().trim_matches('"');
+        if commodity != "€" {
+            continue;
+        }
+        for (idx, &(col, _)) in month_cols.iter().enumerate() {
+            if col >= fields.len() {
+                continue;
+            }
+            if let Some(amount) = parse_eu_number(&fields[col]) {
+                sums[idx] += amount;
+            }
+        }
+    }
+
+    let first_date = month_cols[0].1;
+    let points: Vec<(f64, f64)> = month_cols
+        .iter()
+        .enumerate()
+        .map(|(i, &(_, date))| {
+            let x = (date - first_date).num_days() as f64;
+            (x, sums[i])
+        })
+        .collect();
+
+    let labels: Vec<(NaiveDate, f64)> = month_cols
+        .iter()
+        .enumerate()
+        .map(|(i, &(_, date))| (date, sums[i]))
+        .collect();
+
+    Ok(NetWorthSeries { points, labels })
+}
+
 pub fn compute_portfolio(
     crypto_balances: &[AccountBalance],
     latest_prices: &HashMap<String, f64>,
