@@ -92,7 +92,7 @@ fn run(terminal: &mut Terminal<CrosstermBackend<io::Stdout>>, journal_path: Path
     let mut app = App::new(journal_path).context("Failed to initialize app")?;
 
     terminal.draw(|f| ui::render(f, &mut app))?;
-    app.start_refresh();
+    app.ensure_tab_loaded(app.tab);
 
     let tick = Duration::from_millis(250);
     let mut last_tick = Instant::now();
@@ -160,7 +160,7 @@ fn run(terminal: &mut Terminal<CrosstermBackend<io::Stdout>>, journal_path: Path
         }
 
         if app.last_refresh.elapsed() >= Duration::from_secs(300) {
-            app.start_refresh();
+            app.auto_refresh();
         }
     }
 

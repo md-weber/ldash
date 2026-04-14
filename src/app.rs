@@ -4,109 +4,118 @@ use ratatui::widgets::TableState;
 use std::collections::HashMap;
 use std::path::{Path, PathBuf};
 use std::sync::mpsc;
-use std::time::Instant;
+use std::time::{Instant, SystemTime};
 
 use crate::data::{
-    compute_portfolio, latest_prices, load_account_balances_eur, load_coin_chart_series,
+    compute_portfolio, latest_prices, load_account_balances_eur, load_all_coin_chart_series,
     load_crypto_balances, load_last_year_monthly, load_monthly_data, load_net_worth_history,
     load_price_history, load_recent_transactions, AccountBalance, CoinChartSeries, CryptoHolding,
     MonthlyData, NetWorthSeries, PriceEntry, SingleMonth, Transaction,
 };
 
 pub struct RefreshResult {
+    pub tabs: [bool; 3],
     pub price_history: Vec<PriceEntry>,
     pub latest_prices: HashMap<String, f64>,
-    pub holdings: Vec<CryptoHolding>,
-    pub coin_chart_cache: HashMap<String, CoinChartSeries>,
-    pub account_balances: Vec<AccountBalance>,
-    pub net_worth_history: NetWorthSeries,
-    pub monthly: MonthlyData,
-    pub last_year: MonthlyData,
+    pub holdings: Option<Vec<CryptoHolding>>,
+    pub coin_chart_cache: Option<HashMap<String, CoinChartSeries>>,
+    pub account_balances: Option<Vec<AccountBalance>>,
+    pub net_worth_history: Option<NetWorthSeries>,
+    pub monthly: Option<MonthlyData>,
+    pub last_year: Option<MonthlyData>,
     pub errors: Vec<String>,
 }
 
-fn load_all_data(journal_path: &Path, journal_dir: &Path, nw_period: &str) -> RefreshResult {
+fn load_all_data(
+    journal_path: &Path,
+    journal_dir: &Path,
+    nw_period: &str,
+    tabs: [bool; 3],
+) -> RefreshResult {
     let mut errors = Vec::new();
 
     let price_history = load_price_history(journal_dir);
     let lp = latest_prices(&price_history);
 
+    let want_portfolio = tabs[0];
+    let want_accounts = tabs[1];
+    let want_monthly = tabs[2];
+
     let (crypto_res, accounts_res, nw_res, monthly_res, ly_res) = std::thread::scope(|s| {
-        let t_crypto = s.spawn(|| load_crypto_balances(journal_path));
-        let t_accounts = s.spawn(|| load_account_balances_eur(journal_path));
-        let t_nw = s.spawn(|| load_net_worth_history(journal_path, nw_period));
-        let t_monthly = s.spawn(|| load_monthly_data(journal_path));
-        let t_ly = s.spawn(|| load_last_year_monthly(journal_path));
+        let t_crypto = want_portfolio
+            .then(|| s.spawn(|| load_crypto_balances(journal_path)));
+        let t_accounts = want_accounts
+            .then(|| s.spawn(|| load_account_balances_eur(journal_path)));
+        let t_nw = want_accounts
+            .then(|| s.spawn(|| load_net_worth_history(journal_path, nw_period)));
+        let t_monthly = want_monthly
+            .then(|| s.spawn(|| load_monthly_data(journal_path)));
+        let t_ly = want_monthly
+            .then(|| s.spawn(|| load_last_year_monthly(journal_path)));
         (
-            t_crypto.join().unwrap(),
-            t_accounts.join().unwrap(),
-            t_nw.join().unwrap(),
-            t_monthly.join().unwrap(),
-            t_ly.join().unwrap(),
+            t_crypto.map(|t| t.join().unwrap()),
+            t_accounts.map(|t| t.join().unwrap()),
+            t_nw.map(|t| t.join().unwrap()),
+            t_monthly.map(|t| t.join().unwrap()),
+            t_ly.map(|t| t.join().unwrap()),
         )
     });
 
-    let holdings = match crypto_res {
+    let holdings = crypto_res.map(|res| match res {
         Ok(balances) => compute_portfolio(&balances, &lp),
         Err(e) => {
             errors.push(format!("Error loading crypto balances: {e}"));
             Vec::new()
         }
-    };
-
-    let coin_chart_cache: HashMap<String, CoinChartSeries> = std::thread::scope(|s| {
-        let handles: Vec<_> = holdings
-            .iter()
-            .map(|h| {
-                let coin = h.commodity.clone();
-                let prices = &price_history;
-                s.spawn(move || {
-                    let series = load_coin_chart_series(journal_path, prices, &coin);
-                    (coin, series)
-                })
-            })
-            .collect();
-        handles.into_iter().map(|h| h.join().unwrap()).collect()
     });
 
-    let mut account_balances = match accounts_res {
-        Ok(b) => b,
-        Err(e) => {
-            errors.push(format!("Error loading account balances: {e}"));
-            Vec::new()
-        }
-    };
-    account_balances.sort_by(|a, b| {
-        b.amount
-            .partial_cmp(&a.amount)
-            .unwrap_or(std::cmp::Ordering::Equal)
+    let coin_chart_cache = holdings.as_ref().map(|h| {
+        let coins: Vec<String> = h.iter().map(|holding| holding.commodity.clone()).collect();
+        load_all_coin_chart_series(journal_path, &price_history, &coins)
     });
 
-    let net_worth_history = match nw_res {
+    let account_balances = accounts_res.map(|res| {
+        let mut balances = match res {
+            Ok(b) => b,
+            Err(e) => {
+                errors.push(format!("Error loading account balances: {e}"));
+                Vec::new()
+            }
+        };
+        balances.sort_by(|a, b| {
+            b.amount
+                .partial_cmp(&a.amount)
+                .unwrap_or(std::cmp::Ordering::Equal)
+        });
+        balances
+    });
+
+    let net_worth_history = nw_res.map(|res| match res {
         Ok(s) => s,
         Err(e) => {
             errors.push(format!("Error loading net worth history: {e}"));
             NetWorthSeries::default()
         }
-    };
+    });
 
-    let monthly = match monthly_res {
+    let monthly = monthly_res.map(|res| match res {
         Ok(m) => m,
         Err(e) => {
             errors.push(format!("Error loading monthly data: {e}"));
             MonthlyData::default()
         }
-    };
+    });
 
-    let last_year = match ly_res {
+    let last_year = ly_res.map(|res| match res {
         Ok(ly) => ly,
         Err(e) => {
             errors.push(format!("Error loading last year data: {e}"));
             MonthlyData::default()
         }
-    };
+    });
 
     RefreshResult {
+        tabs,
         price_history,
         latest_prices: lp,
         holdings,
@@ -219,7 +228,9 @@ pub struct App {
     pub loading: bool,
     pub show_help: bool,
     pub last_refresh: Instant,
+    pub tabs_loaded: [bool; 3],
     refresh_rx: Option<mpsc::Receiver<RefreshResult>>,
+    last_journal_mtime: Option<SystemTime>,
 }
 
 impl App {
@@ -252,11 +263,27 @@ impl App {
             loading: true,
             show_help: false,
             last_refresh: Instant::now(),
+            tabs_loaded: [false; 3],
             refresh_rx: None,
+            last_journal_mtime: None,
         })
     }
 
     pub fn start_refresh(&mut self) {
+        self.tabs_loaded = [false; 3];
+        self.start_refresh_tabs([true; 3]);
+    }
+
+    pub fn ensure_tab_loaded(&mut self, tab: Tab) {
+        if self.tabs_loaded[tab.index()] || self.refresh_rx.is_some() {
+            return;
+        }
+        let mut tabs = [false; 3];
+        tabs[tab.index()] = true;
+        self.start_refresh_tabs(tabs);
+    }
+
+    fn start_refresh_tabs(&mut self, tabs: [bool; 3]) {
         if self.refresh_rx.is_some() {
             return;
         }
@@ -271,7 +298,7 @@ impl App {
         self.refresh_rx = Some(rx);
 
         std::thread::spawn(move || {
-            let result = load_all_data(&jp, &jd, &nw_period);
+            let result = load_all_data(&jp, &jd, &nw_period, tabs);
             let _ = tx.send(result);
         });
     }
@@ -289,18 +316,40 @@ impl App {
     fn apply_refresh(&mut self, r: RefreshResult) {
         self.price_history = r.price_history;
         self.latest_prices = r.latest_prices;
-        self.holdings = r.holdings;
-        self.coin_chart_cache = r.coin_chart_cache;
-        self.account_balances = r.account_balances;
-        self.net_worth_history = r.net_worth_history;
-        self.monthly = r.monthly;
-        self.last_year = r.last_year;
+
+        if let Some(h) = r.holdings {
+            self.holdings = h;
+        }
+        if let Some(c) = r.coin_chart_cache {
+            self.coin_chart_cache = c;
+        }
+        if let Some(a) = r.account_balances {
+            self.account_balances = a;
+        }
+        if let Some(nw) = r.net_worth_history {
+            self.net_worth_history = nw;
+        }
+        if let Some(m) = r.monthly {
+            self.monthly = m;
+        }
+        if let Some(ly) = r.last_year {
+            self.last_year = ly;
+        }
 
         if !self.holdings.is_empty() && self.selected_holding >= self.holdings.len() {
             self.selected_holding = self.holdings.len() - 1;
         }
 
+        for (i, loaded) in r.tabs.iter().enumerate() {
+            if *loaded {
+                self.tabs_loaded[i] = true;
+            }
+        }
+
         self.last_refresh = Instant::now();
+        self.last_journal_mtime = std::fs::metadata(&self.journal_path)
+            .and_then(|m| m.modified())
+            .ok();
         if r.errors.is_empty() {
             let now = Local::now().format("%H:%M:%S");
             self.status_msg = format!("Updated at {now}");
@@ -310,21 +359,35 @@ impl App {
         self.loading = false;
     }
 
+    pub fn auto_refresh(&mut self) {
+        let current_mtime = std::fs::metadata(&self.journal_path)
+            .and_then(|m| m.modified())
+            .ok();
+        if current_mtime == self.last_journal_mtime {
+            self.last_refresh = Instant::now();
+            return;
+        }
+        self.start_refresh();
+    }
+
     pub fn next_tab(&mut self) {
         let tabs = Tab::all();
         let idx = (self.tab.index() + 1) % tabs.len();
         self.tab = tabs[idx];
+        self.ensure_tab_loaded(self.tab);
     }
 
     pub fn prev_tab(&mut self) {
         let tabs = Tab::all();
         let idx = (self.tab.index() + tabs.len() - 1) % tabs.len();
         self.tab = tabs[idx];
+        self.ensure_tab_loaded(self.tab);
     }
 
     pub fn select_tab(&mut self, idx: usize) {
         if let Some(&t) = Tab::all().get(idx) {
             self.tab = t;
+            self.ensure_tab_loaded(t);
         }
     }
 

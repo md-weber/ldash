@@ -518,9 +518,14 @@ impl CoinChartSeries {
     }
 }
 
-/// Run `hledger register <args…> -O csv` and return `(date, amount, commodity)`
-/// for every posting row. The commodity is parsed from the amount field.
-fn run_register(journal_path: &Path, args: &[&str]) -> Vec<(NaiveDate, f64, String)> {
+struct RegisterEntry {
+    date: NaiveDate,
+    amount: f64,
+    commodity: String,
+    account: String,
+}
+
+fn run_register_full(journal_path: &Path, args: &[&str]) -> Vec<RegisterEntry> {
     let output = Command::new("hledger")
         .arg("-f")
         .arg(journal_path.to_str().unwrap_or("all.journal"))
@@ -552,102 +557,142 @@ fn run_register(journal_path: &Path, args: &[&str]) -> Vec<(NaiveDate, f64, Stri
             Err(_) => continue,
         };
 
+        let account = fields[4].trim().to_string();
         let amount_str = fields[5].trim();
         if amount_str.is_empty() || amount_str == "0" {
             continue;
         }
 
         if let Some((amount, commodity)) = parse_amount_str(amount_str) {
-            result.push((date, amount, commodity));
+            result.push(RegisterEntry { date, amount, commodity, account });
         }
     }
 
     result
 }
 
-/// Build the three portfolio analysis series for one coin, aligned to the
-/// dates present in `price_history`.
+/// Build chart series for all coins in 3 bulk hledger calls instead of 3×N.
 ///
-/// How the three queries work together:
-///
-/// 1. `assets:crypto cur:SOL --cost`:  every SOL posting in the crypto asset
-///    accounts, with `@ price` amounts converted to their EUR cost. Only the
-///    EUR-denominated rows represent real purchases; SOL-denominated rows are
-///    transfers/staking movements with no cost annotation and are ignored.
-///
-/// 2. `assets:crypto cur:SOL`:  all SOL balance changes in asset accounts.
-///    Running sum = total SOL held at any date (purchases + staking + transfers,
-///    transfers net to zero so they cancel out).
-///
-/// 3. `income cur:SOL`:  queries the income accounts directly (not the asset
-///    accounts), so the AND semantics of hledger queries work in our favour.
-///    These amounts are negative (income credits); negating gives the SOL
-///    earned through staking.
-pub fn load_coin_chart_series(
+/// Three queries (run in parallel):
+/// 1. `register assets:crypto --cost` — all crypto postings with cost
+///    conversion. EUR rows = purchase cost basis. Account field maps to coin.
+/// 2. `register assets:crypto` — all crypto movements. Commodity = coin.
+/// 3. `register income` — all income. Non-EUR commodity rows = staking rewards.
+pub fn load_all_coin_chart_series(
     journal_path: &Path,
     price_history: &[PriceEntry],
-    coin: &str,
-) -> CoinChartSeries {
-    let coin_prices: Vec<&PriceEntry> =
-        price_history.iter().filter(|e| e.commodity == coin).collect();
-
-    if coin_prices.len() < 2 {
-        return CoinChartSeries::default();
-    }
-
-    let first_date = coin_prices[0].date;
-    let coin_filter = format!("cur:{coin}");
-
-    // EUR cost of purchases: SOL postings converted via @ annotation.
-    // Only rows whose commodity is EUR came from a real buy.
-    let cost_entries = run_register(journal_path, &["assets:crypto", &coin_filter, "--cost"]);
-
-    // All SOL movements in asset accounts.
-    let sol_entries = run_register(journal_path, &["assets:crypto", &coin_filter]);
-
-    // SOL credited to income accounts as staking rewards (negative amounts).
-    // We query the income account directly so the hledger AND query works.
-    let staking_entries = run_register(journal_path, &["income", &coin_filter]);
+    coins: &[String],
+) -> HashMap<String, CoinChartSeries> {
+    let (cost_entries, asset_entries, income_entries) = std::thread::scope(|s| {
+        let t_cost = s.spawn(|| run_register_full(journal_path, &["assets:crypto", "--cost"]));
+        let t_asset = s.spawn(|| run_register_full(journal_path, &["assets:crypto"]));
+        let t_income = s.spawn(|| run_register_full(journal_path, &["income"]));
+        (
+            t_cost.join().unwrap(),
+            t_asset.join().unwrap(),
+            t_income.join().unwrap(),
+        )
+    });
 
     let eur_commodities: &[&str] = &["€", "EUR", "eur"];
+    let coin_set: std::collections::HashSet<&str> = coins.iter().map(|s| s.as_str()).collect();
 
-    let mut investment = Vec::with_capacity(coin_prices.len());
-    let mut price_growth = Vec::with_capacity(coin_prices.len());
-    let mut staking_growth = Vec::with_capacity(coin_prices.len());
-
-    for entry in &coin_prices {
-        let date = entry.date;
-        let price = entry.price_eur;
-        let days = (date - first_date).num_days() as f64;
-
-        // Net EUR cost basis up to this date (buys positive, sells negative).
-        // Clamp to zero: if sells exceed buys, remaining holdings are pure profit.
-        let cost: f64 = cost_entries
-            .iter()
-            .filter(|(d, _, com)| *d <= date && eur_commodities.contains(&com.as_str()))
-            .map(|(_, amt, _)| amt)
-            .sum::<f64>()
-            .max(0.0);
-
-        let total_sol: f64 = sol_entries
-            .iter()
-            .filter(|(d, _, _)| *d <= date)
-            .map(|(_, amt, _)| amt)
-            .sum();
-
-        let staked_sol: f64 = staking_entries
-            .iter()
-            .filter(|(d, _, _)| *d <= date)
-            .map(|(_, amt, _)| -amt)
-            .sum::<f64>()
-            .max(0.0);
-
-        let bought_sol = (total_sol - staked_sol).max(0.0);
-
-        investment.push((days, cost));
-        price_growth.push((days, bought_sol * price - cost));
-        staking_growth.push((days, staked_sol * price));
+    // Account → coin mapping from asset entries (commodity IS the coin)
+    let mut account_to_coin: HashMap<&str, &str> = HashMap::new();
+    for e in &asset_entries {
+        if !eur_commodities.contains(&e.commodity.as_str()) && coin_set.contains(e.commodity.as_str())
+        {
+            account_to_coin.entry(&e.account).or_insert(&e.commodity);
+        }
     }
 
-    CoinChartSeries { investment, price_growth, staking_growth }
+    // Group cost entries by coin (EUR rows only, mapped via account)
+    let mut cost_by_coin: HashMap<&str, Vec<(NaiveDate, f64)>> = HashMap::new();
+    for e in &cost_entries {
+        if eur_commodities.contains(&e.commodity.as_str()) {
+            if let Some(&coin) = account_to_coin.get(e.account.as_str()) {
+                cost_by_coin.entry(coin).or_default().push((e.date, e.amount));
+            }
+        }
+    }
+
+    // Group asset movements by coin (native commodity only)
+    let mut asset_by_coin: HashMap<&str, Vec<(NaiveDate, f64)>> = HashMap::new();
+    for e in &asset_entries {
+        if coin_set.contains(e.commodity.as_str()) {
+            asset_by_coin
+                .entry(&e.commodity)
+                .or_default()
+                .push((e.date, e.amount));
+        }
+    }
+
+    // Group staking income by coin (non-EUR commodity)
+    let mut income_by_coin: HashMap<&str, Vec<(NaiveDate, f64)>> = HashMap::new();
+    for e in &income_entries {
+        if coin_set.contains(e.commodity.as_str()) {
+            income_by_coin
+                .entry(&e.commodity)
+                .or_default()
+                .push((e.date, e.amount));
+        }
+    }
+
+    let mut result = HashMap::new();
+    for coin in coins {
+        let coin_prices: Vec<&PriceEntry> =
+            price_history.iter().filter(|e| e.commodity == *coin).collect();
+
+        if coin_prices.len() < 2 {
+            result.insert(coin.clone(), CoinChartSeries::default());
+            continue;
+        }
+
+        let first_date = coin_prices[0].date;
+        let costs = cost_by_coin.get(coin.as_str());
+        let assets = asset_by_coin.get(coin.as_str());
+        let staking = income_by_coin.get(coin.as_str());
+
+        let mut investment = Vec::with_capacity(coin_prices.len());
+        let mut price_growth = Vec::with_capacity(coin_prices.len());
+        let mut staking_growth = Vec::with_capacity(coin_prices.len());
+
+        for entry in &coin_prices {
+            let date = entry.date;
+            let price = entry.price_eur;
+            let days = (date - first_date).num_days() as f64;
+
+            let cost: f64 = costs
+                .map(|v| v.iter().filter(|(d, _)| *d <= date).map(|(_, a)| a).sum::<f64>())
+                .unwrap_or(0.0)
+                .max(0.0);
+
+            let total_coin: f64 = assets
+                .map(|v| v.iter().filter(|(d, _)| *d <= date).map(|(_, a)| a).sum())
+                .unwrap_or(0.0);
+
+            let staked_coin: f64 = staking
+                .map(|v| {
+                    v.iter()
+                        .filter(|(d, _)| *d <= date)
+                        .map(|(_, a)| -a)
+                        .sum::<f64>()
+                })
+                .unwrap_or(0.0)
+                .max(0.0);
+
+            let bought_coin = (total_coin - staked_coin).max(0.0);
+
+            investment.push((days, cost));
+            price_growth.push((days, bought_coin * price - cost));
+            staking_growth.push((days, staked_coin * price));
+        }
+
+        result.insert(
+            coin.clone(),
+            CoinChartSeries { investment, price_growth, staking_growth },
+        );
+    }
+
+    result
 }

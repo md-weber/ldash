@@ -896,14 +896,14 @@ fn render_monthly_summary(f: &mut Frame, app: &App, area: Rect) {
         Line::from(vec![
             Span::styled("  Best      ", Style::default().fg(MUTED)),
             Span::styled(
-                format!("{} (+{:.0} €)", &ytd.best_month[..3], ytd.best_net),
+                format!("{} (+{:.0} €)", ytd.best_month.get(..3).unwrap_or(&ytd.best_month), ytd.best_net),
                 Style::default().fg(GREEN),
             ),
         ]),
         Line::from(vec![
             Span::styled("  Worst     ", Style::default().fg(MUTED)),
             Span::styled(
-                format!("{} ({:.0} €)", &ytd.worst_month[..3], ytd.worst_net),
+                format!("{} ({:.0} €)", ytd.worst_month.get(..3).unwrap_or(&ytd.worst_month), ytd.worst_net),
                 Style::default().fg(RED),
             ),
         ]),
