@@ -193,4 +193,8 @@ impl App {
     pub fn total_portfolio_value(&self) -> f64 {
         self.holdings.iter().map(|h| h.value_eur).sum()
     }
+
+    pub fn total_net_worth(&self) -> f64 {
+        self.account_balances.iter().map(|b| b.amount).sum()
+    }
 }

@@ -63,7 +63,7 @@ relative sizing visible at a glance.
 
 ---
 
-## Step 4 — Net worth total on the Accounts tab
+## Step 4 — Net worth total on the Accounts tab ✅
 
 **Why:** The Accounts tab lists every asset balance but never shows the sum.
 Net worth is the single most important number in a personal finance dashboard.

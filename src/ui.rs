@@ -311,13 +311,31 @@ fn render_price_chart(f: &mut Frame, app: &App, area: Rect) {
 // ── Accounts tab ──────────────────────────────────────────────────────────────
 
 fn render_accounts(f: &mut Frame, app: &App, area: Rect) {
+    let chunks = Layout::vertical([Constraint::Length(3), Constraint::Min(0)]).split(area);
+
+    let net_worth = app.total_net_worth();
+    let nw_text = Line::from(vec![
+        Span::styled("  Net Worth: ", Style::default().fg(MUTED).bold()),
+        Span::styled(
+            format!("{:.2} €", net_worth),
+            Style::default().fg(GOLD).bold(),
+        ),
+    ]);
+    let nw_block = Block::default()
+        .borders(Borders::ALL)
+        .border_type(BorderType::Rounded)
+        .border_style(Style::default().fg(MUTED));
+    f.render_widget(Paragraph::new(nw_text).block(nw_block), chunks[0]);
+
+    let table_area = chunks[1];
+
     let max_amount = app
         .account_balances
         .iter()
         .map(|b| b.amount.abs())
         .fold(0.0_f64, f64::max);
 
-    let bar_width = (area.width as f64 * 0.2) as usize;
+    let bar_width = (table_area.width as f64 * 0.2) as usize;
 
     let rows: Vec<Row> = app
         .account_balances
@@ -366,7 +384,7 @@ fn render_accounts(f: &mut Frame, app: &App, area: Rect) {
                 .border_style(Style::default().fg(MUTED)),
         );
 
-    f.render_widget(table, area);
+    f.render_widget(table, table_area);
 }
 
 // ── Monthly tab ───────────────────────────────────────────────────────────────
