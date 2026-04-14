@@ -32,7 +32,7 @@ fn expense_color(category: &str) -> Color {
 
 // ── Entry point ───────────────────────────────────────────────────────────────
 
-pub fn render(f: &mut Frame, app: &App) {
+pub fn render(f: &mut Frame, app: &mut App) {
     let area = f.area();
 
     let layout = Layout::vertical([
@@ -90,7 +90,7 @@ fn render_tabs(f: &mut Frame, app: &App, area: Rect) {
 
 // ── Content dispatch ──────────────────────────────────────────────────────────
 
-fn render_content(f: &mut Frame, app: &App, area: Rect) {
+fn render_content(f: &mut Frame, app: &mut App, area: Rect) {
     match app.tab {
         Tab::Portfolio => render_portfolio(f, app, area),
         Tab::Accounts => render_accounts(f, app, area),
@@ -508,7 +508,7 @@ fn render_net_worth_chart(f: &mut Frame, app: &App, area: Rect) {
     f.render_widget(chart, area);
 }
 
-fn render_accounts(f: &mut Frame, app: &App, area: Rect) {
+fn render_accounts(f: &mut Frame, app: &mut App, area: Rect) {
     let chunks = Layout::vertical([
         Constraint::Percentage(40), // net worth chart
         Constraint::Length(3),      // net worth number
@@ -532,7 +532,9 @@ fn render_accounts(f: &mut Frame, app: &App, area: Rect) {
         .border_style(Style::default().fg(MUTED));
     f.render_widget(Paragraph::new(nw_text).block(nw_block), chunks[1]);
 
-    if let (Some(txns), Some(name)) = (&app.account_detail, &app.detail_account_name) {
+    if app.account_detail.is_some() {
+        let txns = app.account_detail.as_ref().unwrap();
+        let name = app.detail_account_name.as_ref().unwrap();
         render_account_detail(f, txns, name, chunks[2]);
     } else {
         render_accounts_table(f, app, chunks[2]);
@@ -579,7 +581,7 @@ fn render_account_detail(f: &mut Frame, txns: &[crate::data::Transaction], name:
     f.render_widget(table, area);
 }
 
-fn render_accounts_table(f: &mut Frame, app: &App, area: Rect) {
+fn render_accounts_table(f: &mut Frame, app: &mut App, area: Rect) {
     let max_amount = app
         .account_balances
         .iter()
@@ -591,15 +593,7 @@ fn render_accounts_table(f: &mut Frame, app: &App, area: Rect) {
     let rows: Vec<Row> = app
         .account_balances
         .iter()
-        .enumerate()
-        .skip(app.account_scroll)
-        .map(|(i, b)| {
-            let selected = i == app.account_scroll;
-            let name_style = if selected {
-                Style::default().fg(GOLD).bold()
-            } else {
-                Style::default().fg(FG)
-            };
+        .map(|b| {
             let amount_style = if b.amount >= 0.0 {
                 Style::default().fg(GREEN)
             } else {
@@ -615,10 +609,8 @@ fn render_accounts_table(f: &mut Frame, app: &App, area: Rect) {
             };
             let bar = "█".repeat(bar_len);
 
-            let indicator = if selected { "▶ " } else { "  " };
-
             Row::new(vec![
-                Cell::from(format!("{indicator}{}", b.account)).style(name_style),
+                Cell::from(format!("  {}", b.account)).style(Style::default().fg(FG)),
                 Cell::from(amount_str).style(amount_style),
                 Cell::from(bar).style(Style::default().fg(Color::Rgb(0, 130, 130))),
             ])
@@ -633,6 +625,8 @@ fn render_accounts_table(f: &mut Frame, app: &App, area: Rect) {
                 .style(Style::default().fg(MUTED).bold())
                 .bottom_margin(1),
         )
+        .row_highlight_style(Style::default().bg(Color::Rgb(40, 40, 60)).bold())
+        .highlight_symbol("▶ ")
         .block(
             Block::default()
                 .title(Span::styled(
@@ -644,7 +638,7 @@ fn render_accounts_table(f: &mut Frame, app: &App, area: Rect) {
                 .border_style(Style::default().fg(MUTED)),
         );
 
-    f.render_widget(table, area);
+    f.render_stateful_widget(table, area, &mut app.account_state);
 }
 
 // ── Monthly tab ───────────────────────────────────────────────────────────────
@@ -703,7 +697,7 @@ fn render_monthly_chart(f: &mut Frame, app: &App, area: Rect) {
     f.render_widget(chart, area);
 }
 
-fn render_monthly(f: &mut Frame, app: &App, area: Rect) {
+fn render_monthly(f: &mut Frame, app: &mut App, area: Rect) {
     let chunks = Layout::vertical([
         Constraint::Length(12), // bar chart
         Constraint::Length(8),  // summary
@@ -882,7 +876,7 @@ fn render_monthly_income(f: &mut Frame, app: &App, area: Rect) {
     f.render_widget(table, area);
 }
 
-fn render_monthly_expenses(f: &mut Frame, app: &App, area: Rect) {
+fn render_monthly_expenses(f: &mut Frame, app: &mut App, area: Rect) {
     let empty = crate::data::SingleMonth::default();
     let m = app.current_month().unwrap_or(&empty);
     let max_val = m.expenses.first().map(|e| e.1).unwrap_or(1.0);
@@ -891,7 +885,6 @@ fn render_monthly_expenses(f: &mut Frame, app: &App, area: Rect) {
     let rows: Vec<Row> = m
         .expenses
         .iter()
-        .skip(app.expense_scroll)
         .map(|(name, amount)| {
             let short = name.strip_prefix("expenses:").unwrap_or(name);
             let color = if app.expense_colors { expense_color(short) } else { FG };
@@ -914,6 +907,8 @@ fn render_monthly_expenses(f: &mut Frame, app: &App, area: Rect) {
                 .style(Style::default().fg(MUTED).bold())
                 .bottom_margin(1),
         )
+        .row_highlight_style(Style::default().bg(Color::Rgb(40, 40, 60)).bold())
+        .highlight_symbol("▶ ")
         .block(
             Block::default()
                 .title(Span::styled(
@@ -925,5 +920,5 @@ fn render_monthly_expenses(f: &mut Frame, app: &App, area: Rect) {
                 .border_style(Style::default().fg(MUTED)),
         );
 
-    f.render_widget(table, area);
+    f.render_stateful_widget(table, area, &mut app.expense_state);
 }

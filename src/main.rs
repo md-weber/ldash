@@ -95,7 +95,7 @@ fn run(terminal: &mut Terminal<CrosstermBackend<io::Stdout>>, journal_path: Path
     let mut last_tick = Instant::now();
 
     loop {
-        terminal.draw(|f| ui::render(f, &app))?;
+        terminal.draw(|f| ui::render(f, &mut app))?;
 
         let timeout = tick.saturating_sub(last_tick.elapsed());
         if event::poll(timeout)? {

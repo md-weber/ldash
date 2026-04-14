@@ -1,5 +1,6 @@
 use anyhow::Result;
 use chrono::Local;
+use ratatui::widgets::TableState;
 use std::collections::HashMap;
 use std::path::PathBuf;
 use std::time::Instant;
@@ -54,8 +55,8 @@ pub struct App {
     pub net_worth_history: NetWorthSeries,
     pub monthly: MonthlyData,
     pub selected_holding: usize,
-    pub account_scroll: usize,
-    pub expense_scroll: usize,
+    pub account_state: TableState,
+    pub expense_state: TableState,
     pub account_detail: Option<Vec<Transaction>>,
     pub detail_account_name: Option<String>,
     pub expense_colors: bool,
@@ -84,8 +85,8 @@ impl App {
             net_worth_history: NetWorthSeries::default(),
             monthly: MonthlyData::default(),
             selected_holding: 0,
-            account_scroll: 0,
-            expense_scroll: 0,
+            account_state: TableState::default().with_selected(0),
+            expense_state: TableState::default().with_selected(0),
             account_detail: None,
             detail_account_name: None,
             expense_colors: true,
@@ -191,10 +192,12 @@ impl App {
                 self.selected_holding = self.selected_holding.saturating_sub(1);
             }
             Tab::Accounts => {
-                self.account_scroll = self.account_scroll.saturating_sub(1);
+                let i = self.account_state.selected().unwrap_or(0);
+                self.account_state.select(Some(i.saturating_sub(1)));
             }
             Tab::Monthly => {
-                self.expense_scroll = self.expense_scroll.saturating_sub(1);
+                let i = self.expense_state.selected().unwrap_or(0);
+                self.expense_state.select(Some(i.saturating_sub(1)));
             }
         }
     }
@@ -207,14 +210,16 @@ impl App {
                 }
             }
             Tab::Accounts => {
-                if self.account_scroll + 1 < self.account_balances.len() {
-                    self.account_scroll += 1;
+                let i = self.account_state.selected().unwrap_or(0);
+                if i + 1 < self.account_balances.len() {
+                    self.account_state.select(Some(i + 1));
                 }
             }
             Tab::Monthly => {
+                let i = self.expense_state.selected().unwrap_or(0);
                 let len = self.current_month().map(|m| m.expenses.len()).unwrap_or(0);
-                if self.expense_scroll + 1 < len {
-                    self.expense_scroll += 1;
+                if i + 1 < len {
+                    self.expense_state.select(Some(i + 1));
                 }
             }
         }
@@ -312,7 +317,8 @@ impl App {
         if self.tab != Tab::Accounts || self.account_detail.is_some() {
             return;
         }
-        if let Some(b) = self.account_balances.get(self.account_scroll) {
+        let sel = self.account_state.selected().unwrap_or(0);
+        if let Some(b) = self.account_balances.get(sel) {
             let account = b.account.clone();
             match load_recent_transactions(&self.journal_path, &account, 30) {
                 Ok(txns) => {
