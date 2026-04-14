@@ -101,23 +101,33 @@ fn run(terminal: &mut Terminal<CrosstermBackend<io::Stdout>>, journal_path: Path
         if event::poll(timeout)? {
             if let Event::Key(key) = event::read()? {
                 if key.kind == KeyEventKind::Press {
-                    match key.code {
-                        KeyCode::Char('q') | KeyCode::Esc => break,
-                        KeyCode::Tab => app.next_tab(),
-                        KeyCode::BackTab => app.prev_tab(),
-                        KeyCode::Char('1') => app.select_tab(0),
-                        KeyCode::Char('2') => app.select_tab(1),
-                        KeyCode::Char('3') => app.select_tab(2),
-                        KeyCode::Up | KeyCode::Char('k') => app.scroll_up(),
-                        KeyCode::Down | KeyCode::Char('j') => app.scroll_down(),
-                        KeyCode::Left | KeyCode::Char('h') => app.month_left(),
-                        KeyCode::Right | KeyCode::Char('l') => app.month_right(),
-                        KeyCode::Char('r') => {
-                            if let Err(e) = app.refresh() {
-                                app.status_msg = format!("Refresh error: {e}");
+                    if app.show_help {
+                        match key.code {
+                            KeyCode::Char('?') | KeyCode::Char('q') | KeyCode::Esc => {
+                                app.show_help = false;
                             }
+                            _ => {}
                         }
-                        _ => {}
+                    } else {
+                        match key.code {
+                            KeyCode::Char('q') | KeyCode::Esc => break,
+                            KeyCode::Char('?') => app.show_help = true,
+                            KeyCode::Tab => app.next_tab(),
+                            KeyCode::BackTab => app.prev_tab(),
+                            KeyCode::Char('1') => app.select_tab(0),
+                            KeyCode::Char('2') => app.select_tab(1),
+                            KeyCode::Char('3') => app.select_tab(2),
+                            KeyCode::Up | KeyCode::Char('k') => app.scroll_up(),
+                            KeyCode::Down | KeyCode::Char('j') => app.scroll_down(),
+                            KeyCode::Left | KeyCode::Char('h') => app.month_left(),
+                            KeyCode::Right | KeyCode::Char('l') => app.month_right(),
+                            KeyCode::Char('r') => {
+                                if let Err(e) = app.refresh() {
+                                    app.status_msg = format!("Refresh error: {e}");
+                                }
+                            }
+                            _ => {}
+                        }
                     }
                 }
             }

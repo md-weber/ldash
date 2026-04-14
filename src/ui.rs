@@ -27,6 +27,10 @@ pub fn render(f: &mut Frame, app: &App) {
     render_tabs(f, app, layout[1]);
     render_content(f, app, layout[2]);
     render_status(f, app, layout[3]);
+
+    if app.show_help {
+        render_help_popup(f, area);
+    }
 }
 
 // ── Title bar ─────────────────────────────────────────────────────────────────
@@ -76,8 +80,51 @@ fn render_content(f: &mut Frame, app: &App, area: Rect) {
 
 // ── Status bar ────────────────────────────────────────────────────────────────
 
+fn render_help_popup(f: &mut Frame, area: Rect) {
+    let w = 44u16.min(area.width.saturating_sub(4));
+    let h = 16u16.min(area.height.saturating_sub(4));
+    let popup = Rect {
+        x: area.x + (area.width.saturating_sub(w)) / 2,
+        y: area.y + (area.height.saturating_sub(h)) / 2,
+        width: w,
+        height: h,
+    };
+
+    f.render_widget(Clear, popup);
+
+    let bindings: &[(&str, &str)] = &[
+        ("1 / 2 / 3", "Switch tab"),
+        ("Tab / Shift-Tab", "Next / prev tab"),
+        ("↑ k / ↓ j", "Scroll / select"),
+        ("← h / → l", "Month navigation"),
+        ("r", "Refresh data"),
+        ("?", "Toggle this help"),
+        ("q / Esc", "Quit / close help"),
+    ];
+
+    let mut lines = vec![Line::from("")];
+    for (key, desc) in bindings {
+        lines.push(Line::from(vec![
+            Span::styled(format!("  {:<18}", key), Style::default().fg(ACCENT).bold()),
+            Span::styled(*desc, Style::default().fg(FG)),
+        ]));
+    }
+
+    let block = Block::default()
+        .title(Span::styled(
+            " Keybindings ",
+            Style::default().fg(GOLD).bold(),
+        ))
+        .borders(Borders::ALL)
+        .border_type(BorderType::Rounded)
+        .border_style(Style::default().fg(ACCENT))
+        .style(Style::default().bg(Color::Rgb(20, 20, 30)));
+
+    f.render_widget(Paragraph::new(lines).block(block), popup);
+}
+
 fn render_status(f: &mut Frame, app: &App, area: Rect) {
-    let help = "  [1-3] tab  [↑↓/jk] navigate  [←→/hl] month  [r] refresh  [q] quit";
+    let help = "  [1-3] tab  [↑↓/jk] navigate  [←→/hl] month  [r] refresh  [?] help  [q] quit";
     let text = Line::from(vec![
         Span::styled(&app.status_msg, Style::default().fg(ACCENT)),
         Span::styled(help, Style::default().fg(MUTED)),

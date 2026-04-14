@@ -44,6 +44,7 @@ pub struct App {
     pub expense_scroll: usize,
     pub status_msg: String,
     pub loading: bool,
+    pub show_help: bool,
 }
 
 impl App {
@@ -68,6 +69,7 @@ impl App {
             expense_scroll: 0,
             status_msg: "Loading data…".to_string(),
             loading: true,
+            show_help: false,
         };
 
         app.refresh()?;
