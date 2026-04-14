@@ -559,14 +559,74 @@ fn render_accounts(f: &mut Frame, app: &App, area: Rect) {
 
 // ── Monthly tab ───────────────────────────────────────────────────────────────
 
-fn render_monthly(f: &mut Frame, app: &App, area: Rect) {
-    let chunks = Layout::vertical([Constraint::Length(8), Constraint::Min(0)]).split(area);
+fn render_monthly_chart(f: &mut Frame, app: &App, area: Rect) {
+    use ratatui::widgets::{Bar, BarChart, BarGroup};
 
-    render_monthly_summary(f, app, chunks[0]);
+    let groups: Vec<BarGroup> = app
+        .monthly
+        .months
+        .iter()
+        .enumerate()
+        .map(|(i, m)| {
+            let selected = i == app.monthly.selected;
+            let (inc_color, exp_color) = if selected {
+                (Color::LightGreen, Color::LightRed)
+            } else {
+                (GREEN, RED)
+            };
+
+            let label = &m.month_name[..3];
+            BarGroup::default()
+                .label(Line::from(label.to_string()).style(Style::default().fg(if selected { ACCENT } else { MUTED })))
+                .bars(&[
+                    Bar::default()
+                        .value(m.total_income as u64)
+                        .style(Style::default().fg(inc_color)),
+                    Bar::default()
+                        .value(m.total_expenses as u64)
+                        .style(Style::default().fg(exp_color)),
+                ])
+        })
+        .collect();
+
+    let mut chart = BarChart::default()
+        .block(
+            Block::default()
+                .title(Span::styled(
+                    " Income vs Expenses ",
+                    Style::default().fg(ACCENT).bold(),
+                ))
+                .borders(Borders::ALL)
+                .border_type(BorderType::Rounded)
+                .border_style(Style::default().fg(MUTED))
+                .padding(Padding::new(1, 1, 1, 0)),
+        )
+        .bar_width(3)
+        .bar_gap(0)
+        .group_gap(2)
+        .bar_style(Style::default().fg(GREEN));
+
+    for g in groups {
+        chart = chart.data(g);
+    }
+
+    f.render_widget(chart, area);
+}
+
+fn render_monthly(f: &mut Frame, app: &App, area: Rect) {
+    let chunks = Layout::vertical([
+        Constraint::Length(12), // bar chart
+        Constraint::Length(8),  // summary
+        Constraint::Min(0),     // detail tables
+    ])
+    .split(area);
+
+    render_monthly_chart(f, app, chunks[0]);
+    render_monthly_summary(f, app, chunks[1]);
 
     let detail_chunks =
         Layout::horizontal([Constraint::Percentage(50), Constraint::Percentage(50)])
-            .split(chunks[1]);
+            .split(chunks[2]);
 
     render_monthly_income(f, app, detail_chunks[0]);
     render_monthly_expenses(f, app, detail_chunks[1]);
