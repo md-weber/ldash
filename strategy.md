@@ -1,261 +1,258 @@
-# Ledger Dashboard — Improvement Strategy
+# Ledger Dashboard — Phase 2 Strategy: Trends & Drill-Down
+
+The Phase 1 strategy (11 steps) is complete. The dashboard now shows solid
+point-in-time snapshots across three tabs. Phase 2 focuses on **temporal
+visibility** (how things change over time) and **interactive drill-down**
+(exploring data without leaving the TUI).
 
 Ordered from highest-impact / lowest-risk to nice-to-haves.
 Each step is self-contained: the app compiles and works after every step.
 
 ---
 
-## Step 1 — Panic hook (safety net) ✅
+## Step 1 — Net worth history chart (Accounts tab)
 
-**Why:** If anything panics today, the terminal is left in raw mode (no echo,
-no cursor). The user has to blindly type `reset`. This is the single most
-important fix because it affects every subsequent step — any bug introduced
-later won't brick the terminal.
+**Why:** Net worth is the single most important number. Seeing it as a
+time series reveals whether you're on track. Currently it's a single number
+with no context — up or down this month? This year? No way to tell.
 
-**Files:** `src/main.rs`
+**Files:** `src/data.rs`, `src/app.rs`, `src/ui.rs`
 
 **Changes:**
 
-- Between `enable_raw_mode()` and `Terminal::new()`, install a custom panic
-  hook that calls `disable_raw_mode()` + `LeaveAlternateScreen` before
-  forwarding to the original hook.
-- Keep the existing cleanup after `run()` as-is (it handles the normal exit
-  path).
+### 1a — Data layer
 
-**Scope:** ~10 lines added.
+- Add `pub struct NetWorthSeries { pub points: Vec<(f64, f64)>, pub labels: Vec<(NaiveDate, f64)> }`.
+- Add `load_net_worth_history(journal_path)` that runs:
+  `hledger -f FILE balance assets -H -p "monthly from 2024" -O csv --layout bare`
+  and sums all EUR-valued rows per month to produce a time series.
+- Store in `App` as `pub net_worth_history: NetWorthSeries`.
+
+### 1b — UI
+
+- Split the Accounts tab vertically: top 40% = net worth chart, bottom 60% = existing table.
+- Render a `Chart` with a single `Dataset` (line, braille markers, gold color).
+- X-axis: month labels (`"Jan 25"`, `"Apr 26"`). Y-axis: EUR values.
+- Keep the existing net worth number in a `Paragraph` between chart and table.
+
+**Scope:** ~70 lines across 3 files.
 
 ---
 
-## Step 2 — hledger availability check ✅
+## Step 2 — Monthly income vs expenses bar chart
 
-**Why:** If `hledger` is not in `$PATH`, the app currently starts, enters raw
-mode, and then every `Command::new("hledger")` silently fails or returns an
-opaque IO error. Better to fail fast with a clear message *before* entering
-the alternate screen.
+**Why:** The Monthly tab shows numbers for one month at a time. An overview
+chart comparing income/expenses across all months reveals seasonal patterns
+and spending trajectory at a glance.
 
-**Files:** `src/main.rs`
+**Files:** `src/ui.rs`
 
 **Changes:**
 
-- Add a function `check_hledger()` that runs `hledger --version` and returns
-  `Result<()>`.
-- Call it right after `find_journal()`, before `enable_raw_mode()`.
-- On failure, bail with: `"hledger not found in PATH. Install it from https://hledger.org"`.
+- Add `render_monthly_chart(f, app, area)` that builds a `BarChart` widget
+  using `app.monthly.months` data.
+- Each month gets two bars: income (green) and expenses (red).
+- Highlight the currently selected month with a brighter shade.
+- Split the Monthly tab: top = bar chart (height 12), bottom = existing
+  summary + detail tables.
+- The chart uses data already loaded — no new hledger commands needed.
 
-**Scope:** ~12 lines added.
+**Scope:** ~50 lines in `ui.rs`.
 
 ---
 
-## Step 3 — Portfolio allocation % column ✅
+## Step 3 — Year-to-date summary panel
 
-**Why:** Quick win. The holdings table already shows EUR value per coin but
-not what fraction of the portfolio each coin represents. A `%` column makes
-relative sizing visible at a glance.
+**Why:** "Am I ahead or behind for the year?" is answered by aggregating all
+months up to now. Show total income, total expenses, average savings rate,
+and best/worst month — all derivable from existing `MonthlyData`.
 
-**Files:** `src/ui.rs` → `render_holdings_table()`
-
-**Changes:**
-
-- Compute `total` (already done on line 99).
-- For each holding row, compute `pct = h.value_eur / total * 100.0`.
-- Add a 5th cell: `format!("{:.1}%", pct)` styled in `FG`.
-- Add a 5th width constraint: `Constraint::Length(7)`.
-- Add `"Alloc"` to the header row.
-
-**Scope:** ~8 lines changed.
-
----
-
-## Step 4 — Net worth total on the Accounts tab ✅
-
-**Why:** The Accounts tab lists every asset balance but never shows the sum.
-Net worth is the single most important number in a personal finance dashboard.
-
-**Files:** `src/app.rs`, `src/ui.rs`
+**Files:** `src/ui.rs`, `src/app.rs`
 
 **Changes:**
 
-- In `App`, add a helper: `pub fn total_net_worth(&self) -> f64` that sums
-  `account_balances.iter().map(|b| b.amount)`.
-- In `render_accounts()`, add a summary row at the top (or a `Paragraph`
-  above the table) showing `"Net Worth: {:.2} €"` in bold gold.
-
-**Scope:** ~15 lines.
-
----
-
-## Step 5 — Month navigation on the Monthly tab ✅
-
-**Why:** Currently locked to the current calendar month. All the multi-month
-data is already loaded from hledger (`-p "monthly this year"`), but
-`parse_monthly_csv` discards every column except `current_month`. Enabling
-left/right navigation is high value.
-
-**Files:** `src/data.rs`, `src/app.rs`, `src/main.rs`, `src/ui.rs`
-
-**Changes:**
-
-### 5a — Store all months in data layer
-
-- Change `MonthlyData` to hold a `Vec<SingleMonth>` where each `SingleMonth`
-  has `month_name`, `income`, `expenses`, `total_income`, `total_expenses`.
-- Rewrite `parse_monthly_csv` to iterate over all columns (1..=12) and build
-  a `SingleMonth` for each that has non-zero data.
-- Keep the existing `MonthlyData` struct as a wrapper:
-  `pub months: Vec<SingleMonth>, pub selected: usize`.
-
-### 5b — Navigation in App
-
-- Add `selected_month: usize` to `App`.
-- Add methods `pub fn month_left(&mut self)` and `pub fn month_right(&mut self)`
-  that decrement / increment `selected_month` clamped to `0..months.len()`.
-- Wire `KeyCode::Left / 'h'` and `KeyCode::Right / 'l'` in the `Monthly` tab
-  arm of `scroll_up` / `scroll_down` (or as separate matches in `main.rs`).
-
-### 5c — UI
-
-- `render_monthly_summary` reads `app.monthly.months[app.selected_month]`
-  instead of the single `app.monthly`.
-- Show `"◀ March 2026 ▶"` in the title so the user sees navigation is
-  available.
-
-**Scope:** ~60–80 lines changed across 4 files. This is the largest step.
-
----
-
-## Step 6 — Per-coin P/L column in portfolio table ✅
-
-**Why:** The chart shows invested vs. current value, but the table should give
-an at-a-glance gain/loss for each coin without having to select it.
-
-**Files:** `src/data.rs`, `src/ui.rs`
-
-**Changes:**
-
-- In `CoinChartSeries`, add a convenience method or store `total_invested`
-  (the last value of the `investment` series).
-- In `render_holdings_table()`, look up the coin's `CoinChartSeries` from
-  `app.coin_chart_cache` and compute:
-  `pl = h.value_eur - series.total_invested`.
-  `pl_pct = pl / series.total_invested * 100.0`.
-- Add a 6th cell: `"+12.3%"` colored green/red.
-- Update header and widths.
-
-**Scope:** ~15 lines.
-
----
-
-## Step 7 — Help popup (`?` key) ✅
-
-**Why:** Standard TUI convention. The status bar keybindings get truncated on
-narrow terminals.
-
-**Files:** `src/app.rs`, `src/main.rs`, `src/ui.rs`
-
-**Changes:**
-
-- Add `pub show_help: bool` to `App`.
-- In `main.rs`, add `KeyCode::Char('?')` → toggle `app.show_help`.
-  When `show_help` is true, all other keys except `?` / `q` / `Esc` are
-  ignored.
-- In `ui.rs`, add `render_help_popup(f, area)` that renders a centered
-  `Clear` + `Paragraph` overlay listing all keybindings.
-- Call it at the end of `render()` when `app.show_help` is true.
+- Add `App::ytd_stats() -> YtdStats` that iterates `monthly.months` up to
+  current month and computes: total_income, total_expenses, avg_savings_rate,
+  best_month (highest net), worst_month (lowest net).
+- Render as a compact `Paragraph` or small table in the Monthly tab summary
+  area, next to or below the savings rate gauge.
 
 **Scope:** ~40 lines.
 
 ---
 
-## Step 8 — Dynamic coin ordering (sort by value) ✅
+## Step 4 — Account drill-down (recent transactions)
 
-**Why:** The hardcoded `["SOL", "BTC", "ETH", "LINK", "TON", "AR"]` list in
-`compute_portfolio` means new coins appear at the bottom regardless of value,
-and removed coins silently disappear from the preferred order.
+**Why:** When you see a suspicious balance, you want to know the last few
+transactions without leaving the dashboard. Currently requires switching to
+a terminal and running hledger manually.
 
-**Files:** `src/data.rs` → `compute_portfolio()`
+**Files:** `src/data.rs`, `src/app.rs`, `src/main.rs`, `src/ui.rs`
 
 **Changes:**
 
-- Remove the `order` array.
-- Collect all coins into a `Vec<CryptoHolding>`, then sort by `value_eur`
-  descending.
-- This is a 3-line change that replaces ~15 lines.
+### 4a — Data layer
 
-**Scope:** Net reduction of ~10 lines.
+- Add `load_recent_transactions(journal_path, account, n) -> Vec<Transaction>`
+  where `Transaction = { date, description, amount, running_total }`.
+- Runs `hledger register ACCOUNT -O csv --count N`.
+
+### 4b — App state
+
+- Add `pub account_detail: Option<Vec<Transaction>>` and
+  `pub detail_account_name: Option<String>` to `App`.
+- On `Enter` key in Accounts tab → load transactions for selected account,
+  store in `account_detail`.
+- On `Esc` in detail view → clear `account_detail` (go back to list).
+
+### 4c — UI
+
+- When `account_detail.is_some()`, replace the accounts table with a
+  transaction list table showing date, description, amount, running balance.
+- Show account name in block title. Add "Esc to go back" hint.
+
+**Scope:** ~80 lines across 4 files. Largest step in Phase 2.
 
 ---
 
-## Step 9 — Chart date labels with year ✅
+## Step 5 — Expense category colors
 
-**Why:** Price history can span multiple years. The current `%d.%m` format
-makes Jan 2025 and Jan 2026 indistinguishable.
+**Why:** The expenses table is a wall of white text with red numbers. Distinct
+colors per top-level category (housing, food, transport, etc.) makes scanning
+faster. Also makes the bar chart from Step 2 more readable.
 
-**Files:** `src/ui.rs` → `render_price_chart()`
+**Files:** `src/ui.rs`
 
 **Changes:**
 
-- Change the date format in `x_labels` from `"%d.%m"` to `"%b %y"`
-  (e.g. "Dec 25", "Mar 26").
-- Reduce label count from 5 to 3-4 if the chart area is narrow
-  (check `area.width`).
+- Define a palette of 8-10 distinct colors mapped to common expense prefixes:
+  `expenses:housing` → blue, `expenses:food` → yellow, `expenses:transport` →
+  magenta, etc. Fallback to default for unknown categories.
+- Apply in `render_monthly_expenses()` for the category name cell and bar.
+- Same palette used in the bar chart (Step 2) if already implemented.
 
-**Scope:** ~5 lines changed.
+**Scope:** ~25 lines.
 
 ---
 
-## Step 10 — Handle terminal resize events ✅
+## Step 6 — Auto-refresh timer
 
-**Why:** On resize, the display may lag by up to 250ms (the tick interval).
-Handling `Event::Resize` forces an immediate redraw.
+**Why:** Leaving the dashboard open while editing the journal is a common
+workflow. Currently requires pressing `r` manually. A background refresh
+every 5 minutes keeps data current.
 
-**Files:** `src/main.rs`
+**Files:** `src/main.rs`, `src/app.rs`
 
 **Changes:**
 
-- In the event loop, add a match arm:
-  `Event::Resize(_, _) => { /* just let the loop redraw */ }`
-- This ensures we don't accidentally fall through or miss the event.
+- Add `last_refresh: Instant` to `App`.
+- In the event loop, after the tick check, add:
+  ```
+  if app.last_refresh.elapsed() >= Duration::from_secs(300) {
+      app.refresh()?;
+  }
+  ```
+- Update `last_refresh` in `refresh()`.
+- Show "auto-refreshed at HH:MM:SS" in status bar to distinguish from manual.
 
-**Scope:** 2 lines.
+**Scope:** ~10 lines.
 
 ---
 
-## Step 11 — Use the `csv` crate for parsing
+## Step 7 — Portfolio total P/L summary
 
-**Why:** The hand-rolled `parse_csv_line` doesn't handle escaped quotes
-(`""`) inside fields. If hledger ever produces a description containing
-`","` the parser will mispatch columns. The `csv` crate handles all edge
-cases and is ~30 KB.
+**Why:** The table shows per-coin P/L but never the total. "Am I up or down
+overall on crypto?" requires mental arithmetic across 6 coins. One summary
+line fixes this.
 
-**Files:** `Cargo.toml`, `src/data.rs`
+**Files:** `src/app.rs`, `src/ui.rs`
 
 **Changes:**
 
-- Add `csv = "1"` to `[dependencies]`.
-- Replace `parse_csv_line` usages in `run_register`, `parse_balance_csv`,
-  and `parse_monthly_csv` with `csv::ReaderBuilder` over the stdout bytes.
-- Remove the `parse_csv_line` function.
+- Add `App::total_portfolio_pl() -> (f64, f64)` returning (absolute EUR P/L,
+  percentage P/L) by summing across all holdings and their chart series.
+- Render in the holdings table total row, filling the currently-empty P/L
+  columns with the aggregate values, styled green/red.
 
-**Scope:** ~40 lines changed, net reduction.
+**Scope:** ~20 lines.
+
+---
+
+## Step 8 — Scrollable accounts table (proper TableState)
+
+**Why:** The current account_scroll is manual offset with `.skip()`. This
+means no visual highlight of which row is selected, and no scroll indicator.
+Using ratatui's `TableState` gives proper selection highlight and prepares
+for the drill-down in Step 4.
+
+**Files:** `src/app.rs`, `src/ui.rs`
+
+**Changes:**
+
+- Replace `pub account_scroll: usize` with `pub account_state: TableState`.
+- In `render_accounts()`, use `f.render_stateful_widget(table, area, &mut state)`
+  and set `.highlight_style()` on the table.
+- Update `scroll_up/scroll_down` for Accounts tab to use `state.select()`.
+- Same treatment for `expense_scroll` → `expense_state: TableState`.
+
+**Scope:** ~30 lines changed.
+
+---
+
+## Step 9 — Configurable date range for net worth chart
+
+**Why:** Step 1 hardcodes `"from 2024"`. Users with longer histories want to
+see more. Users who started recently don't want empty space. Let `←`/`→`
+keys on the Accounts tab zoom the net worth chart.
+
+**Files:** `src/app.rs`, `src/main.rs`, `src/data.rs`
+
+**Changes:**
+
+- Add `pub nw_range: NetWorthRange` enum: `Year1`, `Year2`, `Year5`, `All`.
+- `←`/`→` on Accounts tab cycles through ranges.
+- `load_net_worth_history` takes the range and adjusts the `-p` argument.
+- Reload only the net worth series on range change (cheap operation).
+
+**Scope:** ~25 lines.
+
+---
+
+## Step 10 — Monthly comparison (same month last year)
+
+**Why:** "Is my spending this March higher than last March?" Seasonal
+comparison is one of the most useful insights. Requires loading last year's
+monthly data alongside this year's.
+
+**Files:** `src/data.rs`, `src/app.rs`, `src/ui.rs`
+
+**Changes:**
+
+- In `load_monthly_data`, also run `hledger incomestatement -p "monthly last year"`.
+- Store as `pub last_year: MonthlyData` in `App`.
+- In the monthly summary, if a matching month exists in last year's data,
+  show a "vs last year" line: `"Mar '25: 2340€  Mar '26: 1890€  ↓19%"`.
+
+**Scope:** ~40 lines.
 
 ---
 
 ## Implementation Order Summary
 
-| Step | Area        | Risk  | Effort | Value  |
-|------|-------------|-------|--------|--------|
-| 1    | Panic hook  | None  | Tiny   | Critical |
-| 2    | hledger chk | None  | Tiny   | High   |
-| 3    | Alloc %     | None  | Tiny   | Medium |
-| 4    | Net worth   | None  | Small  | High   |
-| 5    | Month nav   | Low   | Medium | High   |
-| 6    | P/L column  | None  | Small  | High   |
-| 7    | Help popup  | None  | Small  | Medium |
-| 8    | Coin sort   | None  | Tiny   | Medium |
-| 9    | Chart dates | None  | Tiny   | Low    |
-| 10   | Resize      | None  | Tiny   | Low    |
-| 11   | csv crate   | Low   | Medium | Medium |
+| Step | Area             | Risk  | Effort | Value    |
+|------|------------------|-------|--------|----------|
+| 1    | Net worth chart  | Low   | Medium | Critical |
+| 2    | Monthly bar chart| None  | Medium | High     |
+| 3    | YTD summary      | None  | Small  | High     |
+| 4    | Account drill    | Low   | Medium | High     |
+| 5    | Category colors  | None  | Tiny   | Medium   |
+| 6    | Auto-refresh     | None  | Tiny   | Medium   |
+| 7    | Total P/L        | None  | Tiny   | High     |
+| 8    | TableState       | None  | Small  | Medium   |
+| 9    | NW date range    | None  | Small  | Low      |
+| 10   | Year comparison  | Low   | Medium | Medium   |
 
-Steps 1–4 can each be done in under 5 minutes.
-Step 5 is the biggest change and should be done carefully.
-Steps 6–11 are independent and can be done in any order.
+Steps 1–3 form the "trends" core — do them first.
+Step 4 is the "drill-down" centerpiece.
+Steps 5–8 are independent polish.
+Steps 9–10 are nice-to-haves that build on earlier steps.
