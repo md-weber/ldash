@@ -645,8 +645,12 @@ fn render_monthly_summary(f: &mut Frame, app: &App, area: Rect) {
         0
     };
 
-    let chunks = Layout::horizontal([Constraint::Percentage(45), Constraint::Percentage(55)])
-        .split(area);
+    let chunks = Layout::horizontal([
+        Constraint::Percentage(30),
+        Constraint::Percentage(30),
+        Constraint::Percentage(40),
+    ])
+    .split(area);
 
     let nav_title = format!(" ◀ {} ▶ ", m.month_name);
 
@@ -701,6 +705,47 @@ fn render_monthly_summary(f: &mut Frame, app: &App, area: Rect) {
         ));
 
     f.render_widget(gauge, chunks[1]);
+
+    let ytd = app.ytd_stats();
+    let ytd_net = ytd.total_income - ytd.total_expenses;
+    let ytd_net_color = if ytd_net >= 0.0 { GREEN } else { RED };
+    let ytd_prefix = if ytd_net >= 0.0 { "+" } else { "" };
+    let ytd_text = vec![
+        Line::from(vec![
+            Span::styled("  Net YTD   ", Style::default().fg(MUTED)),
+            Span::styled(
+                format!("{ytd_prefix}{:.0} €", ytd_net),
+                Style::default().fg(ytd_net_color).bold(),
+            ),
+            Span::styled(
+                format!("  ({:.0}% saved)", ytd.avg_savings_rate),
+                Style::default().fg(MUTED),
+            ),
+        ]),
+        Line::from(vec![
+            Span::styled("  Best      ", Style::default().fg(MUTED)),
+            Span::styled(
+                format!("{} (+{:.0} €)", &ytd.best_month[..3], ytd.best_net),
+                Style::default().fg(GREEN),
+            ),
+        ]),
+        Line::from(vec![
+            Span::styled("  Worst     ", Style::default().fg(MUTED)),
+            Span::styled(
+                format!("{} ({:.0} €)", &ytd.worst_month[..3], ytd.worst_net),
+                Style::default().fg(RED),
+            ),
+        ]),
+    ];
+    let ytd_block = Block::default()
+        .title(Span::styled(
+            " Year to Date ",
+            Style::default().fg(GOLD).bold(),
+        ))
+        .borders(Borders::ALL)
+        .border_type(BorderType::Rounded)
+        .border_style(Style::default().fg(MUTED));
+    f.render_widget(Paragraph::new(ytd_text).block(ytd_block), chunks[2]);
 }
 
 fn render_monthly_income(f: &mut Frame, app: &App, area: Rect) {

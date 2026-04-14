@@ -30,6 +30,17 @@ impl Tab {
     }
 }
 
+#[derive(Debug, Default)]
+pub struct YtdStats {
+    pub total_income: f64,
+    pub total_expenses: f64,
+    pub avg_savings_rate: f64,
+    pub best_month: String,
+    pub best_net: f64,
+    pub worst_month: String,
+    pub worst_net: f64,
+}
+
 pub struct App {
     pub journal_path: PathBuf,
     pub journal_dir: PathBuf,
@@ -218,6 +229,45 @@ impl App {
 
     pub fn current_month(&self) -> Option<&SingleMonth> {
         self.monthly.months.get(self.monthly.selected)
+    }
+
+    pub fn ytd_stats(&self) -> YtdStats {
+        let months = &self.monthly.months;
+        if months.is_empty() {
+            return YtdStats::default();
+        }
+        let total_income: f64 = months.iter().map(|m| m.total_income).sum();
+        let total_expenses: f64 = months.iter().map(|m| m.total_expenses).sum();
+        let avg_savings_rate = if total_income > 0.0 {
+            ((total_income - total_expenses) / total_income * 100.0).max(0.0)
+        } else {
+            0.0
+        };
+        let best = months
+            .iter()
+            .max_by(|a, b| {
+                let na = a.total_income - a.total_expenses;
+                let nb = b.total_income - b.total_expenses;
+                na.partial_cmp(&nb).unwrap_or(std::cmp::Ordering::Equal)
+            })
+            .unwrap();
+        let worst = months
+            .iter()
+            .min_by(|a, b| {
+                let na = a.total_income - a.total_expenses;
+                let nb = b.total_income - b.total_expenses;
+                na.partial_cmp(&nb).unwrap_or(std::cmp::Ordering::Equal)
+            })
+            .unwrap();
+        YtdStats {
+            total_income,
+            total_expenses,
+            avg_savings_rate,
+            best_month: best.month_name.clone(),
+            best_net: best.total_income - best.total_expenses,
+            worst_month: worst.month_name.clone(),
+            worst_net: worst.total_income - worst.total_expenses,
+        }
     }
 
     pub fn month_left(&mut self) {
