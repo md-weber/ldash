@@ -230,6 +230,26 @@ impl App {
         self.holdings.iter().map(|h| h.value_eur).sum()
     }
 
+    pub fn total_portfolio_pl(&self) -> (f64, f64) {
+        let mut total_invested = 0.0_f64;
+        let mut total_value = 0.0_f64;
+        for h in &self.holdings {
+            if let Some(s) = self.coin_chart_cache.get(&h.commodity) {
+                if !s.investment.is_empty() {
+                    total_invested += s.total_invested();
+                    total_value += h.value_eur;
+                }
+            }
+        }
+        let pl_abs = total_value - total_invested;
+        let pl_pct = if total_invested > 0.0 {
+            pl_abs / total_invested * 100.0
+        } else {
+            0.0
+        };
+        (pl_abs, pl_pct)
+    }
+
     pub fn total_net_worth(&self) -> f64 {
         self.account_balances.iter().map(|b| b.amount).sum()
     }

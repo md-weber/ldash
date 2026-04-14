@@ -209,16 +209,11 @@ fn render_holdings_table(f: &mut Frame, app: &App, area: Rect) {
                 match app.coin_chart_cache.get(&h.commodity) {
                     Some(series) if !series.investment.is_empty() => {
                         let invested = series.total_invested();
-                        let pl_abs = h.value_eur - invested;
-                        let abs_color = if pl_abs >= 0.0 { GREEN } else { RED };
-                        let abs_prefix = if pl_abs >= 0.0 { "+" } else { "" };
-                        let eur = (
-                            format!("{abs_prefix}{:.2}€", pl_abs),
-                            Style::default().fg(abs_color).bold(),
-                        );
-
                         if invested > 0.0 {
-                            let pct = (h.value_eur - invested) / invested * 100.0;
+                            let pl_abs = h.value_eur - invested;
+                            let abs_color = if pl_abs >= 0.0 { GREEN } else { RED };
+                            let abs_prefix = if pl_abs >= 0.0 { "+" } else { "" };
+                            let pct = pl_abs / invested * 100.0;
                             let (prefix, color) = if pct >= 0.0 {
                                 ("+", GREEN)
                             } else {
@@ -227,11 +222,23 @@ fn render_holdings_table(f: &mut Frame, app: &App, area: Rect) {
                             (
                                 format!("{prefix}{:.1}%", pct),
                                 Style::default().fg(color).bold(),
-                                eur.0,
-                                eur.1,
+                                format!("{abs_prefix}{:.2}€", pl_abs),
+                                Style::default().fg(abs_color).bold(),
+                            )
+                        } else if h.value_eur > 0.0 {
+                            (
+                                "∞".into(),
+                                Style::default().fg(GREEN).bold(),
+                                format!("+{:.2}€", h.value_eur),
+                                Style::default().fg(GREEN).bold(),
                             )
                         } else {
-                            ("—".into(), Style::default().fg(MUTED), eur.0, eur.1)
+                            (
+                                "—".into(),
+                                Style::default().fg(MUTED),
+                                "—".into(),
+                                Style::default().fg(MUTED),
+                            )
                         }
                     }
                     _ => (
@@ -254,7 +261,10 @@ fn render_holdings_table(f: &mut Frame, app: &App, area: Rect) {
         })
         .collect();
 
-    // Divider + total row
+    let (pl_abs, pl_pct) = app.total_portfolio_pl();
+    let pl_color = if pl_abs >= 0.0 { GREEN } else { RED };
+    let pl_prefix = if pl_abs >= 0.0 { "+" } else { "" };
+
     rows.push(
         Row::new(vec![
             Cell::from("──────").style(Style::default().fg(MUTED)),
@@ -262,8 +272,10 @@ fn render_holdings_table(f: &mut Frame, app: &App, area: Rect) {
             Cell::from("Total").style(Style::default().fg(FG).bold()),
             Cell::from(format!("{:.2} €", total)).style(Style::default().fg(GOLD).bold()),
             Cell::from("100%").style(Style::default().fg(FG).bold()),
-            Cell::from(""),
-            Cell::from(""),
+            Cell::from(format!("{pl_prefix}{:.1}%", pl_pct))
+                .style(Style::default().fg(pl_color).bold()),
+            Cell::from(format!("{pl_prefix}{:.2}€", pl_abs))
+                .style(Style::default().fg(pl_color).bold()),
         ])
         .height(1),
     );

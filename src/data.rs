@@ -601,21 +601,21 @@ pub fn load_coin_chart_series(
         let price = entry.price_eur;
         let days = (date - first_date).num_days() as f64;
 
-        // Cumulative EUR spent on purchases up to this date.
+        // Net EUR cost basis up to this date (buys positive, sells negative).
+        // Clamp to zero: if sells exceed buys, remaining holdings are pure profit.
         let cost: f64 = cost_entries
             .iter()
             .filter(|(d, _, com)| *d <= date && eur_commodities.contains(&com.as_str()))
             .map(|(_, amt, _)| amt)
-            .sum();
+            .sum::<f64>()
+            .max(0.0);
 
-        // Total SOL in all asset accounts at this date.
         let total_sol: f64 = sol_entries
             .iter()
             .filter(|(d, _, _)| *d <= date)
             .map(|(_, amt, _)| amt)
             .sum();
 
-        // SOL earned via staking (income credits are negative, so we negate).
         let staked_sol: f64 = staking_entries
             .iter()
             .filter(|(d, _, _)| *d <= date)
@@ -623,8 +623,6 @@ pub fn load_coin_chart_series(
             .sum::<f64>()
             .max(0.0);
 
-        // Purchased SOL = total minus staked; transfers between wallets net to
-        // zero so they don't affect this figure (only their fees do).
         let bought_sol = (total_sol - staked_sol).max(0.0);
 
         investment.push((days, cost));
