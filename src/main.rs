@@ -149,6 +149,18 @@ fn run(terminal: &mut Terminal<CrosstermBackend<io::Stdout>>, journal_path: Path
         if last_tick.elapsed() >= tick {
             last_tick = Instant::now();
         }
+
+        if app.last_refresh.elapsed() >= Duration::from_secs(300) {
+            match app.refresh() {
+                Ok(()) => {
+                    let now = chrono::Local::now().format("%H:%M:%S");
+                    app.status_msg = format!("Auto-refreshed at {now}");
+                }
+                Err(e) => {
+                    app.status_msg = format!("Auto-refresh error: {e}");
+                }
+            }
+        }
     }
 
     Ok(())

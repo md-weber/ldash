@@ -2,6 +2,7 @@ use anyhow::Result;
 use chrono::Local;
 use std::collections::HashMap;
 use std::path::PathBuf;
+use std::time::Instant;
 
 use crate::data::{
     compute_portfolio, latest_prices, load_account_balances_eur, load_coin_chart_series,
@@ -61,6 +62,7 @@ pub struct App {
     pub status_msg: String,
     pub loading: bool,
     pub show_help: bool,
+    pub last_refresh: Instant,
 }
 
 impl App {
@@ -90,6 +92,7 @@ impl App {
             status_msg: "Loading data…".to_string(),
             loading: true,
             show_help: false,
+            last_refresh: Instant::now(),
         };
 
         app.refresh()?;
@@ -157,6 +160,7 @@ impl App {
             self.selected_holding = self.holdings.len() - 1;
         }
 
+        self.last_refresh = Instant::now();
         let now = Local::now().format("%H:%M:%S");
         self.status_msg = format!("Updated at {now}");
         self.loading = false;
