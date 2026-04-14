@@ -15,6 +15,7 @@ later won't brick the terminal.
 **Files:** `src/main.rs`
 
 **Changes:**
+
 - Between `enable_raw_mode()` and `Terminal::new()`, install a custom panic
   hook that calls `disable_raw_mode()` + `LeaveAlternateScreen` before
   forwarding to the original hook.
@@ -35,6 +36,7 @@ the alternate screen.
 **Files:** `src/main.rs`
 
 **Changes:**
+
 - Add a function `check_hledger()` that runs `hledger --version` and returns
   `Result<()>`.
 - Call it right after `find_journal()`, before `enable_raw_mode()`.
@@ -53,6 +55,7 @@ relative sizing visible at a glance.
 **Files:** `src/ui.rs` → `render_holdings_table()`
 
 **Changes:**
+
 - Compute `total` (already done on line 99).
 - For each holding row, compute `pct = h.value_eur / total * 100.0`.
 - Add a 5th cell: `format!("{:.1}%", pct)` styled in `FG`.
@@ -71,6 +74,7 @@ Net worth is the single most important number in a personal finance dashboard.
 **Files:** `src/app.rs`, `src/ui.rs`
 
 **Changes:**
+
 - In `App`, add a helper: `pub fn total_net_worth(&self) -> f64` that sums
   `account_balances.iter().map(|b| b.amount)`.
 - In `render_accounts()`, add a summary row at the top (or a `Paragraph`
@@ -92,6 +96,7 @@ left/right navigation is high value.
 **Changes:**
 
 ### 5a — Store all months in data layer
+
 - Change `MonthlyData` to hold a `Vec<SingleMonth>` where each `SingleMonth`
   has `month_name`, `income`, `expenses`, `total_income`, `total_expenses`.
 - Rewrite `parse_monthly_csv` to iterate over all columns (1..=12) and build
@@ -100,6 +105,7 @@ left/right navigation is high value.
   `pub months: Vec<SingleMonth>, pub selected: usize`.
 
 ### 5b — Navigation in App
+
 - Add `selected_month: usize` to `App`.
 - Add methods `pub fn month_left(&mut self)` and `pub fn month_right(&mut self)`
   that decrement / increment `selected_month` clamped to `0..months.len()`.
@@ -107,6 +113,7 @@ left/right navigation is high value.
   arm of `scroll_up` / `scroll_down` (or as separate matches in `main.rs`).
 
 ### 5c — UI
+
 - `render_monthly_summary` reads `app.monthly.months[app.selected_month]`
   instead of the single `app.monthly`.
 - Show `"◀ March 2026 ▶"` in the title so the user sees navigation is
@@ -124,6 +131,7 @@ an at-a-glance gain/loss for each coin without having to select it.
 **Files:** `src/data.rs`, `src/ui.rs`
 
 **Changes:**
+
 - In `CoinChartSeries`, add a convenience method or store `total_invested`
   (the last value of the `investment` series).
 - In `render_holdings_table()`, look up the coin's `CoinChartSeries` from
@@ -137,7 +145,7 @@ an at-a-glance gain/loss for each coin without having to select it.
 
 ---
 
-## Step 7 — Help popup (`?` key)
+## Step 7 — Help popup (`?` key) ✅
 
 **Why:** Standard TUI convention. The status bar keybindings get truncated on
 narrow terminals.
@@ -145,6 +153,7 @@ narrow terminals.
 **Files:** `src/app.rs`, `src/main.rs`, `src/ui.rs`
 
 **Changes:**
+
 - Add `pub show_help: bool` to `App`.
 - In `main.rs`, add `KeyCode::Char('?')` → toggle `app.show_help`.
   When `show_help` is true, all other keys except `?` / `q` / `Esc` are
@@ -157,7 +166,7 @@ narrow terminals.
 
 ---
 
-## Step 8 — Dynamic coin ordering (sort by value)
+## Step 8 — Dynamic coin ordering (sort by value) ✅
 
 **Why:** The hardcoded `["SOL", "BTC", "ETH", "LINK", "TON", "AR"]` list in
 `compute_portfolio` means new coins appear at the bottom regardless of value,
@@ -166,6 +175,7 @@ and removed coins silently disappear from the preferred order.
 **Files:** `src/data.rs` → `compute_portfolio()`
 
 **Changes:**
+
 - Remove the `order` array.
 - Collect all coins into a `Vec<CryptoHolding>`, then sort by `value_eur`
   descending.
@@ -183,6 +193,7 @@ makes Jan 2025 and Jan 2026 indistinguishable.
 **Files:** `src/ui.rs` → `render_price_chart()`
 
 **Changes:**
+
 - Change the date format in `x_labels` from `"%d.%m"` to `"%b %y"`
   (e.g. "Dec 25", "Mar 26").
 - Reduce label count from 5 to 3-4 if the chart area is narrow
@@ -200,6 +211,7 @@ Handling `Event::Resize` forces an immediate redraw.
 **Files:** `src/main.rs`
 
 **Changes:**
+
 - In the event loop, add a match arm:
   `Event::Resize(_, _) => { /* just let the loop redraw */ }`
 - This ensures we don't accidentally fall through or miss the event.
@@ -218,6 +230,7 @@ cases and is ~30 KB.
 **Files:** `Cargo.toml`, `src/data.rs`
 
 **Changes:**
+
 - Add `csv = "1"` to `[dependencies]`.
 - Replace `parse_csv_line` usages in `run_register`, `parse_balance_csv`,
   and `parse_monthly_csv` with `csv::ReaderBuilder` over the stdout bytes.

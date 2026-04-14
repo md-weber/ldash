@@ -354,37 +354,16 @@ pub fn compute_portfolio(
         *totals.entry(balance.commodity.clone()).or_default() += balance.amount;
     }
 
-    let order = ["SOL", "BTC", "ETH", "LINK", "TON", "AR"];
-    let mut holdings: Vec<CryptoHolding> = Vec::new();
+    let mut holdings: Vec<CryptoHolding> = totals
+        .into_iter()
+        .filter(|(_, amount)| *amount > 1e-8)
+        .map(|(coin, amount)| {
+            let price = latest_prices.get(&coin).copied().unwrap_or(0.0);
+            CryptoHolding { commodity: coin, amount, price_eur: price, value_eur: amount * price }
+        })
+        .collect();
 
-    for coin in order.iter() {
-        if let Some(&amount) = totals.get(*coin) {
-            if amount <= 1e-8 {
-                continue;
-            }
-            let price = latest_prices.get(*coin).copied().unwrap_or(0.0);
-            holdings.push(CryptoHolding {
-                commodity: coin.to_string(),
-                amount,
-                price_eur: price,
-                value_eur: amount * price,
-            });
-        }
-    }
-
-    // Any other coins not in the predefined order
-    for (coin, &amount) in &totals {
-        if !order.contains(&coin.as_str()) && amount > 1e-8 {
-            let price = latest_prices.get(coin).copied().unwrap_or(0.0);
-            holdings.push(CryptoHolding {
-                commodity: coin.clone(),
-                amount,
-                price_eur: price,
-                value_eur: amount * price,
-            });
-        }
-    }
-
+    holdings.sort_by(|a, b| b.value_eur.partial_cmp(&a.value_eur).unwrap_or(std::cmp::Ordering::Equal));
     holdings
 }
 
