@@ -218,7 +218,7 @@ keys on the Accounts tab zoom the net worth chart.
 
 ---
 
-## Step 10 — Monthly comparison (same month last year)
+## Step 10 — Monthly comparison (same month last year) ✅
 
 **Why:** "Is my spending this March higher than last March?" Seasonal
 comparison is one of the most useful insights. Requires loading last year's

@@ -1,3 +1,4 @@
+use chrono::Datelike;
 use ratatui::{prelude::*, widgets::*};
 
 use crate::app::{App, Tab};
@@ -28,6 +29,46 @@ fn expense_color(category: &str) -> Color {
         "spende" | "schenkung" => Color::Rgb(150, 220, 180),
         _ => FG,
     }
+}
+
+fn nice_step(range: f64, ticks: usize) -> f64 {
+    let raw = range / ticks as f64;
+    let mag = 10.0_f64.powf(raw.log10().floor());
+    let frac = raw / mag;
+    let nice = if frac <= 1.0 {
+        1.0
+    } else if frac <= 2.0 {
+        2.0
+    } else if frac <= 2.5 {
+        2.5
+    } else if frac <= 5.0 {
+        5.0
+    } else {
+        10.0
+    };
+    nice * mag
+}
+
+fn nice_y_axis(y_min_raw: f64, y_max_raw: f64, ticks: usize) -> (f64, f64, Vec<Span<'static>>) {
+    let range = (y_max_raw - y_min_raw).max(1.0);
+    let step = nice_step(range, ticks);
+    let lo = (y_min_raw / step).floor() * step;
+    let hi = (y_max_raw / step).ceil() * step;
+    let n = ((hi - lo) / step).round() as usize;
+    let labels = (0..=n)
+        .map(|i| {
+            let v = lo + step * i as f64;
+            let s = if v.abs() >= 10_000.0 {
+                format!("{:.0}€", v)
+            } else if v.abs() >= 100.0 {
+                format!("{:.0}€", v)
+            } else {
+                format!("{:.1}€", v)
+            };
+            Span::styled(s, Style::default().fg(MUTED))
+        })
+        .collect();
+    (lo, hi, labels)
 }
 
 // ── Entry point ───────────────────────────────────────────────────────────────
@@ -363,11 +404,8 @@ fn render_price_chart(f: &mut Frame, app: &App, area: Rect) {
         .map(|p| p.1);
     let y_min_raw = all_y.clone().fold(0.0_f64, f64::min);
     let y_max_raw = all_y.fold(0.0_f64, f64::max);
-    let padding = ((y_max_raw - y_min_raw) * 0.08).max(50.0);
-    let y_min = y_min_raw - padding;
-    let y_max = y_max_raw + padding;
+    let (y_min, y_max, y_labels) = nice_y_axis(y_min_raw, y_max_raw, 4);
 
-    // X-axis date labels
     let coin_entries: Vec<_> = app
         .price_history
         .iter()
@@ -381,17 +419,6 @@ fn render_price_chart(f: &mut Frame, app: &App, area: Rect) {
             .iter()
             .filter_map(|&i| coin_entries.get(i))
             .map(|e| Span::styled(e.date.format("%b %y").to_string(), Style::default().fg(MUTED)))
-            .collect()
-    };
-
-    // Y-axis EUR labels
-    let y_labels: Vec<Span> = {
-        let step = (y_max - y_min) / 4.0;
-        (0..=4)
-            .map(|i| {
-                let v = y_min + step * i as f64;
-                Span::styled(format!("{:.0}€", v), Style::default().fg(MUTED))
-            })
             .collect()
     };
 
@@ -462,9 +489,7 @@ fn render_net_worth_chart(f: &mut Frame, app: &App, area: Rect) {
     let x_max = series.points.last().unwrap().0;
     let y_min_raw = series.points.iter().map(|p| p.1).fold(f64::INFINITY, f64::min);
     let y_max_raw = series.points.iter().map(|p| p.1).fold(f64::NEG_INFINITY, f64::max);
-    let padding = ((y_max_raw - y_min_raw) * 0.08).max(100.0);
-    let y_min = y_min_raw - padding;
-    let y_max = y_max_raw + padding;
+    let (y_min, y_max, y_labels) = nice_y_axis(y_min_raw, y_max_raw, 4);
 
     let label_count = if area.width < 60 { 3 } else { 5 };
     let n = series.labels.len();
@@ -473,16 +498,6 @@ fn render_net_worth_chart(f: &mut Frame, app: &App, area: Rect) {
         .filter_map(|i| series.labels.get(i))
         .map(|(d, _)| Span::styled(d.format("%b %y").to_string(), Style::default().fg(MUTED)))
         .collect();
-
-    let y_labels: Vec<Span> = {
-        let step = (y_max - y_min) / 4.0;
-        (0..=4)
-            .map(|i| {
-                let v = y_min + step * i as f64;
-                Span::styled(format!("{:.0}€", v), Style::default().fg(MUTED))
-            })
-            .collect()
-    };
 
     let dataset = Dataset::default()
         .name("Net Worth")
@@ -701,7 +716,7 @@ fn render_monthly_chart(f: &mut Frame, app: &App, area: Rect) {
 fn render_monthly(f: &mut Frame, app: &mut App, area: Rect) {
     let chunks = Layout::vertical([
         Constraint::Length(12), // bar chart
-        Constraint::Length(8),  // summary
+        Constraint::Length(10), // summary
         Constraint::Min(0),     // detail tables
     ])
     .split(area);
@@ -739,7 +754,7 @@ fn render_monthly_summary(f: &mut Frame, app: &App, area: Rect) {
 
     let nav_title = format!(" ◀ {} ▶ ", m.month_name);
 
-    let text = vec![
+    let mut text = vec![
         Line::from(vec![
             Span::styled("  Income    ", Style::default().fg(MUTED)),
             Span::styled(
@@ -762,6 +777,50 @@ fn render_monthly_summary(f: &mut Frame, app: &App, area: Rect) {
             ),
         ]),
     ];
+
+    if let Some(ly) = app.last_year_match() {
+        let short = &m.month_name[..3];
+        let year_ago = chrono::Local::now().year() - 1;
+        text.push(Line::from(""));
+
+        let incomplete = ly.expenses.len() < 3
+            || (m.total_expenses > 0.0 && ly.total_expenses / m.total_expenses < 0.25);
+
+        if incomplete {
+            text.push(Line::from(vec![
+                Span::styled("  vs ", Style::default().fg(MUTED)),
+                Span::styled(
+                    format!("{short} '{}", year_ago % 100),
+                    Style::default().fg(MUTED),
+                ),
+                Span::styled("  (partial data)", Style::default().fg(MUTED)),
+            ]));
+        } else {
+            let ly_net = ly.total_income - ly.total_expenses;
+            let diff = m.total_expenses - ly.total_expenses;
+            let pct = if ly.total_expenses > 0.0 {
+                diff / ly.total_expenses * 100.0
+            } else {
+                0.0
+            };
+            let (arrow, color) = if diff <= 0.0 {
+                ("↓", GREEN)
+            } else {
+                ("↑", RED)
+            };
+            text.push(Line::from(vec![
+                Span::styled("  vs ", Style::default().fg(MUTED)),
+                Span::styled(
+                    format!("{short} '{}: {:.0}€", year_ago % 100, ly_net),
+                    Style::default().fg(MUTED),
+                ),
+                Span::styled(
+                    format!("  {arrow}{:.0}%", pct.abs()),
+                    Style::default().fg(color).bold(),
+                ),
+            ]));
+        }
+    }
 
     let left_block = Block::default()
         .title(Span::styled(nav_title, Style::default().fg(ACCENT).bold()))

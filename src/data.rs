@@ -211,6 +211,25 @@ pub fn load_monthly_data(journal_path: &Path) -> Result<MonthlyData> {
     parse_monthly_csv(&text, current_month)
 }
 
+pub fn load_last_year_monthly(journal_path: &Path) -> Result<MonthlyData> {
+    let output = Command::new("hledger")
+        .args([
+            "-f",
+            journal_path.to_str().unwrap_or("all.journal"),
+            "incomestatement",
+            "-O",
+            "csv",
+            "--no-total",
+            "-p",
+            "monthly last year",
+        ])
+        .output()
+        .context("Failed to run hledger incomestatement for last year")?;
+
+    let text = String::from_utf8_lossy(&output.stdout);
+    parse_monthly_csv(&text, 0)
+}
+
 fn parse_monthly_csv(text: &str, current_month: usize) -> Result<MonthlyData> {
     let mut rdr = csv::ReaderBuilder::new()
         .flexible(true)

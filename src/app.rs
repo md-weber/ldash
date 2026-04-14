@@ -7,9 +7,9 @@ use std::time::Instant;
 
 use crate::data::{
     compute_portfolio, latest_prices, load_account_balances_eur, load_coin_chart_series,
-    load_crypto_balances, load_monthly_data, load_net_worth_history, load_price_history,
-    load_recent_transactions, AccountBalance, CoinChartSeries, CryptoHolding, MonthlyData,
-    NetWorthSeries, PriceEntry, SingleMonth, Transaction,
+    load_crypto_balances, load_last_year_monthly, load_monthly_data, load_net_worth_history,
+    load_price_history, load_recent_transactions, AccountBalance, CoinChartSeries, CryptoHolding,
+    MonthlyData, NetWorthSeries, PriceEntry, SingleMonth, Transaction,
 };
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -101,6 +101,7 @@ pub struct App {
     pub net_worth_history: NetWorthSeries,
     pub nw_range: NetWorthRange,
     pub monthly: MonthlyData,
+    pub last_year: MonthlyData,
     pub selected_holding: usize,
     pub account_state: TableState,
     pub expense_state: TableState,
@@ -132,6 +133,7 @@ impl App {
             net_worth_history: NetWorthSeries::default(),
             nw_range: NetWorthRange::Year2,
             monthly: MonthlyData::default(),
+            last_year: MonthlyData::default(),
             selected_holding: 0,
             account_state: TableState::default().with_selected(0),
             expense_state: TableState::default().with_selected(0),
@@ -201,6 +203,15 @@ impl App {
             }
             Err(e) => {
                 self.status_msg = format!("Error loading monthly data: {e}");
+            }
+        }
+
+        match load_last_year_monthly(&self.journal_path) {
+            Ok(ly) => {
+                self.last_year = ly;
+            }
+            Err(e) => {
+                self.status_msg = format!("Error loading last year data: {e}");
             }
         }
 
@@ -309,6 +320,14 @@ impl App {
 
     pub fn current_month(&self) -> Option<&SingleMonth> {
         self.monthly.months.get(self.monthly.selected)
+    }
+
+    pub fn last_year_match(&self) -> Option<&SingleMonth> {
+        let cur = self.current_month()?;
+        self.last_year
+            .months
+            .iter()
+            .find(|m| m.month_name == cur.month_name)
     }
 
     pub fn ytd_stats(&self) -> YtdStats {
