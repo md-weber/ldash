@@ -185,7 +185,7 @@ and removed coins silently disappear from the preferred order.
 
 ---
 
-## Step 9 — Chart date labels with year
+## Step 9 — Chart date labels with year ✅
 
 **Why:** Price history can span multiple years. The current `%d.%m` format
 makes Jan 2025 and Jan 2026 indistinguishable.

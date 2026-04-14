@@ -340,11 +340,12 @@ fn render_price_chart(f: &mut Frame, app: &App, area: Rect) {
         .collect();
     let x_labels: Vec<Span> = {
         let n = coin_entries.len();
-        let indices = [0, n / 4, n / 2, 3 * n / 4, n.saturating_sub(1)];
+        let count = if area.width < 60 { 3 } else { 5 };
+        let indices: Vec<usize> = (0..count).map(|i| i * n.saturating_sub(1) / (count - 1).max(1)).collect();
         indices
             .iter()
             .filter_map(|&i| coin_entries.get(i))
-            .map(|e| Span::styled(e.date.format("%d.%m").to_string(), Style::default().fg(MUTED)))
+            .map(|e| Span::styled(e.date.format("%b %y").to_string(), Style::default().fg(MUTED)))
             .collect()
     };
 
