@@ -1,185 +1,297 @@
 
-# Phase 3 Strategy: Startup Performance
+# Phase 4 Strategy: Feature Expansion
 
-## Problem
+## Current State
 
-`App::refresh()` runs **5 + 3N** sequential hledger subprocess calls (N = number
-of crypto holdings). With 6 coins that's 23 invocations, each re-parsing the
-full journal from scratch. All blocking — no UI rendered until every call
-finishes. Perceived startup: several seconds of blank screen.
-
-### Call inventory (current)
-
-| Call                          | Count | Depends on     |
-|-------------------------------|-------|----------------|
-| `load_price_history`          | 1     | (file read)    |
-| `load_crypto_balances`        | 1     | —              |
-| `compute_portfolio`           | 1     | prices, crypto |
-| `load_coin_chart_series`      | 3×N   | portfolio      |
-| `load_account_balances_eur`   | 1     | —              |
-| `load_net_worth_history`      | 1     | —              |
-| `load_monthly_data`           | 1     | —              |
-| `load_last_year_monthly`      | 1     | —              |
-
-Only `compute_portfolio` and `load_coin_chart_series` have data dependencies.
-Everything else is independent and parallelisable.
+Dashboard has 3 tabs (Portfolio, Accounts, Monthly) with parallel data loading,
+background refresh, lazy tab loading, and mtime-based cache. UI is responsive
+with progressive rendering. Core data: crypto portfolio P/L, net worth chart,
+monthly income/expenses with YoY comparison.
 
 ---
 
-## Step 1 — Progressive rendering (show UI immediately)
+## Feature Group A — Deeper Drill-Downs
 
-**Why:** Even if data takes 3s to load, showing the TUI frame with
-"Loading…" in each panel feels instant. Users tolerate latency when they see
-progress; they don't tolerate a frozen terminal.
+### A1. Expense Category Drill-Down
 
-**Files:** `src/main.rs`, `src/app.rs`
+**Problem:** Monthly tab shows expense categories but no way to see individual
+transactions within a category. Account tab has drill-down, expenses don't.
 
 **Changes:**
+- Enter on selected expense category → show transactions for that category
+  in selected month (reuse `load_recent_transactions` with date filter).
+- Add date-range arg to `load_recent_transactions` (pass `-p "YYYY-MM"`).
+- Render with same `render_account_detail` layout, Esc to go back.
 
-- `App::new()` returns immediately with empty/default data and `loading: true`.
-- Move `refresh()` call to after the first `terminal.draw()` in `run()`.
-- UI already handles empty data (renders empty tables/charts). Add a centered
-  "Loading data…" overlay when `app.loading` is true.
+**Impact:** Users can answer "why was Food so high in March?" without leaving TUI.
 
-**Impact:** Perceived startup drops to ~50ms (time to first frame). Actual data
-load time unchanged but user sees the app immediately.
-
-**Scope:** ~15 lines.
+**Scope:** ~40 lines. Low risk.
 
 ---
 
-## Step 2 — Parallel hledger calls (std::thread)
+### A2. Transaction Search
 
-**Why:** The 5 independent hledger calls + the 3×N coin series calls run
-sequentially. Each takes 100-300ms (journal parse + query). Running them
-in parallel on separate threads cuts wall-clock time from sum to max.
-
-**Files:** `src/data.rs`, `src/app.rs`
+**Problem:** No way to find a specific transaction across all accounts/dates.
+Users must drop to terminal `hledger register` commands.
 
 **Changes:**
+- New keybinding `/` → opens search input bar (bottom of screen).
+- Run `hledger register -O csv` with description filter (`desc:QUERY`).
+- Show results in a temporary overlay table (date, account, description, amount).
+- Esc closes search. Support regex patterns.
 
-### 2a — Parallel independent calls
+**Impact:** Eliminates most reasons to leave the TUI.
 
-- Use `std::thread::scope` to run these concurrently:
-  - `load_crypto_balances`
-  - `load_account_balances_eur`
-  - `load_net_worth_history`
-  - `load_monthly_data`
-  - `load_last_year_monthly`
-- Collect results, apply to `App` after all threads join.
-
-### 2b — Parallel coin chart series
-
-- After portfolio is computed, spawn one thread per coin for
-  `load_coin_chart_series` (each coin does 3 hledger calls internally).
-- Cap thread count with a semaphore if holdings > 8.
-
-**Impact:** With 6 coins: 23 sequential calls → ~4 parallel groups.
-Estimated 3-4× speedup (e.g. 4s → 1s).
-
-**Scope:** ~40 lines.
+**Scope:** ~80 lines. Needs text input widget. Medium risk.
 
 ---
 
-## Step 3 — Background refresh with channel
+## Feature Group B — Financial Intelligence
 
-**Why:** Steps 1+2 still block the event loop during refresh. Moving data
-loading to a background thread lets the UI remain responsive (animations,
-tab switching) while data loads.
+### B1. Budget Tracking
 
-**Files:** `src/main.rs`, `src/app.rs`
+**Problem:** No visibility into whether spending stays within planned limits.
+Users track budgets manually or not at all.
 
 **Changes:**
+- Config file (`~/.config/ldash/budgets.toml`) with per-category monthly limits:
+  ```toml
+  [budgets]
+  "expenses:Essen" = 400.0
+  "expenses:Freizeit" = 200.0
+  ```
+- Monthly tab: add progress bar or percentage next to each expense category
+  showing budget usage (e.g. `[████████░░] 82%`).
+- Color: green < 80%, yellow 80-100%, red > 100%.
+- Summary widget: "3 categories over budget this month".
 
-- Spawn `refresh()` on `std::thread::spawn`, send results back via
-  `std::sync::mpsc::channel`.
-- Event loop checks channel each tick; applies new data when ready.
-- Manual refresh (`r` key) and auto-refresh both use the channel.
-- Guard against double-refresh with an `is_refreshing: bool` flag.
+**Impact:** Core personal finance feature. Makes dashboard actionable.
 
-**Impact:** UI never freezes during refresh. Combined with Step 2, user
-sees data appear ~1s after launch with zero perceived lag.
-
-**Scope:** ~50 lines.
+**Scope:** ~60 lines + config loading. Low risk.
 
 ---
 
-## Step 4 — Lazy tab loading
+### B2. Cash Flow Sparklines
 
-**Why:** Portfolio tab loads first (default tab), but account/monthly data
-loads too even though it's not visible. Deferring non-visible tab data
-until tab switch makes the first visible tab appear faster.
-
-**Files:** `src/app.rs`
+**Problem:** Monthly chart shows bars but no trend direction at a glance.
+Hard to see if expenses are trending up or down over time.
 
 **Changes:**
+- Add sparkline widgets (ratatui `Sparkline`) next to YTD summary showing
+  6-month trailing trend for income, expenses, and net.
+- Compute from existing `monthly.months` data — no new hledger calls.
 
-- Track `tabs_loaded: [bool; 3]` per tab.
-- On startup, only load Portfolio data.
-- On first switch to Accounts/Monthly tab, trigger load for that tab's data.
-- Show per-tab "Loading…" state while data arrives.
+**Impact:** Instant trend visibility. Zero performance cost.
 
-**Impact:** Initial data display ~2× faster (only load 1 tab worth of data).
-Subsequent tab switches add ~200ms one-time cost.
-
-**Scope:** ~30 lines.
+**Scope:** ~25 lines. No risk.
 
 ---
 
-## Step 5 — Coin chart series batching
+### B3. Savings Goal Tracker
 
-**Why:** `load_coin_chart_series` runs 3 `hledger register` calls per coin,
-each re-parsing the full journal. Combining into one `register assets:crypto
---cost -O csv` call for all coins at once eliminates N×3 → 3 calls total.
-
-**Files:** `src/data.rs`
+**Problem:** Users have financial goals (emergency fund, house down payment)
+but no way to track progress in dashboard.
 
 **Changes:**
+- Config file entry:
+  ```toml
+  [[goals]]
+  name = "Emergency Fund"
+  target = 15000.0
+  account = "assets:bank:savings"
+  
+  [[goals]]
+  name = "House Fund"
+  target = 50000.0
+  account = "assets:bank:house"
+  ```
+- Display as gauge widgets in Accounts tab or dedicated section.
+- Pull current balance from existing `account_balances` data.
 
-- Add `load_all_coin_chart_series(journal_path, price_history, coins)` that:
-  - Runs 3 bulk register queries (all coins at once).
-  - Splits results by commodity in-memory.
-  - Builds `CoinChartSeries` per coin from the split data.
-- Replace the per-coin loop in `refresh()`.
+**Impact:** Makes long-term financial planning visible.
 
-**Impact:** 18 hledger calls → 3. Combined with Step 2, total calls drop
-from 23 to 8, all parallel. Estimated 5-8× total speedup.
-
-**Scope:** ~60 lines (refactor + new parser logic).
+**Scope:** ~40 lines. Low risk.
 
 ---
 
-## Step 6 — Journal mtime cache
+## Feature Group C — Portfolio Enhancements
 
-**Why:** Auto-refresh every 5 min re-runs everything even if journal didn't
-change. Checking file mtime before refresh avoids redundant work.
+### C1. Portfolio Allocation Chart
 
-**Files:** `src/app.rs`
+**Problem:** Allocation percentages shown as text in table. Hard to visualize
+portfolio balance at a glance.
 
 **Changes:**
+- Add horizontal stacked bar or mini bar chart below holdings table showing
+  allocation split by coin (colored segments).
+- Use ratatui `BarChart` with single group, one bar per coin.
+- Data already available — no new hledger calls.
 
-- Store `last_journal_mtime: SystemTime` in `App`.
-- Before auto-refresh, check `fs::metadata(journal_path).modified()`.
-- Skip refresh if mtime unchanged. Still allow manual `r` to force reload.
+**Impact:** Visual portfolio balance check. Zero cost.
 
-**Impact:** Zero-cost auto-refresh when journal unchanged. Saves 1-4s every
-5 minutes for users who leave the dashboard open.
-
-**Scope:** ~10 lines.
+**Scope:** ~30 lines. No risk.
 
 ---
 
-## Implementation Order Summary
+### C2. Portfolio Time Range Selection
 
-| Step | Area                | Risk  | Effort | Impact      |
-|------|---------------------|-------|--------|-------------|
-| 1    | Progressive render  | None  | Tiny   | High (UX)   |
-| 2    | Parallel calls      | Low   | Medium | High (3-4×) |
-| 3    | Background refresh  | Low   | Medium | High (UX)   |
-| 4    | Lazy tab loading    | None  | Small  | Medium      |
-| 5    | Batch coin queries  | Med   | Medium | High (5-8×) |
-| 6    | Mtime cache         | None  | Tiny   | Medium      |
+**Problem:** Portfolio chart always shows full history. No way to zoom into
+last 3 months or 1 year.
 
-Steps 1-2 give biggest bang: instant UI + parallel loading.
-Step 3 makes refresh non-blocking.
-Steps 4-6 are incremental optimizations, order flexible.
+**Changes:**
+- Add range selector (same pattern as net worth: 3M/6M/1Y/All).
+- Filter `coin_chart_cache` data by date range before rendering.
+- Keybinding `[` and `]` or reuse `←`/`→` on Portfolio tab.
+
+**Impact:** Better analysis of recent performance vs long-term.
+
+**Scope:** ~20 lines. No risk.
+
+---
+
+### C3. Price Alerts Display
+
+**Problem:** No visibility into significant price movements since last session.
+
+**Changes:**
+- On startup, compare current prices to 24h-ago prices from price history.
+- Show notification-style banner: "BTC +5.2%, SOL -3.1% since yesterday".
+- Auto-dismiss after 5 seconds or on any keypress.
+
+**Impact:** Quick market awareness on dashboard open.
+
+**Scope:** ~30 lines. Low risk.
+
+---
+
+## Feature Group D — Configuration & Polish
+
+### D1. Config File Support
+
+**Problem:** No configuration. Expense color mapping, account groupings, and
+display preferences are hardcoded.
+
+**Changes:**
+- Load `~/.config/ldash/config.toml` on startup.
+- Options: journal path, refresh interval, default tab, number format (EU/US),
+  currency symbol, expense color overrides.
+- Fallback to current hardcoded defaults when config missing.
+
+**Impact:** Foundation for all config-dependent features (budgets, goals).
+Must implement before B1/B3.
+
+**Scope:** ~50 lines + toml dependency. Low risk.
+
+---
+
+### D2. Liability Tracking
+
+**Problem:** Net worth chart shows assets only. Users with mortgages or debts
+see inflated net worth. `hledger balance assets liabilities` gives true picture.
+
+**Changes:**
+- Extend `load_account_balances_eur` to also query `liabilities`.
+- Show liabilities in Accounts tab below assets, colored red, separated.
+- Net worth calculation: assets + liabilities (liabilities are negative in hledger).
+- Optional: net worth chart includes liabilities in calculation.
+
+**Impact:** Accurate financial picture for users with debt.
+
+**Scope:** ~30 lines. Low risk.
+
+---
+
+### D3. Multi-Year Monthly Comparison
+
+**Problem:** Only current year vs last year. No way to see 3-year expense trends
+for a category.
+
+**Changes:**
+- New keybinding (e.g. `y`) in Monthly tab cycles through years: 2026, 2025, 2024.
+- Or: overlay mode showing selected month across multiple years as grouped bars.
+- Reuse `load_monthly_data` with different `-p` period argument.
+
+**Impact:** Long-term trend analysis.
+
+**Scope:** ~40 lines. Low risk.
+
+---
+
+### D4. Responsive Terminal Layout
+
+**Problem:** UI assumes wide terminal. Narrow terminals (< 100 cols) break
+table layouts and truncate data.
+
+**Changes:**
+- Detect terminal width in render functions.
+- < 100 cols: stack Portfolio panels vertically (table above, chart below).
+- < 80 cols: hide bar charts in tables, abbreviate column headers.
+- Accounts table: truncate long account names with ellipsis.
+
+**Impact:** Usable on laptop screens and split panes.
+
+**Scope:** ~40 lines across `ui.rs`. Low risk.
+
+---
+
+## Feature Group E — Data Export & Integration
+
+### E1. Clipboard Export
+
+**Problem:** No way to extract data from TUI without going to terminal.
+
+**Changes:**
+- Keybinding `y` (yank) copies current view data to clipboard.
+- Portfolio: CSV of holdings. Accounts: selected account balance.
+  Monthly: current month income/expenses.
+- Use `clipboard` crate or pipe to `pbcopy`/`xclip`.
+
+**Impact:** Bridges TUI and other tools (spreadsheets, reports).
+
+**Scope:** ~30 lines. Low risk.
+
+---
+
+### E2. Journal File Watcher
+
+**Problem:** Auto-refresh checks mtime every 5 minutes. Edits to journal
+not reflected for up to 5 min.
+
+**Changes:**
+- Use `notify` crate to watch journal file + included files for changes.
+- Trigger refresh within 1 second of file save.
+- Replace polling interval with event-driven refresh.
+
+**Impact:** Near-realtime updates when editing journal in another pane.
+
+**Scope:** ~40 lines + `notify` dependency. Low risk.
+
+---
+
+## Implementation Priority
+
+| Priority | Feature | Group | Depends On | Effort | Impact |
+|----------|---------|-------|------------|--------|--------|
+| 1        | D1 Config file | Config | — | Medium | Foundation |
+| 2        | A1 Expense drill-down | Drill-down | — | Small | High |
+| 3        | B2 Cash flow sparklines | Intelligence | — | Tiny | Medium |
+| 4        | D2 Liability tracking | Config | — | Small | High |
+| 5        | B1 Budget tracking | Intelligence | D1 | Medium | High |
+| 6        | C1 Allocation chart | Portfolio | — | Small | Medium |
+| 7        | C2 Portfolio time range | Portfolio | — | Tiny | Medium |
+| 8        | D4 Responsive layout | Polish | — | Medium | Medium |
+| 9        | A2 Transaction search | Drill-down | — | Medium | High |
+| 10       | B3 Savings goals | Intelligence | D1 | Small | Medium |
+| 11       | E2 File watcher | Integration | — | Small | Medium |
+| 12       | D3 Multi-year comparison | Config | — | Small | Medium |
+| 13       | C3 Price alerts | Portfolio | — | Small | Low |
+| 14       | E1 Clipboard export | Integration | — | Small | Low |
+
+### Recommended batches for plan files:
+
+- **Plan 1:** D1 + A1 (config foundation + first drill-down)
+- **Plan 2:** B2 + C1 + C2 (visual enhancements, no new data loading)
+- **Plan 3:** D2 + D4 (accuracy + usability)
+- **Plan 4:** B1 + B3 (actionable financial intelligence, needs D1)
+- **Plan 5:** A2 + E2 (search + live updates)
+- **Plan 6:** D3 + C3 + E1 (nice-to-haves)
