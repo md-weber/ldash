@@ -6,7 +6,7 @@ use std::path::PathBuf;
 use crate::data::{
     compute_portfolio, latest_prices, load_account_balances_eur, load_coin_chart_series,
     load_crypto_balances, load_monthly_data, load_price_history, AccountBalance, CoinChartSeries,
-    CryptoHolding, MonthlyData, PriceEntry,
+    CryptoHolding, MonthlyData, PriceEntry, SingleMonth,
 };
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -179,7 +179,11 @@ impl App {
                 }
             }
             Tab::Monthly => {
-                if self.expense_scroll + 1 < self.monthly.expenses.len() {
+                let len = self
+                    .current_month()
+                    .map(|m| m.expenses.len())
+                    .unwrap_or(0);
+                if self.expense_scroll + 1 < len {
                     self.expense_scroll += 1;
                 }
             }
@@ -196,5 +200,20 @@ impl App {
 
     pub fn total_net_worth(&self) -> f64 {
         self.account_balances.iter().map(|b| b.amount).sum()
+    }
+
+    pub fn current_month(&self) -> Option<&SingleMonth> {
+        self.monthly.months.get(self.monthly.selected)
+    }
+
+    pub fn month_left(&mut self) {
+        self.monthly.selected = self.monthly.selected.saturating_sub(1);
+    }
+
+    pub fn month_right(&mut self) {
+        if !self.monthly.months.is_empty() && self.monthly.selected + 1 < self.monthly.months.len()
+        {
+            self.monthly.selected += 1;
+        }
     }
 }

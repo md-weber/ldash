@@ -77,7 +77,7 @@ fn render_content(f: &mut Frame, app: &App, area: Rect) {
 // ── Status bar ────────────────────────────────────────────────────────────────
 
 fn render_status(f: &mut Frame, app: &App, area: Rect) {
-    let help = "  [1-3] switch tab  [↑↓/jk] navigate  [r] refresh  [q] quit";
+    let help = "  [1-3] tab  [↑↓/jk] navigate  [←→/hl] month  [r] refresh  [q] quit";
     let text = Line::from(vec![
         Span::styled(&app.status_msg, Style::default().fg(ACCENT)),
         Span::styled(help, Style::default().fg(MUTED)),
@@ -135,12 +135,51 @@ fn render_holdings_table(f: &mut Frame, app: &App, area: Rect) {
                 "—".into()
             };
 
+            let (pl_pct_str, pl_pct_style, pl_eur_str, pl_eur_style) =
+                match app.coin_chart_cache.get(&h.commodity) {
+                    Some(series) if !series.investment.is_empty() => {
+                        let invested = series.total_invested();
+                        let pl_abs = h.value_eur - invested;
+                        let abs_color = if pl_abs >= 0.0 { GREEN } else { RED };
+                        let abs_prefix = if pl_abs >= 0.0 { "+" } else { "" };
+                        let eur = (
+                            format!("{abs_prefix}{:.2}€", pl_abs),
+                            Style::default().fg(abs_color).bold(),
+                        );
+
+                        if invested > 0.0 {
+                            let pct = (h.value_eur - invested) / invested * 100.0;
+                            let (prefix, color) = if pct >= 0.0 {
+                                ("+", GREEN)
+                            } else {
+                                ("", RED)
+                            };
+                            (
+                                format!("{prefix}{:.1}%", pct),
+                                Style::default().fg(color).bold(),
+                                eur.0,
+                                eur.1,
+                            )
+                        } else {
+                            ("—".into(), Style::default().fg(MUTED), eur.0, eur.1)
+                        }
+                    }
+                    _ => (
+                        "—".into(),
+                        Style::default().fg(MUTED),
+                        "—".into(),
+                        Style::default().fg(MUTED),
+                    ),
+                };
+
             Row::new(vec![
                 Cell::from(format!("{indicator}{}", h.commodity)).style(coin_style),
                 Cell::from(amt_str).style(Style::default().fg(if selected { GOLD } else { MUTED })),
                 Cell::from(price_str).style(Style::default().fg(ACCENT)),
                 Cell::from(value_str).style(Style::default().fg(GREEN)),
                 Cell::from(pct).style(Style::default().fg(FG)),
+                Cell::from(pl_pct_str).style(pl_pct_style),
+                Cell::from(pl_eur_str).style(pl_eur_style),
             ])
         })
         .collect();
@@ -153,6 +192,8 @@ fn render_holdings_table(f: &mut Frame, app: &App, area: Rect) {
             Cell::from("Total").style(Style::default().fg(FG).bold()),
             Cell::from(format!("{:.2} €", total)).style(Style::default().fg(GOLD).bold()),
             Cell::from("100%").style(Style::default().fg(FG).bold()),
+            Cell::from(""),
+            Cell::from(""),
         ])
         .height(1),
     );
@@ -163,11 +204,13 @@ fn render_holdings_table(f: &mut Frame, app: &App, area: Rect) {
         Constraint::Length(11),
         Constraint::Length(12),
         Constraint::Length(7),
+        Constraint::Length(8),
+        Constraint::Length(14),
     ];
 
     let table = Table::new(rows, widths)
         .header(
-            Row::new(vec!["Coin", "Amount", "Price", "Value", "Alloc"])
+            Row::new(vec!["Coin", "Amount", "Price", "Value", "Alloc", "P/L %", "P/L €"])
                 .style(Style::default().fg(MUTED).bold())
                 .bottom_margin(1),
         )
@@ -403,12 +446,12 @@ fn render_monthly(f: &mut Frame, app: &App, area: Rect) {
 }
 
 fn render_monthly_summary(f: &mut Frame, app: &App, area: Rect) {
-    let m = &app.monthly;
+    let empty = crate::data::SingleMonth::default();
+    let m = app.current_month().unwrap_or(&empty);
     let net = m.total_income - m.total_expenses;
     let net_color = if net >= 0.0 { GREEN } else { RED };
     let net_prefix = if net >= 0.0 { "+" } else { "" };
 
-    // Savings rate
     let savings_rate = if m.total_income > 0.0 {
         (net / m.total_income * 100.0).max(0.0).min(100.0) as u16
     } else {
@@ -418,12 +461,9 @@ fn render_monthly_summary(f: &mut Frame, app: &App, area: Rect) {
     let chunks = Layout::horizontal([Constraint::Percentage(45), Constraint::Percentage(55)])
         .split(area);
 
-    // Left: text summary
+    let nav_title = format!(" ◀ {} ▶ ", m.month_name);
+
     let text = vec![
-        Line::from(vec![
-            Span::styled("  Month     ", Style::default().fg(MUTED)),
-            Span::styled(&m.month_name, Style::default().fg(FG).bold()),
-        ]),
         Line::from(vec![
             Span::styled("  Income    ", Style::default().fg(MUTED)),
             Span::styled(
@@ -448,17 +488,13 @@ fn render_monthly_summary(f: &mut Frame, app: &App, area: Rect) {
     ];
 
     let left_block = Block::default()
-        .title(Span::styled(
-            " Monthly Overview ",
-            Style::default().fg(ACCENT).bold(),
-        ))
+        .title(Span::styled(nav_title, Style::default().fg(ACCENT).bold()))
         .borders(Borders::ALL)
         .border_type(BorderType::Rounded)
         .border_style(Style::default().fg(MUTED));
 
     f.render_widget(Paragraph::new(text).block(left_block), chunks[0]);
 
-    // Right: savings rate gauge
     let gauge = Gauge::default()
         .block(
             Block::default()
@@ -481,7 +517,8 @@ fn render_monthly_summary(f: &mut Frame, app: &App, area: Rect) {
 }
 
 fn render_monthly_income(f: &mut Frame, app: &App, area: Rect) {
-    let m = &app.monthly;
+    let empty = crate::data::SingleMonth::default();
+    let m = app.current_month().unwrap_or(&empty);
     let max_val = m.income.first().map(|i| i.1).unwrap_or(1.0);
     let bar_width = area.width.saturating_sub(40) as usize;
 
@@ -524,7 +561,8 @@ fn render_monthly_income(f: &mut Frame, app: &App, area: Rect) {
 }
 
 fn render_monthly_expenses(f: &mut Frame, app: &App, area: Rect) {
-    let m = &app.monthly;
+    let empty = crate::data::SingleMonth::default();
+    let m = app.current_month().unwrap_or(&empty);
     let max_val = m.expenses.first().map(|e| e.1).unwrap_or(1.0);
     let bar_width = area.width.saturating_sub(40) as usize;
 

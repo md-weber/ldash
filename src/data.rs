@@ -27,12 +27,18 @@ pub struct AccountBalance {
 }
 
 #[derive(Debug, Default, Clone)]
-pub struct MonthlyData {
+pub struct SingleMonth {
     pub month_name: String,
     pub income: Vec<(String, f64)>,
     pub expenses: Vec<(String, f64)>,
     pub total_income: f64,
     pub total_expenses: f64,
+}
+
+#[derive(Debug, Default, Clone)]
+pub struct MonthlyData {
+    pub months: Vec<SingleMonth>,
+    pub selected: usize,
 }
 
 /// Parse a European-formatted number like "1.524,00" or "74,52" or "0,02352448"
@@ -213,19 +219,26 @@ pub fn load_monthly_data(journal_path: &Path) -> Result<MonthlyData> {
 }
 
 fn parse_monthly_csv(text: &str, current_month: usize) -> Result<MonthlyData> {
-    // Columns: 0=Account, 1=Jan, 2=Feb, 3=Mar, ...
-    // current_month is 1-based, so March (3) is at column index 3
-    let col_idx = current_month;
+    let lines: Vec<&str> = text.lines().collect();
 
-    let mut data = MonthlyData {
-        month_name: month_name(current_month).to_string(),
-        ..Default::default()
-    };
+    // Determine how many month columns exist from the header row
+    let header_fields = lines
+        .iter()
+        .find(|l| parse_csv_line(l).first().map(|f| f.as_str()) == Some("Account"))
+        .map(|l| parse_csv_line(l));
+    let num_cols = header_fields.as_ref().map(|f| f.len()).unwrap_or(2);
+
+    let mut months_data: Vec<SingleMonth> = (1..num_cols)
+        .map(|m| SingleMonth {
+            month_name: month_name(m).to_string(),
+            ..Default::default()
+        })
+        .collect();
 
     let mut in_revenues = false;
     let mut in_expenses = false;
 
-    for line in text.lines() {
+    for line in &lines {
         let line = line.trim();
         if line.is_empty() {
             continue;
@@ -255,27 +268,44 @@ fn parse_monthly_csv(text: &str, current_month: usize) -> Result<MonthlyData> {
             _ => {}
         }
 
-        if col_idx < fields.len() {
+        for col_idx in 1..num_cols {
+            if col_idx >= fields.len() {
+                continue;
+            }
             let val_str = &fields[col_idx];
             if let Some((amount, commodity)) = parse_amount_str(val_str) {
                 if commodity == "€" && amount.abs() > 0.005 {
+                    let month = &mut months_data[col_idx - 1];
                     if in_revenues {
-                        data.income.push((account, amount.abs()));
-                        data.total_income += amount.abs();
+                        month.income.push((account.clone(), amount.abs()));
+                        month.total_income += amount.abs();
                     } else if in_expenses {
-                        data.expenses.push((account, amount.abs()));
-                        data.total_expenses += amount.abs();
+                        month.expenses.push((account.clone(), amount.abs()));
+                        month.total_expenses += amount.abs();
                     }
                 }
             }
         }
     }
 
-    data.income.sort_by(|a, b| b.1.partial_cmp(&a.1).unwrap_or(std::cmp::Ordering::Equal));
-    data.expenses
-        .sort_by(|a, b| b.1.partial_cmp(&a.1).unwrap_or(std::cmp::Ordering::Equal));
+    // Sort each month's entries and drop empty months
+    let months: Vec<SingleMonth> = months_data
+        .into_iter()
+        .filter(|m| m.total_income > 0.0 || m.total_expenses > 0.0)
+        .map(|mut m| {
+            m.income.sort_by(|a, b| b.1.partial_cmp(&a.1).unwrap_or(std::cmp::Ordering::Equal));
+            m.expenses.sort_by(|a, b| b.1.partial_cmp(&a.1).unwrap_or(std::cmp::Ordering::Equal));
+            m
+        })
+        .collect();
 
-    Ok(data)
+    // Default selection: current month if present, otherwise last available
+    let selected = months
+        .iter()
+        .position(|m| m.month_name == month_name(current_month))
+        .unwrap_or(months.len().saturating_sub(1));
+
+    Ok(MonthlyData { months, selected })
 }
 
 fn parse_csv_line(line: &str) -> Vec<String> {
@@ -367,6 +397,12 @@ pub struct CoinChartSeries {
     pub price_growth: Vec<(f64, f64)>,
     /// EUR value of coins received via staking rewards.
     pub staking_growth: Vec<(f64, f64)>,
+}
+
+impl CoinChartSeries {
+    pub fn total_invested(&self) -> f64 {
+        self.investment.last().map(|p| p.1).unwrap_or(0.0)
+    }
 }
 
 /// Run `hledger register <args…> -O csv` and return `(date, amount, commodity)`

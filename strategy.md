@@ -80,7 +80,7 @@ Net worth is the single most important number in a personal finance dashboard.
 
 ---
 
-## Step 5 — Month navigation on the Monthly tab
+## Step 5 — Month navigation on the Monthly tab ✅
 
 **Why:** Currently locked to the current calendar month. All the multi-month
 data is already loaded from hledger (`-p "monthly this year"`), but
@@ -116,7 +116,7 @@ left/right navigation is high value.
 
 ---
 
-## Step 6 — Per-coin P/L column in portfolio table
+## Step 6 — Per-coin P/L column in portfolio table ✅
 
 **Why:** The chart shows invested vs. current value, but the table should give
 an at-a-glance gain/loss for each coin without having to select it.
