@@ -113,6 +113,11 @@ pub fn render(f: &mut Frame, app: &mut App) {
     render_title(f, layout[0]);
     render_tabs(f, app, layout[1]);
     render_content(f, app, layout[2]);
+
+    if app.search_active {
+        render_search_overlay(f, app, layout[2]);
+    }
+
     render_status(f, app, layout[3]);
 
     if app.loading {
@@ -212,6 +217,7 @@ fn render_help_popup(f: &mut Frame, area: Rect) {
         ("↑ k / ↓ j", "Scroll / select"),
         ("← h / → l", "Month nav / NW range"),
         ("Enter", "Drill into detail"),
+        ("/", "Search transactions"),
         ("c", "Toggle expense colors"),
         ("Esc", "Back / quit"),
         ("r", "Refresh data"),
@@ -238,6 +244,98 @@ fn render_help_popup(f: &mut Frame, area: Rect) {
         .style(Style::default().bg(Color::Rgb(20, 20, 30)));
 
     f.render_widget(Paragraph::new(lines).block(block), popup);
+}
+
+fn render_search_overlay(f: &mut Frame, app: &mut App, area: Rect) {
+    f.render_widget(Clear, area);
+
+    let chunks = Layout::vertical([
+        Constraint::Length(3),
+        Constraint::Min(0),
+        Constraint::Length(1),
+    ])
+    .split(area);
+
+    let input = Paragraph::new(Line::from(vec![
+        Span::styled("  / ", Style::default().fg(GOLD).bold()),
+        Span::styled(&app.search_query, Style::default().fg(FG)),
+        Span::styled("█", Style::default().fg(ACCENT)),
+    ]))
+    .block(
+        Block::default()
+            .title(Span::styled(
+                " Search Transactions ",
+                Style::default().fg(ACCENT).bold(),
+            ))
+            .borders(Borders::ALL)
+            .border_type(BorderType::Rounded)
+            .border_style(Style::default().fg(ACCENT)),
+    );
+    f.render_widget(input, chunks[0]);
+
+    let rows: Vec<Row> = app
+        .search_results
+        .iter()
+        .map(|t| {
+            let amt_color = if t.amount >= 0.0 { GREEN } else { RED };
+            Row::new(vec![
+                Cell::from(t.date.format("%Y-%m-%d").to_string())
+                    .style(Style::default().fg(MUTED)),
+                Cell::from(t.description.clone()).style(Style::default().fg(FG)),
+                Cell::from(format!("{:>10.2} €", t.amount))
+                    .style(Style::default().fg(amt_color)),
+                Cell::from(format!("{:>10.2} €", t.running_total))
+                    .style(Style::default().fg(ACCENT)),
+            ])
+        })
+        .collect();
+
+    let result_count = app.search_results.len();
+    let title = if result_count > 0 {
+        format!(" {} results ", result_count)
+    } else if app.search_query.is_empty() {
+        " Type query, Enter to search ".to_string()
+    } else {
+        " No results ".to_string()
+    };
+
+    let table = Table::new(
+        rows,
+        [
+            Constraint::Length(12),
+            Constraint::Min(24),
+            Constraint::Length(14),
+            Constraint::Length(14),
+        ],
+    )
+    .header(
+        Row::new(vec!["Date", "Description", "Amount", "Balance"])
+            .style(Style::default().fg(MUTED).bold())
+            .bottom_margin(1),
+    )
+    .row_highlight_style(Style::default().bg(Color::Rgb(40, 40, 60)).bold())
+    .highlight_symbol("▶ ")
+    .block(
+        Block::default()
+            .title(Span::styled(title, Style::default().fg(GOLD).bold()))
+            .borders(Borders::ALL)
+            .border_type(BorderType::Rounded)
+            .border_style(Style::default().fg(MUTED)),
+    );
+
+    f.render_stateful_widget(table, chunks[1], &mut app.search_state);
+
+    let hint = Paragraph::new(Line::from(vec![
+        Span::styled(
+            "  [Enter] search  [↑↓] navigate  [Esc] close",
+            Style::default().fg(MUTED),
+        ),
+        Span::styled(
+            "  Supports regex (e.g. \"grocery|supermarket\")",
+            Style::default().fg(MUTED),
+        ),
+    ]));
+    f.render_widget(hint, chunks[2]);
 }
 
 fn render_status(f: &mut Frame, app: &App, area: Rect) {

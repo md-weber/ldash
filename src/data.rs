@@ -503,6 +503,60 @@ pub fn load_recent_transactions(
     Ok(txns)
 }
 
+pub fn search_transactions(journal_path: &Path, query: &str) -> Result<Vec<Transaction>> {
+    let output = Command::new("hledger")
+        .args([
+            "-f",
+            journal_path.to_str().unwrap_or("all.journal"),
+            "register",
+            "-O",
+            "csv",
+            &format!("desc:{}", query),
+        ])
+        .output()
+        .context("Failed to run hledger register for search")?;
+
+    let text = String::from_utf8_lossy(&output.stdout);
+    let mut rdr = csv::ReaderBuilder::new().from_reader(text.as_bytes());
+
+    let mut txns = Vec::new();
+    for row in rdr.records() {
+        let fields = match row {
+            Ok(r) => r,
+            Err(_) => continue,
+        };
+        if fields.len() < 7 {
+            continue;
+        }
+
+        let date = match NaiveDate::parse_from_str(fields[1].trim(), "%Y-%m-%d") {
+            Ok(d) => d,
+            Err(_) => continue,
+        };
+        let account = fields[4].trim().to_string();
+        let description = fields[3].trim().to_string();
+        let amount = parse_amount_str(fields[5].trim())
+            .map(|(a, _)| a)
+            .unwrap_or(0.0);
+        let running_total = parse_amount_str(fields[6].trim())
+            .map(|(a, _)| a)
+            .unwrap_or(0.0);
+
+        txns.push(Transaction {
+            date,
+            description: format!("{} ({})", description, account),
+            amount,
+            running_total,
+        });
+    }
+
+    if txns.len() > 100 {
+        txns = txns.split_off(txns.len() - 100);
+    }
+
+    Ok(txns)
+}
+
 pub fn compute_portfolio(
     crypto_balances: &[AccountBalance],
     latest_prices: &HashMap<String, f64>,

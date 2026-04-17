@@ -8,12 +8,13 @@ use std::time::{Instant, SystemTime};
 
 use crate::config::Config;
 use crate::data::{
-    compute_portfolio, latest_prices, load_account_balances_eur, load_all_coin_chart_series,
+    self, compute_portfolio, latest_prices, load_account_balances_eur, load_all_coin_chart_series,
     load_crypto_balances, load_last_year_monthly, load_liability_balances_eur, load_monthly_data,
     load_net_worth_history, load_price_history, load_recent_transactions, AccountBalance,
     CoinChartSeries, CryptoHolding, MonthlyData, NetWorthSeries, PriceEntry, SingleMonth,
     Transaction,
 };
+use crate::watcher::JournalWatcher;
 
 pub struct RefreshResult {
     pub tabs: [bool; 3],
@@ -297,9 +298,14 @@ pub struct App {
     pub status_msg: String,
     pub loading: bool,
     pub show_help: bool,
+    pub search_active: bool,
+    pub search_query: String,
+    pub search_results: Vec<Transaction>,
+    pub search_state: TableState,
     pub last_refresh: Instant,
     pub tabs_loaded: [bool; 3],
     refresh_rx: Option<mpsc::Receiver<RefreshResult>>,
+    watcher: Option<JournalWatcher>,
     last_journal_mtime: Option<SystemTime>,
     last_config_mtime: Option<SystemTime>,
 }
@@ -310,6 +316,11 @@ impl App {
             .parent()
             .unwrap_or(std::path::Path::new("."))
             .to_path_buf();
+
+        let watcher = JournalWatcher::new(&journal_path);
+        if watcher.is_none() {
+            eprintln!("Warning: file watcher unavailable, falling back to polling");
+        }
 
         let default_tab = match config.default_tab_index() {
             1 => Tab::Accounts,
@@ -344,9 +355,14 @@ impl App {
             status_msg: "Loading data…".to_string(),
             loading: true,
             show_help: false,
+            search_active: false,
+            search_query: String::new(),
+            search_results: Vec::new(),
+            search_state: TableState::default(),
             last_refresh: Instant::now(),
             tabs_loaded: [false; 3],
             refresh_rx: None,
+            watcher,
             last_journal_mtime: None,
             last_config_mtime: Config::config_mtime(),
         })
@@ -447,6 +463,18 @@ impl App {
 
     pub fn auto_refresh(&mut self) {
         self.check_config_reload();
+
+        let watcher_changed = self
+            .watcher
+            .as_ref()
+            .map(|w| w.has_changes())
+            .unwrap_or(false);
+
+        if watcher_changed {
+            self.start_refresh();
+            return;
+        }
+
         let current_mtime = std::fs::metadata(&self.journal_path)
             .and_then(|m| m.modified())
             .ok();
@@ -455,6 +483,10 @@ impl App {
             return;
         }
         self.start_refresh();
+    }
+
+    pub fn has_watcher(&self) -> bool {
+        self.watcher.is_some()
     }
 
     fn check_config_reload(&mut self) {
@@ -749,6 +781,49 @@ impl App {
     pub fn close_expense_detail(&mut self) {
         self.expense_detail = None;
         self.detail_expense_name = None;
+    }
+
+    pub fn open_search(&mut self) {
+        self.search_active = true;
+        self.search_query.clear();
+        self.search_results.clear();
+        self.search_state = TableState::default();
+    }
+
+    pub fn close_search(&mut self) {
+        self.search_active = false;
+        self.search_query.clear();
+        self.search_results.clear();
+    }
+
+    pub fn execute_search(&mut self) {
+        if self.search_query.is_empty() {
+            self.search_results.clear();
+            return;
+        }
+        match data::search_transactions(&self.journal_path, &self.search_query) {
+            Ok(txns) => {
+                self.search_results = txns;
+                if !self.search_results.is_empty() {
+                    self.search_state = TableState::default().with_selected(0);
+                }
+            }
+            Err(e) => {
+                self.status_msg = format!("Search error: {e}");
+            }
+        }
+    }
+
+    pub fn search_scroll_up(&mut self) {
+        let i = self.search_state.selected().unwrap_or(0);
+        self.search_state.select(Some(i.saturating_sub(1)));
+    }
+
+    pub fn search_scroll_down(&mut self) {
+        let i = self.search_state.selected().unwrap_or(0);
+        if i + 1 < self.search_results.len() {
+            self.search_state.select(Some(i + 1));
+        }
     }
 }
 

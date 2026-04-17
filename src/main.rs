@@ -2,6 +2,7 @@ mod app;
 mod config;
 mod data;
 mod ui;
+mod watcher;
 
 use anyhow::{Context, Result};
 use app::App;
@@ -123,7 +124,17 @@ fn run(terminal: &mut Terminal<CrosstermBackend<io::Stdout>>, journal_path: Path
             }
             if let Event::Key(key) = ev {
                 if key.kind == KeyEventKind::Press {
-                    if app.show_help {
+                    if app.search_active {
+                        match key.code {
+                            KeyCode::Esc => app.close_search(),
+                            KeyCode::Enter => app.execute_search(),
+                            KeyCode::Backspace => { app.search_query.pop(); }
+                            KeyCode::Char(c) => app.search_query.push(c),
+                            KeyCode::Up => app.search_scroll_up(),
+                            KeyCode::Down => app.search_scroll_down(),
+                            _ => {}
+                        }
+                    } else if app.show_help {
                         match key.code {
                             KeyCode::Char('?') | KeyCode::Char('q') | KeyCode::Esc => {
                                 app.show_help = false;
@@ -147,6 +158,7 @@ fn run(terminal: &mut Terminal<CrosstermBackend<io::Stdout>>, journal_path: Path
                                 app::Tab::Monthly => app.open_expense_detail(),
                                 _ => {}
                             },
+                            KeyCode::Char('/') => app.open_search(),
                             KeyCode::Char('?') => app.show_help = true,
                             KeyCode::Tab => app.next_tab(),
                             KeyCode::BackTab => app.prev_tab(),
@@ -178,7 +190,12 @@ fn run(terminal: &mut Terminal<CrosstermBackend<io::Stdout>>, journal_path: Path
             last_tick = Instant::now();
         }
 
-        if app.last_refresh.elapsed() >= app.config.refresh_duration() {
+        let check_interval = if app.has_watcher() {
+            Duration::from_secs(1)
+        } else {
+            app.config.refresh_duration()
+        };
+        if app.last_refresh.elapsed() >= check_interval {
             app.auto_refresh();
         }
     }
