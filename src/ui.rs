@@ -309,24 +309,38 @@ fn holding_pl(
 }
 
 fn render_portfolio(f: &mut Frame, app: &App, area: Rect) {
-    let chunks = Layout::horizontal([Constraint::Percentage(38), Constraint::Percentage(62)])
+    if area.width < 100 {
+        let chunks = Layout::vertical([
+            Constraint::Percentage(45),
+            Constraint::Percentage(55),
+        ])
         .split(area);
+        render_holdings_table(f, app, chunks[0]);
+        render_price_chart(f, app, chunks[1]);
+    } else {
+        let chunks =
+            Layout::horizontal([Constraint::Percentage(38), Constraint::Percentage(62)])
+                .split(area);
 
-    let left = Layout::vertical([
-        Constraint::Min(0),
-        Constraint::Length(app.holdings.len().min(8) as u16 + 2),
-    ])
-    .split(chunks[0]);
+        let left = Layout::vertical([
+            Constraint::Min(0),
+            Constraint::Length(app.holdings.len().min(8) as u16 + 2),
+        ])
+        .split(chunks[0]);
 
-    render_holdings_table(f, app, left[0]);
-    render_allocation_chart(f, app, left[1]);
-    render_price_chart(f, app, chunks[1]);
+        render_holdings_table(f, app, left[0]);
+        render_allocation_chart(f, app, left[1]);
+        render_price_chart(f, app, chunks[1]);
+    }
 }
 
 fn render_holdings_table(f: &mut Frame, app: &App, area: Rect) {
     let total = app.total_portfolio_value();
+    let narrow = area.width < 100;
+    let very_narrow = area.width < 80;
 
-    let mut coin_first_dates: std::collections::HashMap<&str, chrono::NaiveDate> = std::collections::HashMap::new();
+    let mut coin_first_dates: std::collections::HashMap<&str, chrono::NaiveDate> =
+        std::collections::HashMap::new();
     for e in &app.price_history {
         coin_first_dates.entry(&e.commodity).or_insert(e.date);
     }
@@ -371,7 +385,9 @@ fn render_holdings_table(f: &mut Frame, app: &App, area: Rect) {
             let (pl_pct_str, pl_pct_style, pl_eur_str, pl_eur_style) =
                 match app.coin_chart_cache.get(&h.commodity) {
                     Some(series) if !series.investment.is_empty() => {
-                        let first_date = coin_first_dates.get(h.commodity.as_str()).copied()
+                        let first_date = coin_first_dates
+                            .get(h.commodity.as_str())
+                            .copied()
                             .unwrap_or(chrono::Local::now().date_naive());
                         let (pl_abs, basis) = holding_pl(app, h, series, first_date);
 
@@ -379,11 +395,8 @@ fn render_holdings_table(f: &mut Frame, app: &App, area: Rect) {
                             let abs_color = if pl_abs >= 0.0 { GREEN } else { RED };
                             let abs_prefix = if pl_abs >= 0.0 { "+" } else { "" };
                             let pct = pl_abs / basis * 100.0;
-                            let (prefix, color) = if pct >= 0.0 {
-                                ("+", GREEN)
-                            } else {
-                                ("", RED)
-                            };
+                            let (prefix, color) =
+                                if pct >= 0.0 { ("+", GREEN) } else { ("", RED) };
                             (
                                 format!("{prefix}{:.1}%", pct),
                                 Style::default().fg(color).bold(),
@@ -414,15 +427,26 @@ fn render_holdings_table(f: &mut Frame, app: &App, area: Rect) {
                     ),
                 };
 
-            Row::new(vec![
+            let mut cells = vec![
                 Cell::from(format!("{indicator}{}", h.commodity)).style(coin_style),
-                Cell::from(amt_str).style(Style::default().fg(if selected { GOLD } else { MUTED })),
+            ];
+            if !very_narrow {
+                cells.push(
+                    Cell::from(amt_str)
+                        .style(Style::default().fg(if selected { GOLD } else { MUTED })),
+                );
+            }
+            cells.extend([
                 Cell::from(price_str).style(Style::default().fg(ACCENT)),
                 Cell::from(value_str).style(Style::default().fg(GREEN)),
                 Cell::from(pct).style(Style::default().fg(FG)),
                 Cell::from(pl_pct_str).style(pl_pct_style),
-                Cell::from(pl_eur_str).style(pl_eur_style),
-            ])
+            ]);
+            if !narrow {
+                cells.push(Cell::from(pl_eur_str).style(pl_eur_style));
+            }
+
+            Row::new(cells)
         })
         .collect();
 
@@ -432,7 +456,9 @@ fn render_holdings_table(f: &mut Frame, app: &App, area: Rect) {
         for h in &app.holdings {
             if let Some(s) = app.coin_chart_cache.get(&h.commodity) {
                 if !s.investment.is_empty() {
-                    let first_date = coin_first_dates.get(h.commodity.as_str()).copied()
+                    let first_date = coin_first_dates
+                        .get(h.commodity.as_str())
+                        .copied()
                         .unwrap_or(chrono::Local::now().date_naive());
                     let (pl, basis) = holding_pl(app, h, s, first_date);
                     total_pl += pl;
@@ -440,40 +466,78 @@ fn render_holdings_table(f: &mut Frame, app: &App, area: Rect) {
                 }
             }
         }
-        let pct = if total_basis > 0.0 { total_pl / total_basis * 100.0 } else { 0.0 };
+        let pct = if total_basis > 0.0 {
+            total_pl / total_basis * 100.0
+        } else {
+            0.0
+        };
         (total_pl, pct)
     };
     let pl_color = if pl_abs >= 0.0 { GREEN } else { RED };
     let pl_prefix = if pl_abs >= 0.0 { "+" } else { "" };
 
-    rows.push(
-        Row::new(vec![
-            Cell::from("──────").style(Style::default().fg(MUTED)),
-            Cell::from(""),
-            Cell::from("Total").style(Style::default().fg(FG).bold()),
-            Cell::from(format!("{:.2} €", total)).style(Style::default().fg(GOLD).bold()),
-            Cell::from("100%").style(Style::default().fg(FG).bold()),
-            Cell::from(format!("{pl_prefix}{:.1}%", pl_pct))
-                .style(Style::default().fg(pl_color).bold()),
+    let mut total_cells = vec![
+        Cell::from("──────").style(Style::default().fg(MUTED)),
+    ];
+    if !very_narrow {
+        total_cells.push(Cell::from(""));
+    }
+    total_cells.extend([
+        Cell::from("Total").style(Style::default().fg(FG).bold()),
+        Cell::from(format!("{:.2} €", total)).style(Style::default().fg(GOLD).bold()),
+        Cell::from("100%").style(Style::default().fg(FG).bold()),
+        Cell::from(format!("{pl_prefix}{:.1}%", pl_pct))
+            .style(Style::default().fg(pl_color).bold()),
+    ]);
+    if !narrow {
+        total_cells.push(
             Cell::from(format!("{pl_prefix}{:.2}€", pl_abs))
                 .style(Style::default().fg(pl_color).bold()),
-        ])
-        .height(1),
-    );
+        );
+    }
+    rows.push(Row::new(total_cells).height(1));
 
-    let widths = [
-        Constraint::Length(8),
-        Constraint::Length(10),
-        Constraint::Length(11),
-        Constraint::Length(12),
-        Constraint::Length(7),
-        Constraint::Length(8),
-        Constraint::Length(14),
-    ];
+    let widths: Vec<Constraint> = if very_narrow {
+        vec![
+            Constraint::Length(6),
+            Constraint::Length(10),
+            Constraint::Length(11),
+            Constraint::Length(6),
+            Constraint::Length(8),
+        ]
+    } else if narrow {
+        vec![
+            Constraint::Length(6),
+            Constraint::Length(9),
+            Constraint::Length(10),
+            Constraint::Length(11),
+            Constraint::Length(6),
+            Constraint::Length(8),
+        ]
+    } else {
+        vec![
+            Constraint::Length(8),
+            Constraint::Length(10),
+            Constraint::Length(11),
+            Constraint::Length(12),
+            Constraint::Length(7),
+            Constraint::Length(8),
+            Constraint::Length(14),
+        ]
+    };
+
+    let mut header_cells = vec!["Coin"];
+    if !very_narrow {
+        header_cells.push("Amount");
+    }
+    header_cells.extend(["Price", "Value", "Alloc", "P/L %"]);
+    if !narrow {
+        header_cells.push("P/L €");
+    }
 
     let table = Table::new(rows, widths)
         .header(
-            Row::new(vec!["Coin", "Amount", "Price", "Value", "Alloc", "P/L %", "P/L €"])
+            Row::new(header_cells)
                 .style(Style::default().fg(MUTED).bold())
                 .bottom_margin(1),
         )
@@ -490,7 +554,6 @@ fn render_holdings_table(f: &mut Frame, app: &App, area: Rect) {
 
     f.render_widget(table, area);
 
-    // Hint at bottom
     let hint_area = Rect {
         x: area.x + 1,
         y: area.y + area.height.saturating_sub(2),
@@ -750,6 +813,14 @@ fn render_accounts(f: &mut Frame, app: &mut App, area: Rect) {
         let txns = app.account_detail.as_ref().unwrap();
         let name = app.detail_account_name.as_ref().unwrap();
         render_account_detail(f, txns, name, chunks[2]);
+    } else if !app.liabilities.is_empty() {
+        let split = Layout::vertical([
+            Constraint::Percentage(70),
+            Constraint::Percentage(30),
+        ])
+        .split(chunks[2]);
+        render_accounts_table(f, app, split[0]);
+        render_liabilities_table(f, app, split[1]);
     } else {
         render_accounts_table(f, app, chunks[2]);
     }
@@ -835,13 +906,14 @@ fn render_account_detail(f: &mut Frame, txns: &[crate::data::Transaction], name:
 }
 
 fn render_accounts_table(f: &mut Frame, app: &mut App, area: Rect) {
+    let narrow = area.width < 100;
     let max_amount = app
         .account_balances
         .iter()
         .map(|b| b.amount.abs())
         .fold(0.0_f64, f64::max);
 
-    let bar_width = (area.width as f64 * 0.2) as usize;
+    let bar_width = if narrow { 0 } else { (area.width as f64 * 0.2) as usize };
 
     let rows: Vec<Row> = app
         .account_balances
@@ -855,26 +927,45 @@ fn render_accounts_table(f: &mut Frame, app: &mut App, area: Rect) {
 
             let amount_str = format!("{:>12.2} €", b.amount);
 
-            let bar_len = if max_amount > 0.0 {
-                ((b.amount.abs() / max_amount) * bar_width as f64) as usize
+            let name = if narrow && b.account.len() > 30 {
+                format!("  {}…", &b.account[..29])
             } else {
-                0
+                format!("  {}", b.account)
             };
-            let bar = "█".repeat(bar_len);
 
-            Row::new(vec![
-                Cell::from(format!("  {}", b.account)).style(Style::default().fg(FG)),
+            let mut cells = vec![
+                Cell::from(name).style(Style::default().fg(FG)),
                 Cell::from(amount_str).style(amount_style),
-                Cell::from(bar).style(Style::default().fg(Color::Rgb(0, 130, 130))),
-            ])
+            ];
+
+            if !narrow {
+                let bar_len = if max_amount > 0.0 {
+                    ((b.amount.abs() / max_amount) * bar_width as f64) as usize
+                } else {
+                    0
+                };
+                let bar = "█".repeat(bar_len);
+                cells.push(Cell::from(bar).style(Style::default().fg(Color::Rgb(0, 130, 130))));
+            }
+
+            Row::new(cells)
         })
         .collect();
 
-    let widths = [Constraint::Min(38), Constraint::Length(16), Constraint::Min(10)];
+    let widths: Vec<Constraint> = if narrow {
+        vec![Constraint::Min(30), Constraint::Length(16)]
+    } else {
+        vec![Constraint::Min(38), Constraint::Length(16), Constraint::Min(10)]
+    };
+
+    let mut header = vec!["Account", "Balance (EUR)"];
+    if !narrow {
+        header.push("");
+    }
 
     let table = Table::new(rows, widths)
         .header(
-            Row::new(vec!["Account", "Balance (EUR)", ""])
+            Row::new(header)
                 .style(Style::default().fg(MUTED).bold())
                 .bottom_margin(1),
         )
@@ -892,6 +983,41 @@ fn render_accounts_table(f: &mut Frame, app: &mut App, area: Rect) {
         );
 
     f.render_stateful_widget(table, area, &mut app.account_state);
+}
+
+fn render_liabilities_table(f: &mut Frame, app: &App, area: Rect) {
+    let rows: Vec<Row> = app
+        .liabilities
+        .iter()
+        .map(|b| {
+            let amount_str = format!("{:>12.2} €", b.amount);
+            Row::new(vec![
+                Cell::from(format!("  {}", b.account)).style(Style::default().fg(FG)),
+                Cell::from(amount_str).style(Style::default().fg(RED)),
+            ])
+        })
+        .collect();
+
+    let widths = [Constraint::Min(38), Constraint::Length(16)];
+
+    let total_liab: f64 = app.liabilities.iter().map(|b| b.amount).sum();
+    let title = format!(" Liabilities  ({:.2} €) ", total_liab);
+
+    let table = Table::new(rows, widths)
+        .header(
+            Row::new(vec!["Account", "Balance (EUR)"])
+                .style(Style::default().fg(MUTED).bold())
+                .bottom_margin(1),
+        )
+        .block(
+            Block::default()
+                .title(Span::styled(title, Style::default().fg(RED).bold()))
+                .borders(Borders::ALL)
+                .border_type(BorderType::Rounded)
+                .border_style(Style::default().fg(MUTED)),
+        );
+
+    f.render_widget(table, area);
 }
 
 // ── Monthly tab ───────────────────────────────────────────────────────────────
@@ -951,25 +1077,35 @@ fn render_monthly_chart(f: &mut Frame, app: &App, area: Rect) {
 }
 
 fn render_monthly(f: &mut Frame, app: &mut App, area: Rect) {
+    let narrow = area.width < 100;
+    let very_narrow = area.width < 80;
+
     let chunks = Layout::vertical([
-        Constraint::Length(12), // bar chart
-        Constraint::Length(14), // summary + sparklines
-        Constraint::Min(0),     // detail tables
+        Constraint::Length(12),
+        Constraint::Length(if narrow { 20 } else { 14 }),
+        Constraint::Min(0),
     ])
     .split(area);
 
     render_monthly_chart(f, app, chunks[0]);
     render_monthly_summary(f, app, chunks[1]);
 
-    let detail_chunks =
+    let detail_chunks = if very_narrow {
+        Layout::vertical([Constraint::Percentage(50), Constraint::Percentage(50)])
+            .split(chunks[2])
+    } else {
         Layout::horizontal([Constraint::Percentage(50), Constraint::Percentage(50)])
-            .split(chunks[2]);
+            .split(chunks[2])
+    };
 
     render_monthly_income(f, app, detail_chunks[0]);
 
     if let (Some(txns), Some(name)) = (&app.expense_detail, &app.detail_expense_name) {
         let short = name.strip_prefix("expenses:").unwrap_or(name);
-        let month = app.current_month().map(|m| m.month_name.as_str()).unwrap_or("");
+        let month = app
+            .current_month()
+            .map(|m| m.month_name.as_str())
+            .unwrap_or("");
         let title = format!(" {} — {}  [Esc back] ", short, month);
         render_detail_with_title(f, txns, &title, detail_chunks[1]);
     } else {
@@ -990,12 +1126,22 @@ fn render_monthly_summary(f: &mut Frame, app: &App, area: Rect) {
         0
     };
 
-    let chunks = Layout::horizontal([
-        Constraint::Percentage(30),
-        Constraint::Percentage(30),
-        Constraint::Percentage(40),
-    ])
-    .split(area);
+    let narrow = area.width < 100;
+    let chunks = if narrow {
+        Layout::vertical([
+            Constraint::Length(8),
+            Constraint::Length(4),
+            Constraint::Min(0),
+        ])
+        .split(area)
+    } else {
+        Layout::horizontal([
+            Constraint::Percentage(30),
+            Constraint::Percentage(30),
+            Constraint::Percentage(40),
+        ])
+        .split(area)
+    };
 
     let nav_title = format!(" ◀ {} ▶ ", m.month_name);
 
@@ -1186,32 +1332,44 @@ fn render_monthly_summary(f: &mut Frame, app: &App, area: Rect) {
 }
 
 fn render_monthly_income(f: &mut Frame, app: &App, area: Rect) {
+    let narrow = area.width < 100;
     let empty = crate::data::SingleMonth::default();
     let m = app.current_month().unwrap_or(&empty);
     let max_val = m.income.first().map(|i| i.1).unwrap_or(1.0);
-    let bar_width = area.width.saturating_sub(40) as usize;
+    let bar_width = if narrow { 0 } else { area.width.saturating_sub(40) as usize };
 
     let rows: Vec<Row> = m
         .income
         .iter()
         .map(|(name, amount)| {
             let short = name.strip_prefix("income:").unwrap_or(name);
-            let bar_len = ((amount / max_val) * bar_width as f64) as usize;
-            let bar = "█".repeat(bar_len.min(bar_width));
-
-            Row::new(vec![
+            let mut cells = vec![
                 Cell::from(short.to_string()).style(Style::default().fg(FG)),
                 Cell::from(format!("{:.2} €", amount)).style(Style::default().fg(GREEN)),
-                Cell::from(bar).style(Style::default().fg(Color::Rgb(0, 160, 80))),
-            ])
+            ];
+            if !narrow {
+                let bar_len = ((amount / max_val) * bar_width as f64) as usize;
+                let bar = "█".repeat(bar_len.min(bar_width));
+                cells.push(Cell::from(bar).style(Style::default().fg(Color::Rgb(0, 160, 80))));
+            }
+            Row::new(cells)
         })
         .collect();
 
-    let widths = [Constraint::Min(20), Constraint::Length(12), Constraint::Min(4)];
+    let widths: Vec<Constraint> = if narrow {
+        vec![Constraint::Min(20), Constraint::Length(12)]
+    } else {
+        vec![Constraint::Min(20), Constraint::Length(12), Constraint::Min(4)]
+    };
+
+    let mut header = vec!["Source", "Amount"];
+    if !narrow {
+        header.push("");
+    }
 
     let table = Table::new(rows, widths)
         .header(
-            Row::new(vec!["Source", "Amount", ""])
+            Row::new(header)
                 .style(Style::default().fg(MUTED).bold())
                 .bottom_margin(1),
         )
@@ -1230,33 +1388,53 @@ fn render_monthly_income(f: &mut Frame, app: &App, area: Rect) {
 }
 
 fn render_monthly_expenses(f: &mut Frame, app: &mut App, area: Rect) {
+    let narrow = area.width < 100;
     let empty = crate::data::SingleMonth::default();
     let m = app.current_month().unwrap_or(&empty);
     let max_val = m.expenses.first().map(|e| e.1).unwrap_or(1.0);
-    let bar_width = area.width.saturating_sub(40) as usize;
+    let bar_width = if narrow { 0 } else { area.width.saturating_sub(40) as usize };
 
     let rows: Vec<Row> = m
         .expenses
         .iter()
         .map(|(name, amount)| {
             let short = name.strip_prefix("expenses:").unwrap_or(name);
-            let color = if app.expense_colors { expense_color(short, app) } else { FG };
-            let bar_len = ((amount / max_val) * bar_width as f64) as usize;
-            let bar = "█".repeat(bar_len.min(bar_width));
-
-            Row::new(vec![
+            let color = if app.expense_colors {
+                expense_color(short, app)
+            } else {
+                FG
+            };
+            let mut cells = vec![
                 Cell::from(short.to_string()).style(Style::default().fg(color)),
                 Cell::from(format!("{:.2} €", amount)).style(Style::default().fg(RED)),
-                Cell::from(bar).style(Style::default().fg(if app.expense_colors { color } else { Color::Rgb(180, 50, 50) })),
-            ])
+            ];
+            if !narrow {
+                let bar_len = ((amount / max_val) * bar_width as f64) as usize;
+                let bar = "█".repeat(bar_len.min(bar_width));
+                cells.push(Cell::from(bar).style(Style::default().fg(if app.expense_colors {
+                    color
+                } else {
+                    Color::Rgb(180, 50, 50)
+                })));
+            }
+            Row::new(cells)
         })
         .collect();
 
-    let widths = [Constraint::Min(20), Constraint::Length(12), Constraint::Min(4)];
+    let widths: Vec<Constraint> = if narrow {
+        vec![Constraint::Min(20), Constraint::Length(12)]
+    } else {
+        vec![Constraint::Min(20), Constraint::Length(12), Constraint::Min(4)]
+    };
+
+    let mut header = vec!["Category", "Amount"];
+    if !narrow {
+        header.push("");
+    }
 
     let table = Table::new(rows, widths)
         .header(
-            Row::new(vec!["Category", "Amount", ""])
+            Row::new(header)
                 .style(Style::default().fg(MUTED).bold())
                 .bottom_margin(1),
         )

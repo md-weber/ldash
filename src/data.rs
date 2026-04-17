@@ -162,6 +162,26 @@ pub fn load_account_balances_eur(journal_path: &Path) -> Result<Vec<AccountBalan
     parse_balance_csv(&text)
 }
 
+pub fn load_liability_balances_eur(journal_path: &Path) -> Result<Vec<AccountBalance>> {
+    let output = Command::new("hledger")
+        .args([
+            "-f",
+            journal_path.to_str().unwrap_or("all.journal"),
+            "balance",
+            "--flat",
+            "-O",
+            "csv",
+            "--no-total",
+            "-V",
+            "liabilities",
+        ])
+        .output()
+        .context("Failed to run hledger for liabilities")?;
+
+    let text = String::from_utf8_lossy(&output.stdout);
+    parse_balance_csv(&text)
+}
+
 fn parse_balance_csv(text: &str) -> Result<Vec<AccountBalance>> {
     let mut result = Vec::new();
     let mut rdr = csv::ReaderBuilder::new().from_reader(text.as_bytes());
@@ -343,6 +363,7 @@ pub fn load_net_worth_history(journal_path: &Path, period: &str) -> Result<NetWo
             journal_path.to_str().unwrap_or("all.journal"),
             "balance",
             "assets",
+            "liabilities",
             "-H",
             "-p",
             period,

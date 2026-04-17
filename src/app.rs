@@ -9,9 +9,10 @@ use std::time::{Instant, SystemTime};
 use crate::config::Config;
 use crate::data::{
     compute_portfolio, latest_prices, load_account_balances_eur, load_all_coin_chart_series,
-    load_crypto_balances, load_last_year_monthly, load_monthly_data, load_net_worth_history,
-    load_price_history, load_recent_transactions, AccountBalance, CoinChartSeries, CryptoHolding,
-    MonthlyData, NetWorthSeries, PriceEntry, SingleMonth, Transaction,
+    load_crypto_balances, load_last_year_monthly, load_liability_balances_eur, load_monthly_data,
+    load_net_worth_history, load_price_history, load_recent_transactions, AccountBalance,
+    CoinChartSeries, CryptoHolding, MonthlyData, NetWorthSeries, PriceEntry, SingleMonth,
+    Transaction,
 };
 
 pub struct RefreshResult {
@@ -21,6 +22,7 @@ pub struct RefreshResult {
     pub holdings: Option<Vec<CryptoHolding>>,
     pub coin_chart_cache: Option<HashMap<String, CoinChartSeries>>,
     pub account_balances: Option<Vec<AccountBalance>>,
+    pub liabilities: Option<Vec<AccountBalance>>,
     pub net_worth_history: Option<NetWorthSeries>,
     pub monthly: Option<MonthlyData>,
     pub last_year: Option<MonthlyData>,
@@ -42,25 +44,27 @@ fn load_all_data(
     let want_accounts = tabs[1];
     let want_monthly = tabs[2];
 
-    let (crypto_res, accounts_res, nw_res, monthly_res, ly_res) = std::thread::scope(|s| {
-        let t_crypto = want_portfolio
-            .then(|| s.spawn(|| load_crypto_balances(journal_path)));
-        let t_accounts = want_accounts
-            .then(|| s.spawn(|| load_account_balances_eur(journal_path)));
-        let t_nw = want_accounts
-            .then(|| s.spawn(|| load_net_worth_history(journal_path, nw_period)));
-        let t_monthly = want_monthly
-            .then(|| s.spawn(|| load_monthly_data(journal_path)));
-        let t_ly = want_monthly
-            .then(|| s.spawn(|| load_last_year_monthly(journal_path)));
-        (
-            t_crypto.map(|t| t.join().unwrap()),
-            t_accounts.map(|t| t.join().unwrap()),
-            t_nw.map(|t| t.join().unwrap()),
-            t_monthly.map(|t| t.join().unwrap()),
-            t_ly.map(|t| t.join().unwrap()),
-        )
-    });
+    let (crypto_res, accounts_res, liab_res, nw_res, monthly_res, ly_res) =
+        std::thread::scope(|s| {
+            let t_crypto =
+                want_portfolio.then(|| s.spawn(|| load_crypto_balances(journal_path)));
+            let t_accounts =
+                want_accounts.then(|| s.spawn(|| load_account_balances_eur(journal_path)));
+            let t_liabilities =
+                want_accounts.then(|| s.spawn(|| load_liability_balances_eur(journal_path)));
+            let t_nw =
+                want_accounts.then(|| s.spawn(|| load_net_worth_history(journal_path, nw_period)));
+            let t_monthly = want_monthly.then(|| s.spawn(|| load_monthly_data(journal_path)));
+            let t_ly = want_monthly.then(|| s.spawn(|| load_last_year_monthly(journal_path)));
+            (
+                t_crypto.map(|t| t.join().unwrap()),
+                t_accounts.map(|t| t.join().unwrap()),
+                t_liabilities.map(|t| t.join().unwrap()),
+                t_nw.map(|t| t.join().unwrap()),
+                t_monthly.map(|t| t.join().unwrap()),
+                t_ly.map(|t| t.join().unwrap()),
+            )
+        });
 
     let holdings = crypto_res.map(|res| match res {
         Ok(balances) => compute_portfolio(&balances, &lp),
@@ -89,6 +93,14 @@ fn load_all_data(
                 .unwrap_or(std::cmp::Ordering::Equal)
         });
         balances
+    });
+
+    let liabilities = liab_res.map(|res| match res {
+        Ok(l) => l,
+        Err(e) => {
+            errors.push(format!("Error loading liabilities: {e}"));
+            Vec::new()
+        }
     });
 
     let net_worth_history = nw_res.map(|res| match res {
@@ -122,6 +134,7 @@ fn load_all_data(
         holdings,
         coin_chart_cache,
         account_balances,
+        liabilities,
         net_worth_history,
         monthly,
         last_year,
@@ -253,6 +266,7 @@ pub struct App {
     pub holdings: Vec<CryptoHolding>,
     pub coin_chart_cache: HashMap<String, CoinChartSeries>,
     pub account_balances: Vec<AccountBalance>,
+    pub liabilities: Vec<AccountBalance>,
     pub net_worth_history: NetWorthSeries,
     pub nw_range: NetWorthRange,
     pub monthly: MonthlyData,
@@ -298,6 +312,7 @@ impl App {
             holdings: Vec::new(),
             coin_chart_cache: HashMap::new(),
             account_balances: Vec::new(),
+            liabilities: Vec::new(),
             net_worth_history: NetWorthSeries::default(),
             nw_range: NetWorthRange::Year2,
             monthly: MonthlyData::default(),
@@ -377,6 +392,9 @@ impl App {
         }
         if let Some(a) = r.account_balances {
             self.account_balances = a;
+        }
+        if let Some(l) = r.liabilities {
+            self.liabilities = l;
         }
         if let Some(nw) = r.net_worth_history {
             self.net_worth_history = nw;
@@ -493,7 +511,9 @@ impl App {
     }
 
     pub fn total_net_worth(&self) -> f64 {
-        self.account_balances.iter().map(|b| b.amount).sum()
+        let assets: f64 = self.account_balances.iter().map(|b| b.amount).sum();
+        let liabs: f64 = self.liabilities.iter().map(|b| b.amount).sum();
+        assets + liabs
     }
 
     pub fn current_month(&self) -> Option<&SingleMonth> {
