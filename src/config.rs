@@ -11,6 +11,15 @@ pub struct Config {
     pub number_format: String,
     pub currency_symbol: String,
     pub colors: ColorConfig,
+    pub budgets: HashMap<String, f64>,
+    pub goals: Vec<SavingsGoal>,
+}
+
+#[derive(Debug, Deserialize, Clone)]
+pub struct SavingsGoal {
+    pub name: String,
+    pub target: f64,
+    pub account: String,
 }
 
 #[derive(Debug, Deserialize, Default)]
@@ -28,6 +37,8 @@ impl Default for Config {
             number_format: "eu".to_string(),
             currency_symbol: "€".to_string(),
             colors: ColorConfig::default(),
+            budgets: HashMap::new(),
+            goals: Vec::new(),
         }
     }
 }
@@ -56,21 +67,57 @@ const DEFAULT_CONFIG: &str = r##"# ldash configuration
 # [colors.expenses]
 # Wohnen = "blue"
 # Essen = "yellow"
+
+# Monthly budget limits per expense category
+# Matched case-insensitively against expense accounts.
+# Shows a progress bar in the expense table and warns when over budget.
+# [budgets]
+# "expenses:Essen" = 400.0
+# "expenses:Freizeit" = 200.0
+# "expenses:Transport" = 150.0
+
+# Savings goals — track progress toward financial targets
+# Each goal maps a target amount to an account prefix.
+# Shown on the Accounts tab as a progress bar.
+# [[goals]]
+# name = "Emergency Fund"
+# target = 15000.0
+# account = "assets:bank:savings"
 "##;
 
 impl Config {
-    pub fn load() -> Self {
+    pub fn load() -> (Self, Vec<String>) {
         let path = config_path();
-        match std::fs::read_to_string(&path) {
+        let mut warnings = Vec::new();
+        let config = match std::fs::read_to_string(&path) {
             Ok(content) => toml::from_str(&content).unwrap_or_else(|e| {
-                eprintln!("Warning: config parse error: {e}");
+                warnings.push(format!("Config parse error: {e}"));
                 Config::default()
             }),
             Err(_) => {
                 Self::init_default_config(&path);
                 Config::default()
             }
-        }
+        };
+        (config, warnings)
+    }
+
+    /// Hot-reload safe fields from disk. Skips startup-only settings
+    /// (journal, default_tab) that would be confusing to change mid-session.
+    pub fn hot_reload(&mut self) -> Option<String> {
+        let path = config_path();
+        let content = std::fs::read_to_string(&path).ok()?;
+        let fresh: Config = match toml::from_str(&content) {
+            Ok(c) => c,
+            Err(e) => return Some(format!("Config reload error: {e}")),
+        };
+        self.refresh_interval = fresh.refresh_interval;
+        self.number_format = fresh.number_format;
+        self.currency_symbol = fresh.currency_symbol;
+        self.colors = fresh.colors;
+        self.budgets = fresh.budgets;
+        self.goals = fresh.goals;
+        None
     }
 
     fn init_default_config(path: &PathBuf) {
@@ -78,6 +125,12 @@ impl Config {
             let _ = std::fs::create_dir_all(parent);
         }
         let _ = std::fs::write(path, DEFAULT_CONFIG);
+    }
+
+    pub fn config_mtime() -> Option<std::time::SystemTime> {
+        std::fs::metadata(config_path())
+            .and_then(|m| m.modified())
+            .ok()
     }
 
     pub fn default_tab_index(&self) -> usize {

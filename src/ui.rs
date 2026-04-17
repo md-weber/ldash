@@ -809,10 +809,31 @@ fn render_accounts(f: &mut Frame, app: &mut App, area: Rect) {
         .border_style(Style::default().fg(MUTED));
     f.render_widget(Paragraph::new(nw_text).block(nw_block), chunks[1]);
 
+    let has_goals = !app.config.goals.is_empty();
+
     if app.account_detail.is_some() {
         let txns = app.account_detail.as_ref().unwrap();
         let name = app.detail_account_name.as_ref().unwrap();
         render_account_detail(f, txns, name, chunks[2]);
+    } else if has_goals {
+        let goal_h = (app.config.goals.len() as u16 + 2).min(8);
+        let bottom = Layout::vertical([
+            Constraint::Min(0),
+            Constraint::Length(goal_h),
+        ]).split(chunks[2]);
+
+        if !app.liabilities.is_empty() {
+            let split = Layout::vertical([
+                Constraint::Percentage(70),
+                Constraint::Percentage(30),
+            ]).split(bottom[0]);
+            render_accounts_table(f, app, split[0]);
+            render_liabilities_table(f, app, split[1]);
+        } else {
+            render_accounts_table(f, app, bottom[0]);
+        }
+
+        render_goals(f, app, bottom[1]);
     } else if !app.liabilities.is_empty() {
         let split = Layout::vertical([
             Constraint::Percentage(70),
@@ -1020,6 +1041,53 @@ fn render_liabilities_table(f: &mut Frame, app: &App, area: Rect) {
     f.render_widget(table, area);
 }
 
+fn render_goals(f: &mut Frame, app: &App, area: Rect) {
+    let block = Block::default()
+        .title(Span::styled(" Savings Goals ", Style::default().fg(GOLD).bold()))
+        .borders(Borders::ALL)
+        .border_type(BorderType::Rounded)
+        .border_style(Style::default().fg(MUTED));
+    let inner = block.inner(area);
+    f.render_widget(block, area);
+
+    let goals = app.goal_progress();
+    for (i, g) in goals.iter().enumerate() {
+        if i as u16 >= inner.height {
+            break;
+        }
+        let y = inner.y + i as u16;
+        let color = if g.pct >= 100.0 { GREEN }
+                   else if g.pct >= 60.0 { GOLD }
+                   else { ACCENT };
+
+        let label_w = 18u16.min(inner.width / 3);
+        let pct_w = 22u16;
+        let bar_w = inner.width.saturating_sub(label_w + pct_w);
+
+        let label = Span::styled(
+            format!(" {:<w$}", g.name, w = (label_w - 1) as usize),
+            Style::default().fg(FG),
+        );
+        f.render_widget(Paragraph::new(Line::from(label)),
+            Rect { x: inner.x, y, width: label_w, height: 1 });
+
+        let filled = ((g.pct / 100.0).min(1.0) * bar_w as f64) as usize;
+        let empty_b = bar_w as usize - filled;
+        let bar = format!("{}{}", "█".repeat(filled), "░".repeat(empty_b));
+        f.render_widget(
+            Paragraph::new(Line::from(Span::styled(bar, Style::default().fg(color)))),
+            Rect { x: inner.x + label_w, y, width: bar_w, height: 1 },
+        );
+
+        let info = Span::styled(
+            format!(" {:.0}/{:.0}€ {:>3.0}%", g.current, g.target, g.pct),
+            Style::default().fg(MUTED),
+        );
+        f.render_widget(Paragraph::new(Line::from(info)),
+            Rect { x: inner.x + label_w + bar_w, y, width: pct_w, height: 1 });
+    }
+}
+
 // ── Monthly tab ───────────────────────────────────────────────────────────────
 
 fn render_monthly_chart(f: &mut Frame, app: &App, area: Rect) {
@@ -1213,6 +1281,36 @@ fn render_monthly_summary(f: &mut Frame, app: &App, area: Rect) {
         }
     }
 
+    if !app.config.budgets.is_empty() {
+        let budgets = app.budget_status();
+        let over: Vec<_> = budgets.iter().filter(|b| b.pct > 100.0).collect();
+        text.push(Line::from(""));
+        if over.is_empty() {
+            text.push(Line::from(vec![
+                Span::styled("  ✓ ", Style::default().fg(GREEN)),
+                Span::styled("All budgets on track", Style::default().fg(GREEN)),
+            ]));
+        } else {
+            text.push(Line::from(vec![
+                Span::styled("  ⚠ ", Style::default().fg(RED)),
+                Span::styled(
+                    format!("{} over budget:", over.len()),
+                    Style::default().fg(RED).bold(),
+                ),
+            ]));
+            for b in &over {
+                let short = b.category.strip_prefix("expenses:").unwrap_or(&b.category);
+                text.push(Line::from(vec![
+                    Span::styled(format!("    {short}: "), Style::default().fg(FG)),
+                    Span::styled(
+                        format!("{:.0}/{:.0}€ ({:.0}%)", b.spent, b.limit, b.pct),
+                        Style::default().fg(RED),
+                    ),
+                ]));
+            }
+        }
+    }
+
     let left_block = Block::default()
         .title(Span::styled(nav_title, Style::default().fg(ACCENT).bold()))
         .borders(Borders::ALL)
@@ -1389,10 +1487,11 @@ fn render_monthly_income(f: &mut Frame, app: &App, area: Rect) {
 
 fn render_monthly_expenses(f: &mut Frame, app: &mut App, area: Rect) {
     let narrow = area.width < 100;
+    let has_budgets = !app.config.budgets.is_empty();
     let empty = crate::data::SingleMonth::default();
     let m = app.current_month().unwrap_or(&empty);
     let max_val = m.expenses.first().map(|e| e.1).unwrap_or(1.0);
-    let bar_width = if narrow { 0 } else { area.width.saturating_sub(40) as usize };
+    let bar_width = if narrow { 0 } else { area.width.saturating_sub(if has_budgets { 56 } else { 40 }) as usize };
 
     let rows: Vec<Row> = m
         .expenses
@@ -1417,19 +1516,52 @@ fn render_monthly_expenses(f: &mut Frame, app: &mut App, area: Rect) {
                     Color::Rgb(180, 50, 50)
                 })));
             }
+            if has_budgets {
+                let short_full = format!("expenses:{}", short);
+                if let Some(&limit) = app.config.budgets.get(&short_full)
+                    .or_else(|| app.config.budgets.get(name))
+                    .or_else(|| app.config.budgets.get(short))
+                    .or_else(|| {
+                        app.config.budgets.iter()
+                            .find(|(k, _)| k.eq_ignore_ascii_case(&short_full)
+                                        || k.eq_ignore_ascii_case(name)
+                                        || k.eq_ignore_ascii_case(short))
+                            .map(|(_, v)| v)
+                    })
+                {
+                    let pct = if limit > 0.0 { amount / limit * 100.0 } else { 0.0 };
+                    let bar_color = if pct < 80.0 { GREEN }
+                                    else if pct <= 100.0 { GOLD }
+                                    else { RED };
+                    let filled = ((pct / 100.0).min(1.0) * 8.0) as usize;
+                    let empty_b = 8 - filled;
+                    let bar = format!("[{}{}] {:>3.0}%",
+                        "█".repeat(filled), "░".repeat(empty_b), pct);
+                    cells.push(Cell::from(bar).style(Style::default().fg(bar_color)));
+                } else {
+                    cells.push(Cell::from(""));
+                }
+            }
             Row::new(cells)
         })
         .collect();
 
     let widths: Vec<Constraint> = if narrow {
-        vec![Constraint::Min(20), Constraint::Length(12)]
+        let mut w = vec![Constraint::Min(20), Constraint::Length(12)];
+        if has_budgets { w.push(Constraint::Length(16)); }
+        w
     } else {
-        vec![Constraint::Min(20), Constraint::Length(12), Constraint::Min(4)]
+        let mut w = vec![Constraint::Min(20), Constraint::Length(12), Constraint::Min(4)];
+        if has_budgets { w.push(Constraint::Length(16)); }
+        w
     };
 
     let mut header = vec!["Category", "Amount"];
     if !narrow {
         header.push("");
+    }
+    if has_budgets {
+        header.push("Budget");
     }
 
     let table = Table::new(rows, widths)
@@ -1443,7 +1575,11 @@ fn render_monthly_expenses(f: &mut Frame, app: &mut App, area: Rect) {
         .block(
             Block::default()
                 .title(Span::styled(
-                    " Expenses ",
+                    if has_budgets {
+                        format!(" Expenses ({} budgets) ", app.config.budgets.len())
+                    } else {
+                        " Expenses ".to_string()
+                    },
                     Style::default().fg(RED).bold(),
                 ))
                 .borders(Borders::ALL)

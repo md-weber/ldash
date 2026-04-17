@@ -256,6 +256,20 @@ pub struct YtdStats {
     pub worst_net: f64,
 }
 
+pub struct BudgetItem {
+    pub category: String,
+    pub limit: f64,
+    pub spent: f64,
+    pub pct: f64,
+}
+
+pub struct GoalProgress {
+    pub name: String,
+    pub target: f64,
+    pub current: f64,
+    pub pct: f64,
+}
+
 pub struct App {
     pub journal_path: PathBuf,
     pub journal_dir: PathBuf,
@@ -287,6 +301,7 @@ pub struct App {
     pub tabs_loaded: [bool; 3],
     refresh_rx: Option<mpsc::Receiver<RefreshResult>>,
     last_journal_mtime: Option<SystemTime>,
+    last_config_mtime: Option<SystemTime>,
 }
 
 impl App {
@@ -333,6 +348,7 @@ impl App {
             tabs_loaded: [false; 3],
             refresh_rx: None,
             last_journal_mtime: None,
+            last_config_mtime: Config::config_mtime(),
         })
     }
 
@@ -430,6 +446,7 @@ impl App {
     }
 
     pub fn auto_refresh(&mut self) {
+        self.check_config_reload();
         let current_mtime = std::fs::metadata(&self.journal_path)
             .and_then(|m| m.modified())
             .ok();
@@ -438,6 +455,20 @@ impl App {
             return;
         }
         self.start_refresh();
+    }
+
+    fn check_config_reload(&mut self) {
+        let current = Config::config_mtime();
+        if current == self.last_config_mtime {
+            return;
+        }
+        self.last_config_mtime = current;
+        if let Some(err) = self.config.hot_reload() {
+            self.status_msg = err;
+        } else {
+            let now = Local::now().format("%H:%M:%S");
+            self.status_msg = format!("Config reloaded at {now}");
+        }
     }
 
     pub fn next_tab(&mut self) {
@@ -565,6 +596,50 @@ impl App {
             worst_month: worst.month_name.clone(),
             worst_net: worst.total_income - worst.total_expenses,
         }
+    }
+
+    pub fn budget_status(&self) -> Vec<BudgetItem> {
+        let m = match self.current_month() {
+            Some(m) => m,
+            None => return Vec::new(),
+        };
+        self.config.budgets.iter().filter_map(|(category, &limit)| {
+            let spent = m.expenses.iter()
+                .find(|(name, _)| {
+                    let short = name.strip_prefix("expenses:").unwrap_or(name);
+                    let full = format!("expenses:{}", short);
+                    category == name
+                        || category == short
+                        || category == &full
+                        || category.eq_ignore_ascii_case(name)
+                        || category.eq_ignore_ascii_case(short)
+                        || category.eq_ignore_ascii_case(&full)
+                })
+                .map(|(_, amount)| *amount)
+                .unwrap_or(0.0);
+            Some(BudgetItem {
+                category: category.clone(),
+                limit,
+                spent,
+                pct: if limit > 0.0 { spent / limit * 100.0 } else { 0.0 },
+            })
+        }).collect()
+    }
+
+    pub fn goal_progress(&self) -> Vec<GoalProgress> {
+        self.config.goals.iter().map(|g| {
+            let current = self.account_balances.iter()
+                .filter(|b| b.account.starts_with(&g.account))
+                .map(|b| b.amount)
+                .sum::<f64>();
+            let pct = if g.target > 0.0 { (current / g.target * 100.0).min(100.0) } else { 0.0 };
+            GoalProgress {
+                name: g.name.clone(),
+                target: g.target,
+                current,
+                pct,
+            }
+        }).collect()
     }
 
     pub fn month_left(&mut self) {

@@ -25,6 +25,8 @@ Built with [Ratatui](https://ratatui.rs) and Rust.
 - **Account Balances** — All asset accounts with EUR valuations and visual bar indicators
 - **Account Drill-Down** — Select any account and view its recent transactions
 - **Monthly Income & Expenses** — Bar chart overview with per-category breakdown, savings rate gauge, and year-over-year comparison
+- **Budget Tracking** — Set monthly limits per expense category; see progress bars inline and warnings when over budget
+- **Savings Goals** — Define target amounts for account prefixes; progress bars shown on the Accounts tab
 - **Background Refresh** — Non-blocking data loading with parallel hledger calls
 - **Auto-Refresh** — Detects journal file changes and reloads automatically
 - **Lazy Tab Loading** — Only loads data for the active tab on first visit
@@ -98,6 +100,22 @@ On first launch, ldash creates a config file at `~/.config/ldash/config.toml` wi
 # [colors.expenses]
 # Wohnen = "blue"
 # Essen = "yellow"
+
+# Monthly budget limits per expense category
+# Matched against your hledger expense accounts (case-insensitive).
+# Shows a progress bar in the expense table and warns when over budget.
+[budgets]
+# "expenses:Essen" = 400.0
+# "expenses:Freizeit" = 200.0
+# "expenses:Transport" = 150.0
+
+# Savings goals — track progress toward financial targets.
+# Each goal maps a target amount to an account prefix. Shown on
+# the Accounts tab as a progress bar with current/target amounts.
+# [[goals]]
+# name = "Emergency Fund"
+# target = 15000.0
+# account = "assets:bank:savings"
 ```
 
 Missing or partially filled config is fine — defaults fill any gaps.

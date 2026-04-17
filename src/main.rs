@@ -71,7 +71,7 @@ fn check_hledger() -> Result<()> {
 }
 
 fn main() -> Result<()> {
-    let config = config::Config::load();
+    let (config, config_warnings) = config::Config::load();
     let journal_path = find_journal(&config).context("Journal file lookup failed")?;
     check_hledger()?;
 
@@ -90,7 +90,7 @@ fn main() -> Result<()> {
     let backend = CrosstermBackend::new(stdout);
     let mut terminal = Terminal::new(backend)?;
 
-    let result = run(&mut terminal, journal_path, config);
+    let result = run(&mut terminal, journal_path, config, config_warnings);
 
     disable_raw_mode()?;
     io::stdout().execute(LeaveAlternateScreen)?;
@@ -98,8 +98,11 @@ fn main() -> Result<()> {
     result
 }
 
-fn run(terminal: &mut Terminal<CrosstermBackend<io::Stdout>>, journal_path: PathBuf, config: config::Config) -> Result<()> {
+fn run(terminal: &mut Terminal<CrosstermBackend<io::Stdout>>, journal_path: PathBuf, config: config::Config, config_warnings: Vec<String>) -> Result<()> {
     let mut app = App::new(journal_path, config).context("Failed to initialize app")?;
+    if let Some(w) = config_warnings.last() {
+        app.status_msg = w.clone();
+    }
 
     terminal.draw(|f| ui::render(f, &mut app))?;
     app.ensure_tab_loaded(app.tab);
