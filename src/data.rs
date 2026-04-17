@@ -431,18 +431,21 @@ pub fn load_recent_transactions(
     journal_path: &Path,
     account: &str,
     n: usize,
+    period: Option<&str>,
 ) -> Result<Vec<Transaction>> {
-    let output = Command::new("hledger")
-        .args([
-            "-f",
-            journal_path.to_str().unwrap_or("all.journal"),
-            "register",
-            account,
-            "-O",
-            "csv",
-        ])
-        .output()
-        .context("Failed to run hledger register")?;
+    let mut cmd = Command::new("hledger");
+    cmd.args([
+        "-f",
+        journal_path.to_str().unwrap_or("all.journal"),
+        "register",
+        account,
+        "-O",
+        "csv",
+    ]);
+    if let Some(p) = period {
+        cmd.args(["-p", p]);
+    }
+    let output = cmd.output().context("Failed to run hledger register")?;
 
     let text = String::from_utf8_lossy(&output.stdout);
     let mut rdr = csv::ReaderBuilder::new().from_reader(text.as_bytes());

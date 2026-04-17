@@ -11,7 +11,33 @@ const GOLD: Color = Color::Yellow;
 const MUTED: Color = Color::DarkGray;
 const FG: Color = Color::White;
 
-fn expense_color(category: &str) -> Color {
+fn parse_color(s: &str) -> Option<Color> {
+    match s.to_lowercase().as_str() {
+        "red" => Some(Color::Red),
+        "green" => Some(Color::Green),
+        "blue" => Some(Color::Blue),
+        "yellow" => Some(Color::Yellow),
+        "cyan" => Some(Color::Cyan),
+        "magenta" => Some(Color::Magenta),
+        "white" => Some(Color::White),
+        "darkgray" => Some(Color::DarkGray),
+        s if s.starts_with('#') && s.len() == 7 => {
+            let r = u8::from_str_radix(&s[1..3], 16).ok()?;
+            let g = u8::from_str_radix(&s[3..5], 16).ok()?;
+            let b = u8::from_str_radix(&s[5..7], 16).ok()?;
+            Some(Color::Rgb(r, g, b))
+        }
+        _ => None,
+    }
+}
+
+fn expense_color(category: &str, app: &App) -> Color {
+    if let Some(color_str) = app.config.colors.expenses.get(category) {
+        if let Some(c) = parse_color(color_str) {
+            return c;
+        }
+    }
+
     let cat = category.to_lowercase();
     let top = cat.split(':').next().unwrap_or(&cat);
     match top {
@@ -185,7 +211,7 @@ fn render_help_popup(f: &mut Frame, area: Rect) {
         ("Tab / Shift-Tab", "Next / prev tab"),
         ("↑ k / ↓ j", "Scroll / select"),
         ("← h / → l", "Month nav / NW range"),
-        ("Enter", "Drill into account"),
+        ("Enter", "Drill into detail"),
         ("c", "Toggle expense colors"),
         ("Esc", "Back / quit"),
         ("r", "Refresh data"),
@@ -584,6 +610,45 @@ fn render_accounts(f: &mut Frame, app: &mut App, area: Rect) {
     }
 }
 
+fn render_detail_with_title(f: &mut Frame, txns: &[crate::data::Transaction], title: &str, area: Rect) {
+    let rows: Vec<Row> = txns
+        .iter()
+        .map(|t| {
+            let amt_color = if t.amount >= 0.0 { GREEN } else { RED };
+            Row::new(vec![
+                Cell::from(t.date.format("%Y-%m-%d").to_string()).style(Style::default().fg(MUTED)),
+                Cell::from(t.description.clone()).style(Style::default().fg(FG)),
+                Cell::from(format!("{:>10.2} €", t.amount)).style(Style::default().fg(amt_color)),
+                Cell::from(format!("{:>10.2} €", t.running_total))
+                    .style(Style::default().fg(ACCENT)),
+            ])
+        })
+        .collect();
+
+    let widths = [
+        Constraint::Length(12),
+        Constraint::Min(24),
+        Constraint::Length(14),
+        Constraint::Length(14),
+    ];
+
+    let table = Table::new(rows, widths)
+        .header(
+            Row::new(vec!["Date", "Description", "Amount", "Balance"])
+                .style(Style::default().fg(MUTED).bold())
+                .bottom_margin(1),
+        )
+        .block(
+            Block::default()
+                .title(Span::styled(title, Style::default().fg(GOLD).bold()))
+                .borders(Borders::ALL)
+                .border_type(BorderType::Rounded)
+                .border_style(Style::default().fg(ACCENT)),
+        );
+
+    f.render_widget(table, area);
+}
+
 fn render_account_detail(f: &mut Frame, txns: &[crate::data::Transaction], name: &str, area: Rect) {
     let rows: Vec<Row> = txns
         .iter()
@@ -756,7 +821,15 @@ fn render_monthly(f: &mut Frame, app: &mut App, area: Rect) {
             .split(chunks[2]);
 
     render_monthly_income(f, app, detail_chunks[0]);
-    render_monthly_expenses(f, app, detail_chunks[1]);
+
+    if let (Some(txns), Some(name)) = (&app.expense_detail, &app.detail_expense_name) {
+        let short = name.strip_prefix("expenses:").unwrap_or(name);
+        let month = app.current_month().map(|m| m.month_name.as_str()).unwrap_or("");
+        let title = format!(" {} — {}  [Esc back] ", short, month);
+        render_detail_with_title(f, txns, &title, detail_chunks[1]);
+    } else {
+        render_monthly_expenses(f, app, detail_chunks[1]);
+    }
 }
 
 fn render_monthly_summary(f: &mut Frame, app: &App, area: Rect) {
@@ -974,7 +1047,7 @@ fn render_monthly_expenses(f: &mut Frame, app: &mut App, area: Rect) {
         .iter()
         .map(|(name, amount)| {
             let short = name.strip_prefix("expenses:").unwrap_or(name);
-            let color = if app.expense_colors { expense_color(short) } else { FG };
+            let color = if app.expense_colors { expense_color(short, app) } else { FG };
             let bar_len = ((amount / max_val) * bar_width as f64) as usize;
             let bar = "█".repeat(bar_len.min(bar_width));
 

@@ -1,4 +1,5 @@
 mod app;
+mod config;
 mod data;
 mod ui;
 
@@ -16,7 +17,7 @@ use std::{
     time::{Duration, Instant},
 };
 
-fn find_journal() -> Result<PathBuf> {
+fn find_journal(config: &config::Config) -> Result<PathBuf> {
     let args: Vec<String> = std::env::args().collect();
     if args.len() > 1 {
         let path = PathBuf::from(&args[1]);
@@ -24,6 +25,14 @@ fn find_journal() -> Result<PathBuf> {
             return Ok(path);
         }
         anyhow::bail!("Journal file not found: {}", args[1]);
+    }
+
+    if let Some(ref cfg_path) = config.journal {
+        let path = PathBuf::from(cfg_path);
+        if path.exists() {
+            return Ok(path);
+        }
+        anyhow::bail!("Journal file from config not found: {}", cfg_path);
     }
 
     if let Ok(env_path) = std::env::var("LEDGER_FILE") {
@@ -62,7 +71,8 @@ fn check_hledger() -> Result<()> {
 }
 
 fn main() -> Result<()> {
-    let journal_path = find_journal().context("Journal file lookup failed")?;
+    let config = config::Config::load();
+    let journal_path = find_journal(&config).context("Journal file lookup failed")?;
     check_hledger()?;
 
     enable_raw_mode()?;
@@ -80,7 +90,7 @@ fn main() -> Result<()> {
     let backend = CrosstermBackend::new(stdout);
     let mut terminal = Terminal::new(backend)?;
 
-    let result = run(&mut terminal, journal_path);
+    let result = run(&mut terminal, journal_path, config);
 
     disable_raw_mode()?;
     io::stdout().execute(LeaveAlternateScreen)?;
@@ -88,8 +98,8 @@ fn main() -> Result<()> {
     result
 }
 
-fn run(terminal: &mut Terminal<CrosstermBackend<io::Stdout>>, journal_path: PathBuf) -> Result<()> {
-    let mut app = App::new(journal_path).context("Failed to initialize app")?;
+fn run(terminal: &mut Terminal<CrosstermBackend<io::Stdout>>, journal_path: PathBuf, config: config::Config) -> Result<()> {
+    let mut app = App::new(journal_path, config).context("Failed to initialize app")?;
 
     terminal.draw(|f| ui::render(f, &mut app))?;
     app.ensure_tab_loaded(app.tab);
@@ -123,11 +133,17 @@ fn run(terminal: &mut Terminal<CrosstermBackend<io::Stdout>>, journal_path: Path
                             KeyCode::Esc => {
                                 if app.account_detail.is_some() {
                                     app.close_account_detail();
+                                } else if app.expense_detail.is_some() {
+                                    app.close_expense_detail();
                                 } else {
                                     break;
                                 }
                             }
-                            KeyCode::Enter => app.open_account_detail(),
+                            KeyCode::Enter => match app.tab {
+                                app::Tab::Accounts => app.open_account_detail(),
+                                app::Tab::Monthly => app.open_expense_detail(),
+                                _ => {}
+                            },
                             KeyCode::Char('?') => app.show_help = true,
                             KeyCode::Tab => app.next_tab(),
                             KeyCode::BackTab => app.prev_tab(),
@@ -159,7 +175,7 @@ fn run(terminal: &mut Terminal<CrosstermBackend<io::Stdout>>, journal_path: Path
             last_tick = Instant::now();
         }
 
-        if app.last_refresh.elapsed() >= Duration::from_secs(300) {
+        if app.last_refresh.elapsed() >= app.config.refresh_duration() {
             app.auto_refresh();
         }
     }

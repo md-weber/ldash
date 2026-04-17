@@ -1,11 +1,12 @@
 use anyhow::Result;
-use chrono::Local;
+use chrono::{Datelike, Local};
 use ratatui::widgets::TableState;
 use std::collections::HashMap;
 use std::path::{Path, PathBuf};
 use std::sync::mpsc;
 use std::time::{Instant, SystemTime};
 
+use crate::config::Config;
 use crate::data::{
     compute_portfolio, latest_prices, load_account_balances_eur, load_all_coin_chart_series,
     load_crypto_balances, load_last_year_monthly, load_monthly_data, load_net_worth_history,
@@ -208,6 +209,7 @@ pub struct YtdStats {
 pub struct App {
     pub journal_path: PathBuf,
     pub journal_dir: PathBuf,
+    pub config: Config,
     pub tab: Tab,
     pub price_history: Vec<PriceEntry>,
     pub latest_prices: HashMap<String, f64>,
@@ -223,6 +225,8 @@ pub struct App {
     pub expense_state: TableState,
     pub account_detail: Option<Vec<Transaction>>,
     pub detail_account_name: Option<String>,
+    pub expense_detail: Option<Vec<Transaction>>,
+    pub detail_expense_name: Option<String>,
     pub expense_colors: bool,
     pub status_msg: String,
     pub loading: bool,
@@ -234,16 +238,23 @@ pub struct App {
 }
 
 impl App {
-    pub fn new(journal_path: PathBuf) -> Result<Self> {
+    pub fn new(journal_path: PathBuf, config: Config) -> Result<Self> {
         let journal_dir = journal_path
             .parent()
             .unwrap_or(std::path::Path::new("."))
             .to_path_buf();
 
+        let default_tab = match config.default_tab_index() {
+            1 => Tab::Accounts,
+            2 => Tab::Monthly,
+            _ => Tab::Portfolio,
+        };
+
         Ok(Self {
             journal_path,
             journal_dir,
-            tab: Tab::Portfolio,
+            config,
+            tab: default_tab,
             price_history: Vec::new(),
             latest_prices: HashMap::new(),
             holdings: Vec::new(),
@@ -258,6 +269,8 @@ impl App {
             expense_state: TableState::default().with_selected(0),
             account_detail: None,
             detail_account_name: None,
+            expense_detail: None,
+            detail_expense_name: None,
             expense_colors: true,
             status_msg: "Loading data…".to_string(),
             loading: true,
@@ -556,7 +569,7 @@ impl App {
         let sel = self.account_state.selected().unwrap_or(0);
         if let Some(b) = self.account_balances.get(sel) {
             let account = b.account.clone();
-            match load_recent_transactions(&self.journal_path, &account, 30) {
+            match load_recent_transactions(&self.journal_path, &account, 30, None) {
                 Ok(txns) => {
                     self.detail_account_name = Some(account);
                     self.account_detail = Some(txns);
@@ -572,4 +585,52 @@ impl App {
         self.account_detail = None;
         self.detail_account_name = None;
     }
+
+    pub fn open_expense_detail(&mut self) {
+        if self.tab != Tab::Monthly || self.expense_detail.is_some() {
+            return;
+        }
+        let sel = self.expense_state.selected().unwrap_or(0);
+        let (category, period) = match self.current_month() {
+            Some(m) => match m.expenses.get(sel) {
+                Some((cat, _)) => (cat.clone(), month_name_to_period(&m.month_name)),
+                None => return,
+            },
+            None => return,
+        };
+        match load_recent_transactions(&self.journal_path, &category, 50, Some(&period)) {
+            Ok(txns) => {
+                self.detail_expense_name = Some(category);
+                self.expense_detail = Some(txns);
+            }
+            Err(e) => {
+                self.status_msg = format!("Error loading transactions: {e}");
+            }
+        }
+    }
+
+    pub fn close_expense_detail(&mut self) {
+        self.expense_detail = None;
+        self.detail_expense_name = None;
+    }
+}
+
+fn month_name_to_period(month_name: &str) -> String {
+    let year = chrono::Local::now().date_naive().year();
+    let month_num = match month_name {
+        "January" => 1,
+        "February" => 2,
+        "March" => 3,
+        "April" => 4,
+        "May" => 5,
+        "June" => 6,
+        "July" => 7,
+        "August" => 8,
+        "September" => 9,
+        "October" => 10,
+        "November" => 11,
+        "December" => 12,
+        _ => 1,
+    };
+    format!("{year}-{month_num:02}")
 }

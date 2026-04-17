@@ -65,12 +65,42 @@ cd ~/Finance && ldash
 | `Tab` / `Shift-Tab` | Next / previous tab |
 | `↑` `k` / `↓` `j` | Scroll / select |
 | `←` `h` / `→` `l` | Month navigation / net worth range |
-| `Enter` | Drill into account |
+| `Enter` | Drill into account / expense category |
 | `c` | Toggle expense category colors |
 | `r` | Force refresh |
 | `?` | Toggle help overlay |
 | `Esc` | Back / close |
 | `q` | Quit |
+
+## Configuration
+
+On first launch, ldash creates a config file at `~/.config/ldash/config.toml` with all options commented out. Edit it to customize behavior.
+
+```toml
+# Path to hledger journal (overrides $LEDGER_FILE and CLI arg)
+# journal = "/path/to/all.journal"
+
+# Auto-refresh interval in seconds (default: 300)
+# refresh_interval = 300
+
+# Default tab on startup: "portfolio", "accounts", "monthly"
+# default_tab = "portfolio"
+
+# Number format: "eu" (1.000,00) or "us" (1,000.00)
+# number_format = "eu"
+
+# Currency symbol shown in UI
+# currency_symbol = "€"
+
+# Expense category color overrides
+# Colors: red, green, blue, yellow, cyan, magenta, white, darkgray,
+#         or RGB hex like "#B48CFF"
+# [colors.expenses]
+# Wohnen = "blue"
+# Essen = "yellow"
+```
+
+Missing or partially filled config is fine — defaults fill any gaps.
 
 ## Journal Structure
 
