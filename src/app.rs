@@ -4,7 +4,7 @@ use ratatui::widgets::TableState;
 use std::collections::HashMap;
 use std::path::{Path, PathBuf};
 use std::sync::mpsc;
-use std::time::{Instant, SystemTime};
+use std::time::{Duration, Instant, SystemTime};
 
 use crate::config::Config;
 use crate::data::{
@@ -165,46 +165,64 @@ impl Tab {
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum NetWorthRange {
+    All,
+    Ytd,
     Year1,
     Year2,
     Year5,
-    All,
 }
 
 impl NetWorthRange {
-    pub fn period_arg(self) -> &'static str {
+    pub fn period_arg(self) -> String {
+        let today = Local::now().date_naive();
         match self {
-            Self::Year1 => "monthly from 1 year ago",
-            Self::Year2 => "monthly from 2 years ago",
-            Self::Year5 => "monthly from 5 years ago",
-            Self::All => "monthly",
+            Self::All => "monthly".to_string(),
+            Self::Ytd => {
+                let jan1 = NaiveDate::from_ymd_opt(today.year(), 1, 1).unwrap();
+                format!("monthly from {}", jan1.format("%Y-%m-%d"))
+            }
+            Self::Year1 => {
+                let start = today - chrono::Duration::days(365);
+                format!("monthly from {}", start.format("%Y-%m-%d"))
+            }
+            Self::Year2 => {
+                let start = today - chrono::Duration::days(730);
+                format!("monthly from {}", start.format("%Y-%m-%d"))
+            }
+            Self::Year5 => {
+                let start = today - chrono::Duration::days(1825);
+                format!("monthly from {}", start.format("%Y-%m-%d"))
+            }
         }
     }
 
     pub fn label(self) -> &'static str {
         match self {
+            Self::All => "All",
+            Self::Ytd => "YTD",
             Self::Year1 => "1Y",
             Self::Year2 => "2Y",
             Self::Year5 => "5Y",
-            Self::All => "All",
         }
     }
 
     pub fn next(self) -> Self {
         match self {
+            Self::All => Self::Ytd,
+            Self::Ytd => Self::Year1,
             Self::Year1 => Self::Year2,
             Self::Year2 => Self::Year5,
-            Self::Year5 => Self::All,
-            Self::All => Self::All,
+            Self::Year5 => Self::Year5,
         }
     }
 
     pub fn prev(self) -> Self {
         match self {
-            Self::Year1 => Self::Year1,
+            Self::All => Self::All,
+            Self::Ytd => Self::All,
+            Self::Year1 => Self::Ytd,
             Self::Year2 => Self::Year1,
             Self::Year5 => Self::Year2,
-            Self::All => Self::Year5,
         }
     }
 }
@@ -311,6 +329,7 @@ pub struct App {
     pub price_alerts: Vec<PriceAlert>,
     pub show_alerts: bool,
     pub alert_dismissed: bool,
+    pub alert_shown_at: Option<Instant>,
     pub last_refresh: Instant,
     pub tabs_loaded: [bool; 3],
     refresh_rx: Option<mpsc::Receiver<RefreshResult>>,
@@ -349,7 +368,7 @@ impl App {
             account_balances: Vec::new(),
             liabilities: Vec::new(),
             net_worth_history: NetWorthSeries::default(),
-            nw_range: NetWorthRange::Year2,
+            nw_range: NetWorthRange::All,
             monthly: MonthlyData::default(),
             last_year: MonthlyData::default(),
             monthly_year_offset: 0,
@@ -372,6 +391,7 @@ impl App {
             price_alerts: Vec::new(),
             show_alerts: false,
             alert_dismissed: false,
+            alert_shown_at: None,
             last_refresh: Instant::now(),
             tabs_loaded: [false; 3],
             refresh_rx: None,
@@ -753,6 +773,18 @@ impl App {
                 .unwrap_or(std::cmp::Ordering::Equal));
             self.price_alerts = alerts;
             self.show_alerts = true;
+            self.alert_shown_at = Some(Instant::now());
+        }
+    }
+
+    pub fn check_alert_timeout(&mut self) {
+        if self.show_alerts {
+            if let Some(shown_at) = self.alert_shown_at {
+                if shown_at.elapsed() >= Duration::from_secs(5) {
+                    self.show_alerts = false;
+                    self.alert_dismissed = true;
+                }
+            }
         }
     }
 
@@ -849,7 +881,8 @@ impl App {
     }
 
     fn reload_net_worth(&mut self) {
-        match load_net_worth_history(&self.journal_path, self.nw_range.period_arg()) {
+        let period = self.nw_range.period_arg();
+        match load_net_worth_history(&self.journal_path, &period) {
             Ok(series) => self.net_worth_history = series,
             Err(e) => self.status_msg = format!("Error loading net worth: {e}"),
         }
@@ -886,7 +919,7 @@ impl App {
         let sel = self.expense_state.selected().unwrap_or(0);
         let (category, period) = match self.current_month() {
             Some(m) => match m.expenses.get(sel) {
-                Some((cat, _)) => (cat.clone(), month_name_to_period(&m.month_name)),
+                Some((cat, _)) => (cat.clone(), month_name_to_period(&m.month_name, self.displayed_year())),
                 None => return,
             },
             None => return,
@@ -951,8 +984,7 @@ impl App {
     }
 }
 
-fn month_name_to_period(month_name: &str) -> String {
-    let year = chrono::Local::now().date_naive().year();
+fn month_name_to_period(month_name: &str, year: i32) -> String {
     let month_num = match month_name {
         "January" => 1,
         "February" => 2,
