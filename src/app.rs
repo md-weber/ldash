@@ -1,5 +1,5 @@
 use anyhow::Result;
-use chrono::{Datelike, Local};
+use chrono::{Datelike, Local, NaiveDate};
 use ratatui::widgets::TableState;
 use std::collections::HashMap;
 use std::path::{Path, PathBuf};
@@ -195,6 +195,43 @@ impl NetWorthRange {
     }
 }
 
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum PortfolioRange {
+    Month3,
+    Month6,
+    Ytd,
+    All,
+}
+
+impl PortfolioRange {
+    pub fn label(self) -> &'static str {
+        match self {
+            Self::Month3 => "3M",
+            Self::Month6 => "6M",
+            Self::Ytd => "YTD",
+            Self::All => "All",
+        }
+    }
+
+    pub fn next(self) -> Self {
+        match self {
+            Self::Month3 => Self::Month6,
+            Self::Month6 => Self::Ytd,
+            Self::Ytd => Self::All,
+            Self::All => Self::All,
+        }
+    }
+
+    pub fn prev(self) -> Self {
+        match self {
+            Self::Month3 => Self::Month3,
+            Self::Month6 => Self::Month3,
+            Self::Ytd => Self::Month6,
+            Self::All => Self::Ytd,
+        }
+    }
+}
+
 #[derive(Debug, Default)]
 pub struct YtdStats {
     pub total_income: f64,
@@ -227,6 +264,7 @@ pub struct App {
     pub detail_account_name: Option<String>,
     pub expense_detail: Option<Vec<Transaction>>,
     pub detail_expense_name: Option<String>,
+    pub portfolio_range: PortfolioRange,
     pub expense_colors: bool,
     pub status_msg: String,
     pub loading: bool,
@@ -271,6 +309,7 @@ impl App {
             detail_account_name: None,
             expense_detail: None,
             detail_expense_name: None,
+            portfolio_range: PortfolioRange::All,
             expense_colors: true,
             status_msg: "Loading data…".to_string(),
             loading: true,
@@ -453,26 +492,6 @@ impl App {
         self.holdings.iter().map(|h| h.value_eur).sum()
     }
 
-    pub fn total_portfolio_pl(&self) -> (f64, f64) {
-        let mut total_invested = 0.0_f64;
-        let mut total_value = 0.0_f64;
-        for h in &self.holdings {
-            if let Some(s) = self.coin_chart_cache.get(&h.commodity) {
-                if !s.investment.is_empty() {
-                    total_invested += s.total_invested();
-                    total_value += h.value_eur;
-                }
-            }
-        }
-        let pl_abs = total_value - total_invested;
-        let pl_pct = if total_invested > 0.0 {
-            pl_abs / total_invested * 100.0
-        } else {
-            0.0
-        };
-        (pl_abs, pl_pct)
-    }
-
     pub fn total_net_worth(&self) -> f64 {
         self.account_balances.iter().map(|b| b.amount).sum()
     }
@@ -553,6 +572,29 @@ impl App {
             self.nw_range = next;
             self.reload_net_worth();
         }
+    }
+
+    /// Min x (days offset) for current portfolio range, given a coin's first_date.
+    pub fn portfolio_range_min_x(&self, first_date: NaiveDate) -> f64 {
+        let today = Local::now().date_naive();
+        let today_x = (today - first_date).num_days() as f64;
+        match self.portfolio_range {
+            PortfolioRange::Month3 => (today_x - 90.0).max(0.0),
+            PortfolioRange::Month6 => (today_x - 180.0).max(0.0),
+            PortfolioRange::Ytd => {
+                let jan1 = NaiveDate::from_ymd_opt(today.year(), 1, 1).unwrap();
+                (jan1 - first_date).num_days().max(0) as f64
+            }
+            PortfolioRange::All => 0.0,
+        }
+    }
+
+    pub fn portfolio_range_left(&mut self) {
+        self.portfolio_range = self.portfolio_range.prev();
+    }
+
+    pub fn portfolio_range_right(&mut self) {
+        self.portfolio_range = self.portfolio_range.next();
     }
 
     fn reload_net_worth(&mut self) {

@@ -251,16 +251,85 @@ fn render_status(f: &mut Frame, app: &App, area: Rect) {
 
 // ── Portfolio tab ─────────────────────────────────────────────────────────────
 
+fn coin_color(commodity: &str) -> Color {
+    const PALETTE: &[Color] = &[
+        GOLD,
+        ACCENT,
+        GREEN,
+        Color::Magenta,
+        Color::LightBlue,
+        Color::LightRed,
+        Color::LightGreen,
+        Color::LightYellow,
+    ];
+    let hash: usize = commodity.bytes().map(|b| b as usize).sum();
+    PALETTE[hash % PALETTE.len()]
+}
+
+fn series_interp(series: &[(f64, f64)], day: f64) -> f64 {
+    match series.iter().rposition(|p| p.0 <= day) {
+        Some(i) => series[i].1,
+        None => 0.0,
+    }
+}
+
+fn series_value_at_day(series: &crate::data::CoinChartSeries, day: f64) -> f64 {
+    series_interp(&series.investment, day)
+        + series_interp(&series.price_growth, day)
+        + series_interp(&series.staking_growth, day)
+}
+
+/// Compute (pl_abs, basis_for_pct) for a single holding given the current range.
+///
+/// ALL range: pl = current_value − FIFO_basis.
+/// 3M/6M/YTD: pl = change in unrealized P/L over the period.
+///   pl_range = (value_now − basis_now) − (value_at_start − basis_at_start)
+///   basis_for_pct = value_at_start (or FIFO basis if no value at start).
+fn holding_pl(
+    app: &App,
+    h: &crate::data::CryptoHolding,
+    series: &crate::data::CoinChartSeries,
+    first_date: chrono::NaiveDate,
+) -> (f64, f64) {
+    let invested = series.total_invested();
+    let min_x = app.portfolio_range_min_x(first_date);
+    let first_x = series.investment.first().map(|p| p.0).unwrap_or(0.0);
+
+    if min_x <= first_x {
+        (h.value_eur - invested, invested)
+    } else {
+        let current_pl = h.value_eur - invested;
+        let basis_at_start = series_interp(&series.investment, min_x);
+        let value_at_start = series_value_at_day(series, min_x);
+        let pl_at_start = value_at_start - basis_at_start;
+        let pl_range = current_pl - pl_at_start;
+        let denom = if value_at_start > 0.0 { value_at_start } else { invested };
+        (pl_range, denom)
+    }
+}
+
 fn render_portfolio(f: &mut Frame, app: &App, area: Rect) {
     let chunks = Layout::horizontal([Constraint::Percentage(38), Constraint::Percentage(62)])
         .split(area);
 
-    render_holdings_table(f, app, chunks[0]);
+    let left = Layout::vertical([
+        Constraint::Min(0),
+        Constraint::Length(app.holdings.len().min(8) as u16 + 2),
+    ])
+    .split(chunks[0]);
+
+    render_holdings_table(f, app, left[0]);
+    render_allocation_chart(f, app, left[1]);
     render_price_chart(f, app, chunks[1]);
 }
 
 fn render_holdings_table(f: &mut Frame, app: &App, area: Rect) {
     let total = app.total_portfolio_value();
+
+    let mut coin_first_dates: std::collections::HashMap<&str, chrono::NaiveDate> = std::collections::HashMap::new();
+    for e in &app.price_history {
+        coin_first_dates.entry(&e.commodity).or_insert(e.date);
+    }
 
     let mut rows: Vec<Row> = app
         .holdings
@@ -302,12 +371,14 @@ fn render_holdings_table(f: &mut Frame, app: &App, area: Rect) {
             let (pl_pct_str, pl_pct_style, pl_eur_str, pl_eur_style) =
                 match app.coin_chart_cache.get(&h.commodity) {
                     Some(series) if !series.investment.is_empty() => {
-                        let invested = series.total_invested();
-                        if invested > 0.0 {
-                            let pl_abs = h.value_eur - invested;
+                        let first_date = coin_first_dates.get(h.commodity.as_str()).copied()
+                            .unwrap_or(chrono::Local::now().date_naive());
+                        let (pl_abs, basis) = holding_pl(app, h, series, first_date);
+
+                        if basis > 0.0 {
                             let abs_color = if pl_abs >= 0.0 { GREEN } else { RED };
                             let abs_prefix = if pl_abs >= 0.0 { "+" } else { "" };
-                            let pct = pl_abs / invested * 100.0;
+                            let pct = pl_abs / basis * 100.0;
                             let (prefix, color) = if pct >= 0.0 {
                                 ("+", GREEN)
                             } else {
@@ -355,7 +426,23 @@ fn render_holdings_table(f: &mut Frame, app: &App, area: Rect) {
         })
         .collect();
 
-    let (pl_abs, pl_pct) = app.total_portfolio_pl();
+    let (pl_abs, pl_pct) = {
+        let mut total_pl = 0.0_f64;
+        let mut total_basis = 0.0_f64;
+        for h in &app.holdings {
+            if let Some(s) = app.coin_chart_cache.get(&h.commodity) {
+                if !s.investment.is_empty() {
+                    let first_date = coin_first_dates.get(h.commodity.as_str()).copied()
+                        .unwrap_or(chrono::Local::now().date_naive());
+                    let (pl, basis) = holding_pl(app, h, s, first_date);
+                    total_pl += pl;
+                    total_basis += basis;
+                }
+            }
+        }
+        let pct = if total_basis > 0.0 { total_pl / total_basis * 100.0 } else { 0.0 };
+        (total_pl, pct)
+    };
     let pl_color = if pl_abs >= 0.0 { GREEN } else { RED };
     let pl_prefix = if pl_abs >= 0.0 { "+" } else { "" };
 
@@ -416,12 +503,58 @@ fn render_holdings_table(f: &mut Frame, app: &App, area: Rect) {
     );
 }
 
+fn render_allocation_chart(f: &mut Frame, app: &App, area: Rect) {
+    let block = Block::default()
+        .title(Span::styled(" Allocation ", Style::default().fg(ACCENT).bold()))
+        .borders(Borders::ALL)
+        .border_type(BorderType::Rounded)
+        .border_style(Style::default().fg(MUTED));
+    let inner = block.inner(area);
+    f.render_widget(block, area);
+
+    let total = app.total_portfolio_value();
+    let label_w = 6u16;
+    let pct_w = 6u16;
+    let bar_area_w = inner.width.saturating_sub(label_w + pct_w + 2);
+
+    for (i, h) in app.holdings.iter().enumerate() {
+        if i as u16 >= inner.height {
+            break;
+        }
+        let y = inner.y + i as u16;
+        let pct = if total > 0.0 { h.value_eur / total * 100.0 } else { 0.0 };
+        let bar_len = ((pct / 100.0) * bar_area_w as f64) as usize;
+        let color = coin_color(&h.commodity);
+
+        let label = Span::styled(
+            format!(" {:<w$}", h.commodity, w = (label_w - 1) as usize),
+            Style::default().fg(color).bold(),
+        );
+        f.render_widget(Paragraph::new(Line::from(label)),
+            Rect { x: inner.x, y, width: label_w, height: 1 });
+
+        let pct_str = Span::styled(
+            format!("{:>4.1}% ", pct),
+            Style::default().fg(MUTED),
+        );
+        f.render_widget(Paragraph::new(Line::from(pct_str)),
+            Rect { x: inner.x + label_w, y, width: pct_w, height: 1 });
+
+        let bar = "█".repeat(bar_len.min(bar_area_w as usize));
+        f.render_widget(
+            Paragraph::new(Line::from(Span::styled(bar, Style::default().fg(color)))),
+            Rect { x: inner.x + label_w + pct_w, y, width: bar_area_w, height: 1 },
+        );
+    }
+}
+
 fn render_price_chart(f: &mut Frame, app: &App, area: Rect) {
     let selected_coin = app.selected_coin().unwrap_or("SOL");
+    let range_label = app.portfolio_range.label();
 
     let block = Block::default()
         .title(Span::styled(
-            format!(" {} Portfolio Analysis ", selected_coin),
+            format!(" {} Portfolio Analysis [{range_label}]  ◀ ▶ ", selected_coin),
             Style::default().fg(ACCENT).bold(),
         ))
         .borders(Borders::ALL)
@@ -444,33 +577,45 @@ fn render_price_chart(f: &mut Frame, app: &App, area: Rect) {
         }
     };
 
-    // X bounds from the investment series (all three share the same x values)
-    let x_min = series.investment.first().map(|p| p.0).unwrap_or(0.0);
-    let x_max = series.investment.last().map(|p| p.0).unwrap_or(1.0);
-
-    // Y bounds across all three series
-    let all_y = series
-        .investment
-        .iter()
-        .chain(series.price_growth.iter())
-        .chain(series.staking_growth.iter())
-        .map(|p| p.1);
-    let y_min_raw = all_y.clone().fold(0.0_f64, f64::min);
-    let y_max_raw = all_y.fold(0.0_f64, f64::max);
-    let (y_min, y_max, y_labels) = nice_y_axis(y_min_raw, y_max_raw, 4);
-
     let coin_entries: Vec<_> = app
         .price_history
         .iter()
         .filter(|e| e.commodity == selected_coin)
         .collect();
+    let first_date = coin_entries.first().map(|e| e.date).unwrap_or(chrono::Local::now().date_naive());
+    let today = chrono::Local::now().date_naive();
+    let today_x = (today - first_date).num_days() as f64;
+
+    let min_x = app.portfolio_range_min_x(first_date);
+
+    let filtered_inv: Vec<(f64, f64)> = series.investment.iter().filter(|p| p.0 >= min_x).copied().collect();
+    let filtered_price: Vec<(f64, f64)> = series.price_growth.iter().filter(|p| p.0 >= min_x).copied().collect();
+    let filtered_staking: Vec<(f64, f64)> = series.staking_growth.iter().filter(|p| p.0 >= min_x).copied().collect();
+
+    let x_min = min_x;
+    let x_max = today_x.max(filtered_inv.last().map(|p| p.0).unwrap_or(1.0));
+
+    let all_y = filtered_inv.iter()
+        .chain(filtered_price.iter())
+        .chain(filtered_staking.iter())
+        .map(|p| p.1);
+    let y_min_raw = all_y.clone().fold(0.0_f64, f64::min);
+    let y_max_raw = all_y.fold(0.0_f64, f64::max);
+    let (y_min, y_max, y_labels) = nice_y_axis(y_min_raw, y_max_raw, 4);
+
+    let filtered_entries: Vec<_> = coin_entries.iter()
+        .filter(|e| {
+            let day = (e.date - first_date).num_days() as f64;
+            day >= min_x
+        })
+        .collect();
     let x_labels: Vec<Span> = {
-        let n = coin_entries.len();
+        let n = filtered_entries.len();
         let count = if area.width < 60 { 3 } else { 5 };
         let indices: Vec<usize> = (0..count).map(|i| i * n.saturating_sub(1) / (count - 1).max(1)).collect();
         indices
             .iter()
-            .filter_map(|&i| coin_entries.get(i))
+            .filter_map(|&i| filtered_entries.get(i))
             .map(|e| Span::styled(e.date.format("%b %y").to_string(), Style::default().fg(MUTED)))
             .collect()
     };
@@ -480,21 +625,21 @@ fn render_price_chart(f: &mut Frame, app: &App, area: Rect) {
         .marker(symbols::Marker::Braille)
         .graph_type(GraphType::Line)
         .style(Style::default().fg(GOLD))
-        .data(&series.investment);
+        .data(&filtered_inv);
 
     let ds_price = Dataset::default()
         .name("Price gain")
         .marker(symbols::Marker::Braille)
         .graph_type(GraphType::Line)
         .style(Style::default().fg(ACCENT))
-        .data(&series.price_growth);
+        .data(&filtered_price);
 
     let ds_staking = Dataset::default()
         .name("Staking")
         .marker(symbols::Marker::Braille)
         .graph_type(GraphType::Line)
         .style(Style::default().fg(GREEN))
-        .data(&series.staking_growth);
+        .data(&filtered_staking);
 
     let chart = Chart::new(vec![ds_investment, ds_price, ds_staking])
         .block(block)
@@ -808,7 +953,7 @@ fn render_monthly_chart(f: &mut Frame, app: &App, area: Rect) {
 fn render_monthly(f: &mut Frame, app: &mut App, area: Rect) {
     let chunks = Layout::vertical([
         Constraint::Length(12), // bar chart
-        Constraint::Length(10), // summary
+        Constraint::Length(14), // summary + sparklines
         Constraint::Min(0),     // detail tables
     ])
     .split(area);
@@ -954,6 +1099,23 @@ fn render_monthly_summary(f: &mut Frame, app: &App, area: Rect) {
     let ytd_net = ytd.total_income - ytd.total_expenses;
     let ytd_net_color = if ytd_net >= 0.0 { GREEN } else { RED };
     let ytd_prefix = if ytd_net >= 0.0 { "+" } else { "" };
+
+    let ytd_block = Block::default()
+        .title(Span::styled(
+            " Year to Date ",
+            Style::default().fg(GOLD).bold(),
+        ))
+        .borders(Borders::ALL)
+        .border_type(BorderType::Rounded)
+        .border_style(Style::default().fg(MUTED));
+    let ytd_area = ytd_block.inner(chunks[2]);
+    f.render_widget(ytd_block, chunks[2]);
+
+    let ytd_split = Layout::vertical([
+        Constraint::Length(3),
+        Constraint::Min(0),
+    ]).split(ytd_area);
+
     let ytd_text = vec![
         Line::from(vec![
             Span::styled("  Net YTD   ", Style::default().fg(MUTED)),
@@ -981,15 +1143,46 @@ fn render_monthly_summary(f: &mut Frame, app: &App, area: Rect) {
             ),
         ]),
     ];
-    let ytd_block = Block::default()
-        .title(Span::styled(
-            " Year to Date ",
-            Style::default().fg(GOLD).bold(),
-        ))
-        .borders(Borders::ALL)
-        .border_type(BorderType::Rounded)
-        .border_style(Style::default().fg(MUTED));
-    f.render_widget(Paragraph::new(ytd_text).block(ytd_block), chunks[2]);
+    f.render_widget(Paragraph::new(ytd_text), ytd_split[0]);
+
+    let spark_months = &app.monthly.months[app.monthly.months.len().saturating_sub(6)..];
+    let inc_data: Vec<u64> = spark_months.iter().map(|m| m.total_income as u64).collect();
+    let exp_data: Vec<u64> = spark_months.iter().map(|m| m.total_expenses as u64).collect();
+    let net_data: Vec<u64> = spark_months.iter()
+        .map(|m| (m.total_income - m.total_expenses).max(0.0) as u64).collect();
+
+    let spark_rows = Layout::vertical([
+        Constraint::Ratio(1, 3),
+        Constraint::Ratio(1, 3),
+        Constraint::Ratio(1, 3),
+    ]).split(ytd_split[1]);
+
+    let spark_inc = Sparkline::default()
+        .block(Block::default()
+            .title(Span::styled(" Income ▁▃▅ ", Style::default().fg(GREEN)))
+            .borders(Borders::TOP)
+            .border_style(Style::default().fg(MUTED)))
+        .data(&inc_data)
+        .style(Style::default().fg(GREEN));
+    f.render_widget(spark_inc, spark_rows[0]);
+
+    let spark_exp = Sparkline::default()
+        .block(Block::default()
+            .title(Span::styled(" Expenses ▁▃▅ ", Style::default().fg(RED)))
+            .borders(Borders::TOP)
+            .border_style(Style::default().fg(MUTED)))
+        .data(&exp_data)
+        .style(Style::default().fg(RED));
+    f.render_widget(spark_exp, spark_rows[1]);
+
+    let spark_net = Sparkline::default()
+        .block(Block::default()
+            .title(Span::styled(" Net ▁▃▅ ", Style::default().fg(GOLD)))
+            .borders(Borders::TOP)
+            .border_style(Style::default().fg(MUTED)))
+        .data(&net_data)
+        .style(Style::default().fg(GOLD));
+    f.render_widget(spark_net, spark_rows[2]);
 }
 
 fn render_monthly_income(f: &mut Frame, app: &App, area: Rect) {

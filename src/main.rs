@@ -153,14 +153,14 @@ fn run(terminal: &mut Terminal<CrosstermBackend<io::Stdout>>, journal_path: Path
                             KeyCode::Up | KeyCode::Char('k') => app.scroll_up(),
                             KeyCode::Down | KeyCode::Char('j') => app.scroll_down(),
                             KeyCode::Left | KeyCode::Char('h') => match app.tab {
+                                app::Tab::Portfolio => app.portfolio_range_left(),
                                 app::Tab::Accounts => app.nw_range_left(),
                                 app::Tab::Monthly => app.month_left(),
-                                _ => {}
                             },
                             KeyCode::Right | KeyCode::Char('l') => match app.tab {
+                                app::Tab::Portfolio => app.portfolio_range_right(),
                                 app::Tab::Accounts => app.nw_range_right(),
                                 app::Tab::Monthly => app.month_right(),
-                                _ => {}
                             },
                             KeyCode::Char('c') => app.expense_colors = !app.expense_colors,
                             KeyCode::Char('r') => app.start_refresh(),
