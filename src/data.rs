@@ -392,6 +392,7 @@ pub fn load_net_worth_history(journal_path: &Path, period: &str) -> Result<NetWo
             "bare",
             "-V",
             "--no-total",
+            "--empty",
         ])
         .output()
         .context("Failed to run hledger balance for net worth history")?;
@@ -607,6 +608,8 @@ pub struct CoinChartSeries {
     pub price_growth: Vec<(f64, f64)>,
     /// EUR value of coins received via staking rewards.
     pub staking_growth: Vec<(f64, f64)>,
+    /// EUR price per coin at each sample point.
+    pub price: Vec<(f64, f64)>,
 }
 
 impl CoinChartSeries {
@@ -844,17 +847,32 @@ pub fn load_all_coin_chart_series(
             }
         };
 
-        // Build a price lookup: for each day, use last known price
+        // Build a price lookup: linearly interpolate between known price
+        // entries so that sparse prices.journal data doesn't create flat
+        // stretches that break sub-range P/L calculations.
         let mut price_by_day: Vec<f64> = Vec::with_capacity(total_days as usize + 1);
         let mut price_idx = 0;
-        let mut last_price = coin_prices[0].price_eur;
         for d in 0..=total_days {
             let date = first_date + chrono::Duration::days(d);
             while price_idx < coin_prices.len() && coin_prices[price_idx].date <= date {
-                last_price = coin_prices[price_idx].price_eur;
                 price_idx += 1;
             }
-            price_by_day.push(last_price);
+            let price = if price_idx == 0 {
+                coin_prices[0].price_eur
+            } else if price_idx >= coin_prices.len() {
+                coin_prices.last().unwrap().price_eur
+            } else {
+                let prev = &coin_prices[price_idx - 1];
+                let next = &coin_prices[price_idx];
+                let span = (next.date - prev.date).num_days() as f64;
+                if span <= 0.0 {
+                    next.price_eur
+                } else {
+                    let t = (date - prev.date).num_days() as f64 / span;
+                    prev.price_eur + t * (next.price_eur - prev.price_eur)
+                }
+            };
+            price_by_day.push(price);
         }
 
         // Sample every few days to keep chart data manageable
@@ -862,11 +880,13 @@ pub fn load_all_coin_chart_series(
         let mut investment = Vec::new();
         let mut price_growth = Vec::new();
         let mut staking_growth = Vec::new();
+        let mut price_series = Vec::new();
 
         let sample_day = |d: i64,
                           investment: &mut Vec<(f64, f64)>,
                           price_growth: &mut Vec<(f64, f64)>,
-                          staking_growth: &mut Vec<(f64, f64)>| {
+                          staking_growth: &mut Vec<(f64, f64)>,
+                          price_series: &mut Vec<(f64, f64)>| {
             let date = first_date + chrono::Duration::days(d);
             let price = price_by_day[d as usize];
             let days = d as f64;
@@ -891,20 +911,37 @@ pub fn load_all_coin_chart_series(
             investment.push((days, cost));
             price_growth.push((days, bought_coin * price - cost));
             staking_growth.push((days, staked_coin * price));
+            price_series.push((days, price));
         };
 
+        let mandatory_days: Vec<i64> = basis_snaps
+            .iter()
+            .map(|(d, _)| (*d - first_date).num_days())
+            .filter(|&d| d >= 0 && d <= total_days)
+            .collect();
+
+        let mut sample_days: Vec<i64> = Vec::new();
         let mut d = 0i64;
         while d <= total_days {
-            sample_day(d, &mut investment, &mut price_growth, &mut staking_growth);
+            sample_days.push(d);
             d += step as i64;
         }
-        if d - step as i64 != total_days {
-            sample_day(total_days, &mut investment, &mut price_growth, &mut staking_growth);
+        for md in &mandatory_days {
+            sample_days.push(*md);
+        }
+        sample_days.sort();
+        sample_days.dedup();
+        if sample_days.last().copied() != Some(total_days) {
+            sample_days.push(total_days);
+        }
+
+        for d in sample_days {
+            sample_day(d, &mut investment, &mut price_growth, &mut staking_growth, &mut price_series);
         }
 
         result.insert(
             coin.clone(),
-            CoinChartSeries { investment, price_growth, staking_growth },
+            CoinChartSeries { investment, price_growth, staking_growth, price: price_series },
         );
     }
 

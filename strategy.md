@@ -1,297 +1,173 @@
+# Ledger Dashboard — Fix Strategy
 
-# Phase 4 Strategy: Feature Expansion
+## 1. P/L Calculation: Harden Timelines
 
-## Current State
+### Problem
+P/L numbers shift unpredictably across range changes. Root causes:
 
-Dashboard has 3 tabs (Portfolio, Accounts, Monthly) with parallel data loading,
-background refresh, lazy tab loading, and mtime-based cache. UI is responsive
-with progressive rendering. Core data: crypto portfolio P/L, net worth chart,
-monthly income/expenses with YoY comparison.
+- `holding_pl()` in `ui.rs:434-455` uses `portfolio_range_min_x()` to get the start boundary, but the **FIFO basis timeline** (`basis_timeline` in `data.rs:768-816`) only snapshots on transaction dates. Between transactions, `series_interp()` returns the *previous* snapshot — so for ranges starting between two buy events, basis and value can be misaligned (basis is stale but price has moved).
+- For "All" range: `pl = value - invested`. For sub-ranges (3M/6M/YTD): `pl = current_pl - pl_at_start`. The `pl_at_start` uses `series_value_at_day()` which sums investment + price_growth + staking_growth — but `price_growth` is `bought_coin * price - cost`, meaning it already includes basis. Double-subtracting basis when `value_at_start - basis_at_start` is computed from these series can produce wrong numbers when coin amounts changed within the range.
+- The total P/L row sums per-coin P/L but uses summed bases for the percentage. If one coin has zero basis (staking-only), the denominator is wrong.
 
----
+### Fix Plan
 
-## Feature Group A — Deeper Drill-Downs
+**A. Align sample points with basis snapshots**
+In `load_all_coin_chart_series()` (`data.rs`), when sampling every `step` days:
+- Also force a sample on every basis snapshot date (i.e., every transaction date).
+- This ensures `series_interp()` returns exact values at transaction boundaries.
 
-### A1. Expense Category Drill-Down
+**B. Keep current sub-range formula, fix interpolation alignment**
+The current formula in `holding_pl()` (`ui.rs:434-455`) is actually correct in principle:
+```
+pl_range = (value_now - basis_now) - (value_at_start - basis_at_start)
+         = change in unrealized P/L over the period
+```
+This properly handles buys (new basis cancels new value in the delta).
 
-**Problem:** Monthly tab shows expense categories but no way to see individual
-transactions within a category. Account tab has drill-down, expenses don't.
+**DO NOT** change to `value_now - value_at_start` — that would conflate capital flows with gains (a buy would look like profit, a sell like a loss).
 
-**Changes:**
-- Enter on selected expense category → show transactions for that category
-  in selected month (reuse `load_recent_transactions` with date filter).
-- Add date-range arg to `load_recent_transactions` (pass `-p "YYYY-MM"`).
-- Render with same `render_account_detail` layout, Esc to go back.
+The real fix: ensure `series_interp()` returns accurate values at arbitrary points by forcing sample alignment (see fix A above). The interpolation misalignment is what causes the P/L numbers to look wrong across range changes.
 
-**Impact:** Users can answer "why was Food so high in March?" without leaving TUI.
+**B2. Realized gains from sells are invisible**
+Sells remove coins from both value and basis — the realized gain disappears from the portfolio view entirely. It shows up as EUR in the Accounts tab bank balance, but the Portfolio tab gives no indication a profitable (or unprofitable) sell happened.
 
-**Scope:** ~40 lines. Low risk.
+**Decision: Option 2 — Annotation only.** Don't change P/L math, but add a footnote in the holdings table: "P/L is unrealized only. Sells reflected in Accounts tab."
 
----
+**C. Handle zero-basis coins in total row**
+In `render_holdings_table()` (`ui.rs:599-621`):
+- When summing total P/L, skip coins with zero basis from the percentage denominator.
+- Or: use `value_at_start` as denominator for sub-ranges (already non-zero if coin existed).
 
-### A2. Transaction Search
-
-**Problem:** No way to find a specific transaction across all accounts/dates.
-Users must drop to terminal `hledger register` commands.
-
-**Changes:**
-- New keybinding `/` → opens search input bar (bottom of screen).
-- Run `hledger register -O csv` with description filter (`desc:QUERY`).
-- Show results in a temporary overlay table (date, account, description, amount).
-- Esc closes search. Support regex patterns.
-
-**Impact:** Eliminates most reasons to leave the TUI.
-
-**Scope:** ~80 lines. Needs text input widget. Medium risk.
+**D. Add sanity checks**
+- If `invested == 0` and `value > 0` → show "∞" or "N/A" for P/L % (already partially done, but verify all paths).
+- Clamp extreme percentages (>10000%) to avoid UI overflow.
 
 ---
 
-## Feature Group B — Financial Intelligence
+## 2. Portfolio Chart: BTC Clipping & Price Gain Readability
 
-### B1. Budget Tracking
+### Problem
+- Chart Y-axis range computed from `y_min_raw`/`y_max_raw` in `render_price_chart()` (`ui.rs:807-813`) uses `f64::min` with seed `0.0`. If all three series (investment, price_growth, staking) are positive, `y_min` stays at 0 — BUT `nice_y_axis` can set `lo` *below* 0 via floor rounding, wasting chart space. Meanwhile `y_max` may not account for the **sum** of the series at any point — individual max values don't reflect stacked visual height if user expects stacked interpretation.
+- BTC staking line gets clipped because staking values are small compared to investment/price_growth scale, and the Y bounds are driven by the larger series. Staking line hugs the bottom and falls below visible area.
+- Price gain line is independent of invested line — it shows `bought_coin * price - cost` which oscillates around zero. Hard to visually compare against invested because they're on completely different Y positions.
 
-**Problem:** No visibility into whether spending stays within planned limits.
-Users track budgets manually or not at all.
+### Fix Plan
 
-**Changes:**
-- Config file (`~/.config/ldash/budgets.toml`) with per-category monthly limits:
-  ```toml
-  [budgets]
-  "expenses:Essen" = 400.0
-  "expenses:Freizeit" = 200.0
+**A. Fix Y-axis bounds to include all data**
+In `render_price_chart()` (`ui.rs:807-813`):
+- Compute `y_min_raw` and `y_max_raw` using `f64::INFINITY` / `f64::NEG_INFINITY` as seeds instead of `0.0`:
+  ```rust
+  let y_min_raw = all_y.clone().fold(f64::INFINITY, f64::min);
+  let y_max_raw = all_y.fold(f64::NEG_INFINITY, f64::max);
   ```
-- Monthly tab: add progress bar or percentage next to each expense category
-  showing budget usage (e.g. `[████████░░] 82%`).
-- Color: green < 80%, yellow 80-100%, red > 100%.
-- Summary widget: "3 categories over budget this month".
+- This ensures negative price_growth values expand the bottom bound, and small staking values aren't clipped.
 
-**Impact:** Core personal finance feature. Makes dashboard actionable.
+**B. Change price gain to show total value (invested + gain)**
+Instead of plotting raw `price_growth = bought_coin * price - cost` (which hovers around zero), plot `invested + price_growth` = total market value of purchased coins. This makes the price gain line visually move **up or down from the invested line**, showing what the purchased portion is worth vs what was paid.
 
-**Scope:** ~60 lines + config loading. Low risk.
+In `render_price_chart()` (`ui.rs:800-802`):
+- Build `filtered_value` where each point is `(day, invested_at_day + price_growth_at_day)`.
+- Rename dataset from "Price gain" to "Market value" or "Current value".
+- Keep invested line as-is (gold). The gap between the two lines = unrealized P/L, visually obvious.
 
----
+Alternatively (simpler, preserves 3-line setup):
+- In `data.rs` `sample_day` closure (~line 866-894): change `price_growth` to emit `(days, bought_coin * price)` instead of `(days, bought_coin * price - cost)`. Label it "Value" in the chart. The visual delta from the invested line = P/L.
 
-### B2. Cash Flow Sparklines
-
-**Problem:** Monthly chart shows bars but no trend direction at a glance.
-Hard to see if expenses are trending up or down over time.
-
-**Changes:**
-- Add sparkline widgets (ratatui `Sparkline`) next to YTD summary showing
-  6-month trailing trend for income, expenses, and net.
-- Compute from existing `monthly.months` data — no new hledger calls.
-
-**Impact:** Instant trend visibility. Zero performance cost.
-
-**Scope:** ~25 lines. No risk.
+**C. Ensure staking line is visible**
+- If staking values are very small relative to investment, consider plotting staking as a **separate Y-axis** or as an **additive line on top of investment**: `invested + staking_value`. This stacks it visually.
+- Simpler approach: plot staking as `invested + price_growth + staking_growth` (total portfolio value including staking). Then the three lines become:
+  1. **Invested** (cost basis) — gold
+  2. **Purchased value** (market value of bought coins) — cyan  
+  3. **Total value** (including staking rewards) — green
+- Gap between 1→2 = price P/L. Gap between 2→3 = staking value. All three share the same Y scale and nothing clips.
 
 ---
 
-### B3. Savings Goal Tracker
+## 3. Accounts Tab: Net Worth Chart Timeline Issues
 
-**Problem:** Users have financial goals (emergency fund, house down payment)
-but no way to track progress in dashboard.
+### Problem
+- Range cycling order is `1Y → 2Y → 5Y → All` (`NetWorthRange` in `app.rs:166-210`). Default is `Year2`. User expects default `All`, then cycle to `1Y → 2Y → 5Y`.
+- "1Y" uses hledger period `"monthly from 1 year ago"` which starts from the first journal entry + 1 year, not from today minus 1 year. This is because hledger's `from X ago` is relative to the report start, not end.
+- No YTD option (current calendar year).
+- X-axis labels look odd — dates jump inconsistently because label indices are evenly spaced across the *data points* array, but data points may not be evenly spaced in time (months with no data get skipped by hledger).
 
-**Changes:**
-- Config file entry:
-  ```toml
-  [[goals]]
-  name = "Emergency Fund"
-  target = 15000.0
-  account = "assets:bank:savings"
-  
-  [[goals]]
-  name = "House Fund"
-  target = 50000.0
-  account = "assets:bank:house"
-  ```
-- Display as gauge widgets in Accounts tab or dedicated section.
-- Pull current balance from existing `account_balances` data.
+### Fix Plan
 
-**Impact:** Makes long-term financial planning visible.
+**A. Add YTD range, reorder cycle**
 
-**Scope:** ~40 lines. Low risk.
+In `app.rs`, change `NetWorthRange`:
+```rust
+enum NetWorthRange {
+    All,    // default
+    Ytd,
+    Year1,
+    Year2,
+    Year5,
+}
+```
 
----
+Cycle order: `All → 1Y → 2Y → 5Y → All` (left/right arrows). Add YTD between All and 1Y:
+`All ←→ YTD ←→ 1Y ←→ 2Y ←→ 5Y`
 
-## Feature Group C — Portfolio Enhancements
+**B. Fix period_arg to use absolute dates instead of relative**
 
-### C1. Portfolio Allocation Chart
+Instead of `"monthly from 1 year ago"`, compute the actual date:
+```rust
+fn period_arg(self) -> String {
+    let today = Local::now().date_naive();
+    match self {
+        Self::Ytd => {
+            let jan1 = NaiveDate::from_ymd_opt(today.year(), 1, 1).unwrap();
+            format!("monthly from {}", jan1.format("%Y-%m-%d"))
+        }
+        Self::Year1 => {
+            let start = today - chrono::Duration::days(365);
+            format!("monthly from {}", start.format("%Y-%m-%d"))
+        }
+        Self::Year2 => {
+            let start = today - chrono::Duration::days(730);
+            format!("monthly from {}", start.format("%Y-%m-%d"))
+        }
+        Self::Year5 => {
+            let start = today - chrono::Duration::days(1825);
+            format!("monthly from {}", start.format("%Y-%m-%d"))
+        }
+        Self::All => "monthly".to_string(),
+    }
+}
+```
 
-**Problem:** Allocation percentages shown as text in table. Hard to visualize
-portfolio balance at a glance.
+This ensures "1Y" means "from 365 days ago until now", not "from first entry + 1 year".
 
-**Changes:**
-- Add horizontal stacked bar or mini bar chart below holdings table showing
-  allocation split by coin (colored segments).
-- Use ratatui `BarChart` with single group, one bar per coin.
-- Data already available — no new hledger calls.
+**C. Change default to All**
 
-**Impact:** Visual portfolio balance check. Zero cost.
+In `App::new()` (`app.rs:353`):
+```rust
+nw_range: NetWorthRange::All,
+```
 
-**Scope:** ~30 lines. No risk.
+**D. Fix `period_arg` return type**
 
----
+Currently returns `&'static str`. Change to `String` to support dynamic date computation. Update all callers (`load_all_data`, `start_refresh_tabs`, `reload_net_worth`).
 
-### C2. Portfolio Time Range Selection
+**E. Improve X-axis label spacing**
 
-**Problem:** Portfolio chart always shows full history. No way to zoom into
-last 3 months or 1 year.
-
-**Changes:**
-- Add range selector (same pattern as net worth: 3M/6M/1Y/All).
-- Filter `coin_chart_cache` data by date range before rendering.
-- Keybinding `[` and `]` or reuse `←`/`→` on Portfolio tab.
-
-**Impact:** Better analysis of recent performance vs long-term.
-
-**Scope:** ~20 lines. No risk.
-
----
-
-### C3. Price Alerts Display
-
-**Problem:** No visibility into significant price movements since last session.
-
-**Changes:**
-- On startup, compare current prices to 24h-ago prices from price history.
-- Show notification-style banner: "BTC +5.2%, SOL -3.1% since yesterday".
-- Auto-dismiss after 5 seconds or on any keypress.
-
-**Impact:** Quick market awareness on dashboard open.
-
-**Scope:** ~30 lines. Low risk.
-
----
-
-## Feature Group D — Configuration & Polish
-
-### D1. Config File Support
-
-**Problem:** No configuration. Expense color mapping, account groupings, and
-display preferences are hardcoded.
-
-**Changes:**
-- Load `~/.config/ldash/config.toml` on startup.
-- Options: journal path, refresh interval, default tab, number format (EU/US),
-  currency symbol, expense color overrides.
-- Fallback to current hardcoded defaults when config missing.
-
-**Impact:** Foundation for all config-dependent features (budgets, goals).
-Must implement before B1/B3.
-
-**Scope:** ~50 lines + toml dependency. Low risk.
+In `render_net_worth_chart()` (`ui.rs:901-907`): labels are evenly sampled from `series.labels` by index. Since the underlying data is monthly from hledger, spacing should be consistent *if* hledger returns all months. Verify hledger `--empty` flag is set to include zero-balance months. If not, add `--empty` to the `load_net_worth_history` hledger call (`data.rs:379-397`):
+```
+"--empty"
+```
+This fills in months with no changes, giving uniform X spacing.
 
 ---
 
-### D2. Liability Tracking
+## Implementation Order
 
-**Problem:** Net worth chart shows assets only. Users with mortgages or debts
-see inflated net worth. `hledger balance assets liabilities` gives true picture.
-
-**Changes:**
-- Extend `load_account_balances_eur` to also query `liabilities`.
-- Show liabilities in Accounts tab below assets, colored red, separated.
-- Net worth calculation: assets + liabilities (liabilities are negative in hledger).
-- Optional: net worth chart includes liabilities in calculation.
-
-**Impact:** Accurate financial picture for users with debt.
-
-**Scope:** ~30 lines. Low risk.
-
----
-
-### D3. Multi-Year Monthly Comparison
-
-**Problem:** Only current year vs last year. No way to see 3-year expense trends
-for a category.
-
-**Changes:**
-- New keybinding (e.g. `y`) in Monthly tab cycles through years: 2026, 2025, 2024.
-- Or: overlay mode showing selected month across multiple years as grouped bars.
-- Reuse `load_monthly_data` with different `-p` period argument.
-
-**Impact:** Long-term trend analysis.
-
-**Scope:** ~40 lines. Low risk.
-
----
-
-### D4. Responsive Terminal Layout
-
-**Problem:** UI assumes wide terminal. Narrow terminals (< 100 cols) break
-table layouts and truncate data.
-
-**Changes:**
-- Detect terminal width in render functions.
-- < 100 cols: stack Portfolio panels vertically (table above, chart below).
-- < 80 cols: hide bar charts in tables, abbreviate column headers.
-- Accounts table: truncate long account names with ellipsis.
-
-**Impact:** Usable on laptop screens and split panes.
-
-**Scope:** ~40 lines across `ui.rs`. Low risk.
-
----
-
-## Feature Group E — Data Export & Integration
-
-### E1. Clipboard Export
-
-**Problem:** No way to extract data from TUI without going to terminal.
-
-**Changes:**
-- Keybinding `y` (yank) copies current view data to clipboard.
-- Portfolio: CSV of holdings. Accounts: selected account balance.
-  Monthly: current month income/expenses.
-- Use `clipboard` crate or pipe to `pbcopy`/`xclip`.
-
-**Impact:** Bridges TUI and other tools (spreadsheets, reports).
-
-**Scope:** ~30 lines. Low risk.
-
----
-
-### E2. Journal File Watcher
-
-**Problem:** Auto-refresh checks mtime every 5 minutes. Edits to journal
-not reflected for up to 5 min.
-
-**Changes:**
-- Use `notify` crate to watch journal file + included files for changes.
-- Trigger refresh within 1 second of file save.
-- Replace polling interval with event-driven refresh.
-
-**Impact:** Near-realtime updates when editing journal in another pane.
-
-**Scope:** ~40 lines + `notify` dependency. Low risk.
-
----
-
-## Implementation Priority
-
-| Priority | Feature | Group | Depends On | Effort | Impact |
-|----------|---------|-------|------------|--------|--------|
-| 1        | D1 Config file | Config | — | Medium | Foundation |
-| 2        | A1 Expense drill-down | Drill-down | — | Small | High |
-| 3        | B2 Cash flow sparklines | Intelligence | — | Tiny | Medium |
-| 4        | D2 Liability tracking | Config | — | Small | High |
-| 5        | B1 Budget tracking | Intelligence | D1 | Medium | High |
-| 6        | C1 Allocation chart | Portfolio | — | Small | Medium |
-| 7        | C2 Portfolio time range | Portfolio | — | Tiny | Medium |
-| 8        | D4 Responsive layout | Polish | — | Medium | Medium |
-| 9        | A2 Transaction search | Drill-down | — | Medium | High |
-| 10       | B3 Savings goals | Intelligence | D1 | Small | Medium |
-| 11       | E2 File watcher | Integration | — | Small | Medium |
-| 12       | D3 Multi-year comparison | Config | — | Small | Medium |
-| 13       | C3 Price alerts | Portfolio | — | Small | Low |
-| 14       | E1 Clipboard export | Integration | — | Small | Low |
-
-### Recommended batches for plan files:
-
-- **Plan 1:** D1 + A1 (config foundation + first drill-down)
-- **Plan 2:** B2 + C1 + C2 (visual enhancements, no new data loading)
-- **Plan 3:** D2 + D4 (accuracy + usability)
-- **Plan 4:** B1 + B3 (actionable financial intelligence, needs D1)
-- **Plan 5:** A2 + E2 (search + live updates)
-- **Plan 6:** D3 + C3 + E1 (nice-to-haves)
+1. **3B + 3C + 3D** — Fix net worth ranges (quick, most user-visible pain)
+2. **3A** — Add YTD range
+3. **2A** — Fix Y-axis bounds (one-line fix)
+4. **2B** — Change price gain to value-relative line
+5. **2C** — Stack staking on top
+6. **1A + 1B** — Align sample points with basis snapshots (fixes interpolation-caused P/L drift)
+7. **1B2** — Decide on realized gains visibility (option 1/2/3)
+8. **1C + 1D** — Edge cases and sanity checks
+9. **3E** — Add `--empty` for uniform X spacing

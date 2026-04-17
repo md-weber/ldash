@@ -318,6 +318,7 @@ pub struct App {
     pub expense_detail: Option<Vec<Transaction>>,
     pub detail_expense_name: Option<String>,
     pub portfolio_range: PortfolioRange,
+    pub chart_stacked: bool,
     pub expense_colors: bool,
     pub status_msg: String,
     pub loading: bool,
@@ -355,6 +356,7 @@ impl App {
             2 => Tab::Monthly,
             _ => Tab::Portfolio,
         };
+        let chart_stacked = config.chart_mode != "unstacked";
 
         Ok(Self {
             journal_path,
@@ -380,6 +382,7 @@ impl App {
             expense_detail: None,
             detail_expense_name: None,
             portfolio_range: PortfolioRange::All,
+            chart_stacked,
             expense_colors: true,
             status_msg: "Loading data…".to_string(),
             loading: true,

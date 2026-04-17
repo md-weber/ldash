@@ -132,6 +132,7 @@ fn run(terminal: &mut Terminal<CrosstermBackend<io::Stdout>>, journal_path: Path
 
     loop {
         app.check_refresh();
+        app.check_alert_timeout();
 
         terminal.draw(|f| ui::render(f, &mut app))?;
 
@@ -216,6 +217,7 @@ fn run(terminal: &mut Terminal<CrosstermBackend<io::Stdout>>, journal_path: Path
                                     }
                                 }
                             }
+                            KeyCode::Char('s') => app.chart_stacked = !app.chart_stacked,
                             KeyCode::Char('c') => app.expense_colors = !app.expense_colors,
                             KeyCode::Char('r') => app.start_refresh(),
                             _ => {}

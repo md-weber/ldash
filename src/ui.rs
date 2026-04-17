@@ -224,6 +224,7 @@ fn render_help_popup(f: &mut Frame, area: Rect) {
         ("/", "Search transactions"),
         ("y / Y", "Year back/fwd (Monthly)"),
         ("Y", "Copy view to clipboard"),
+        ("s", "Toggle chart stacked/unstacked"),
         ("c", "Toggle expense colors"),
         ("Esc", "Back / quit"),
         ("r", "Refresh data"),
@@ -238,6 +239,11 @@ fn render_help_popup(f: &mut Frame, area: Rect) {
             Span::styled(*desc, Style::default().fg(FG)),
         ]));
     }
+    lines.push(Line::from(""));
+    lines.push(Line::from(Span::styled(
+        "  P/L shows unrealized gains only.",
+        Style::default().fg(MUTED),
+    )));
 
     let block = Block::default()
         .title(Span::styled(
@@ -411,7 +417,6 @@ fn coin_color(commodity: &str) -> Color {
     let hash: usize = commodity.bytes().map(|b| b as usize).sum();
     PALETTE[hash % PALETTE.len()]
 }
-
 fn series_interp(series: &[(f64, f64)], day: f64) -> f64 {
     match series.iter().rposition(|p| p.0 <= day) {
         Some(i) => series[i].1,
@@ -428,9 +433,12 @@ fn series_value_at_day(series: &crate::data::CoinChartSeries, day: f64) -> f64 {
 /// Compute (pl_abs, basis_for_pct) for a single holding given the current range.
 ///
 /// ALL range: pl = current_value − FIFO_basis.
-/// 3M/6M/YTD: pl = change in unrealized P/L over the period.
-///   pl_range = (value_now − basis_now) − (value_at_start − basis_at_start)
-///   basis_for_pct = value_at_start (or FIFO basis if no value at start).
+/// Sub-ranges (3M/6M/YTD): change in unrealized P/L over the period.
+///   pl = (value_now − basis_now) − (value_at_start − basis_at_start)
+///   This correctly weights each buy by its actual purchase price.
+///
+/// If a sell within the range distorts the result (|pl| > current value),
+/// we fall back to a price-only estimate on current holdings.
 fn holding_pl(
     app: &App,
     h: &crate::data::CryptoHolding,
@@ -450,9 +458,20 @@ fn holding_pl(
         let pl_at_start = value_at_start - basis_at_start;
         let pl_range = current_pl - pl_at_start;
         let denom = if value_at_start > 0.0 { value_at_start } else { invested };
+
+        if pl_range.abs() > h.value_eur {
+            let price_at_start = series_interp(&series.price, min_x);
+            if price_at_start > 0.0 {
+                let val_start = h.amount * price_at_start;
+                return (h.value_eur - val_start, val_start);
+            }
+            return (h.value_eur - invested, invested);
+        }
+
         (pl_range, denom)
     }
 }
+
 
 fn render_portfolio(f: &mut Frame, app: &App, area: Rect) {
     if area.width < 100 {
@@ -541,13 +560,26 @@ fn render_holdings_table(f: &mut Frame, app: &App, area: Rect) {
                             let abs_color = if pl_abs >= 0.0 { GREEN } else { RED };
                             let abs_prefix = if pl_abs >= 0.0 { "+" } else { "" };
                             let pct = pl_abs / basis * 100.0;
+                            let pct_clamped = pct.clamp(-9999.0, 9999.0);
                             let (prefix, color) =
                                 if pct >= 0.0 { ("+", GREEN) } else { ("", RED) };
+                            let pct_str = if pct.abs() > 9999.0 {
+                                format!("{prefix}{:.0}%", pct_clamped)
+                            } else {
+                                format!("{prefix}{:.1}%", pct)
+                            };
                             (
-                                format!("{prefix}{:.1}%", pct),
+                                pct_str,
                                 Style::default().fg(color).bold(),
                                 format!("{abs_prefix}{:.2}€", pl_abs),
                                 Style::default().fg(abs_color).bold(),
+                            )
+                        } else if basis < 0.0 {
+                            (
+                                "—".into(),
+                                Style::default().fg(MUTED),
+                                format!("{:.2}€", pl_abs),
+                                Style::default().fg(MUTED),
                             )
                         } else if h.value_eur > 0.0 {
                             (
@@ -608,7 +640,9 @@ fn render_holdings_table(f: &mut Frame, app: &App, area: Rect) {
                         .unwrap_or(chrono::Local::now().date_naive());
                     let (pl, basis) = holding_pl(app, h, s, first_date);
                     total_pl += pl;
-                    total_basis += basis;
+                    if basis > 0.0 {
+                        total_basis += basis;
+                    }
                 }
             }
         }
@@ -707,7 +741,7 @@ fn render_holdings_table(f: &mut Frame, app: &App, area: Rect) {
         height: 1,
     };
     f.render_widget(
-        Paragraph::new("  ↑↓ select coin for chart").style(Style::default().fg(MUTED)),
+        Paragraph::new("  ↑↓ select coin for chart  │  P/L is unrealized only. Sells reflected in Accounts tab.").style(Style::default().fg(MUTED)),
         hint_area,
     );
 }
@@ -761,9 +795,10 @@ fn render_price_chart(f: &mut Frame, app: &App, area: Rect) {
     let selected_coin = app.selected_coin().unwrap_or("SOL");
     let range_label = app.portfolio_range.label();
 
+    let mode_label = if app.chart_stacked { "stacked" } else { "unstacked" };
     let block = Block::default()
         .title(Span::styled(
-            format!(" {} Portfolio Analysis [{range_label}]  ◀ ▶ ", selected_coin),
+            format!(" {} Portfolio Analysis [{range_label}] [{mode_label}]  ◀ ▶ ", selected_coin),
             Style::default().fg(ACCENT).bold(),
         ))
         .borders(Borders::ALL)
@@ -801,15 +836,31 @@ fn render_price_chart(f: &mut Frame, app: &App, area: Rect) {
     let filtered_price: Vec<(f64, f64)> = series.price_growth.iter().filter(|p| p.0 >= min_x).copied().collect();
     let filtered_staking: Vec<(f64, f64)> = series.staking_growth.iter().filter(|p| p.0 >= min_x).copied().collect();
 
+    let (line2_data, line3_data, line2_name, line3_name): (Vec<(f64, f64)>, Vec<(f64, f64)>, &str, &str) =
+        if app.chart_stacked {
+            let purchased: Vec<(f64, f64)> = filtered_inv.iter()
+                .zip(filtered_price.iter())
+                .map(|(inv, pg)| (inv.0, inv.1 + pg.1))
+                .collect();
+            let total: Vec<(f64, f64)> = filtered_inv.iter()
+                .zip(filtered_price.iter())
+                .zip(filtered_staking.iter())
+                .map(|((inv, pg), sg)| (inv.0, inv.1 + pg.1 + sg.1))
+                .collect();
+            (purchased, total, "Purchased value", "Total value")
+        } else {
+            (filtered_price.clone(), filtered_staking.clone(), "Price gain", "Staking gain")
+        };
+
     let x_min = min_x;
     let x_max = today_x.max(filtered_inv.last().map(|p| p.0).unwrap_or(1.0));
 
     let all_y = filtered_inv.iter()
-        .chain(filtered_price.iter())
-        .chain(filtered_staking.iter())
+        .chain(line2_data.iter())
+        .chain(line3_data.iter())
         .map(|p| p.1);
-    let y_min_raw = all_y.clone().fold(0.0_f64, f64::min);
-    let y_max_raw = all_y.fold(0.0_f64, f64::max);
+    let y_min_raw = all_y.clone().fold(f64::INFINITY, f64::min);
+    let y_max_raw = all_y.fold(f64::NEG_INFINITY, f64::max);
     let (y_min, y_max, y_labels) = nice_y_axis(y_min_raw, y_max_raw, 4);
 
     let filtered_entries: Vec<_> = coin_entries.iter()
@@ -836,21 +887,21 @@ fn render_price_chart(f: &mut Frame, app: &App, area: Rect) {
         .style(Style::default().fg(GOLD))
         .data(&filtered_inv);
 
-    let ds_price = Dataset::default()
-        .name("Price gain")
+    let ds_line2 = Dataset::default()
+        .name(line2_name)
         .marker(symbols::Marker::Braille)
         .graph_type(GraphType::Line)
         .style(Style::default().fg(ACCENT))
-        .data(&filtered_price);
+        .data(&line2_data);
 
-    let ds_staking = Dataset::default()
-        .name("Staking")
+    let ds_line3 = Dataset::default()
+        .name(line3_name)
         .marker(symbols::Marker::Braille)
         .graph_type(GraphType::Line)
         .style(Style::default().fg(GREEN))
-        .data(&filtered_staking);
+        .data(&line3_data);
 
-    let chart = Chart::new(vec![ds_investment, ds_price, ds_staking])
+    let chart = Chart::new(vec![ds_investment, ds_line2, ds_line3])
         .block(block)
         .x_axis(
             Axis::default()

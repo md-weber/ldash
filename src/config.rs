@@ -10,6 +10,7 @@ pub struct Config {
     pub default_tab: String,
     pub number_format: String,
     pub currency_symbol: String,
+    pub chart_mode: String,
     pub colors: ColorConfig,
     pub budgets: HashMap<String, f64>,
     pub goals: Vec<SavingsGoal>,
@@ -36,6 +37,7 @@ impl Default for Config {
             default_tab: "portfolio".to_string(),
             number_format: "eu".to_string(),
             currency_symbol: "€".to_string(),
+            chart_mode: "stacked".to_string(),
             colors: ColorConfig::default(),
             budgets: HashMap::new(),
             goals: Vec::new(),
@@ -60,6 +62,14 @@ const DEFAULT_CONFIG: &str = r##"# ldash configuration
 
 # Currency symbol shown in UI
 # currency_symbol = "€"
+
+# Portfolio chart mode: "stacked" or "unstacked"
+#   stacked   — lines show Invested / Purchased value / Total value
+#               (gaps between lines = price P/L and staking value)
+#   unstacked — lines show Invested / Price gain / Staking gain
+#               (independent lines, easy to compare gain sources)
+# Toggle at runtime with 's' key.
+# chart_mode = "stacked"
 
 # Expense category color overrides
 # Colors: red, green, blue, yellow, cyan, magenta, white, darkgray,
@@ -114,6 +124,7 @@ impl Config {
         self.refresh_interval = fresh.refresh_interval;
         self.number_format = fresh.number_format;
         self.currency_symbol = fresh.currency_symbol;
+        self.chart_mode = fresh.chart_mode;
         self.colors = fresh.colors;
         self.budgets = fresh.budgets;
         self.goals = fresh.goals;

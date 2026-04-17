@@ -20,8 +20,8 @@ Built with [Ratatui](https://ratatui.rs) and Rust.
 ## Features
 
 - **Crypto Portfolio** — Holdings table with price, value, allocation %, and P/L tracking (invested vs price gain vs staking rewards)
-- **Portfolio Chart** — Per-coin analysis showing investment cost basis, price growth, and staking income over time
-- **Net Worth History** — Interactive chart with selectable time ranges (1Y / 2Y / 5Y / All)
+- **Portfolio Chart** — Per-coin analysis with two modes: *stacked* (invested / purchased value / total value) or *unstacked* (invested / price gain / staking gain). Toggle with `s`.
+- **Net Worth History** — Interactive chart with selectable time ranges (YTD / 1Y / 2Y / 5Y / All)
 - **Account Balances** — All asset accounts with EUR valuations and visual bar indicators
 - **Account Drill-Down** — Select any account and view its recent transactions
 - **Monthly Income & Expenses** — Bar chart overview with per-category breakdown, savings rate gauge, and year-over-year comparison
@@ -68,6 +68,7 @@ cd ~/Finance && ldash
 | `↑` `k` / `↓` `j` | Scroll / select |
 | `←` `h` / `→` `l` | Month navigation / net worth range |
 | `Enter` | Drill into account / expense category |
+| `s` | Toggle chart mode (stacked / unstacked) |
 | `c` | Toggle expense category colors |
 | `r` | Force refresh |
 | `?` | Toggle help overlay |
@@ -93,6 +94,9 @@ On first launch, ldash creates a config file at `~/.config/ldash/config.toml` wi
 
 # Currency symbol shown in UI
 # currency_symbol = "€"
+
+# Portfolio chart mode: "stacked" or "unstacked" (default: "stacked")
+# chart_mode = "stacked"
 
 # Expense category color overrides
 # Colors: red, green, blue, yellow, cyan, magenta, white, darkgray,
