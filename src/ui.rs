@@ -118,6 +118,10 @@ pub fn render(f: &mut Frame, app: &mut App) {
         render_search_overlay(f, app, layout[2]);
     }
 
+    if app.show_alerts {
+        render_price_alerts(f, app, layout[2]);
+    }
+
     render_status(f, app, layout[3]);
 
     if app.loading {
@@ -201,7 +205,7 @@ fn render_loading_overlay(f: &mut Frame, area: Rect) {
 
 fn render_help_popup(f: &mut Frame, area: Rect) {
     let w = 44u16.min(area.width.saturating_sub(4));
-    let h = 16u16.min(area.height.saturating_sub(4));
+    let h = 18u16.min(area.height.saturating_sub(4));
     let popup = Rect {
         x: area.x + (area.width.saturating_sub(w)) / 2,
         y: area.y + (area.height.saturating_sub(h)) / 2,
@@ -218,6 +222,8 @@ fn render_help_popup(f: &mut Frame, area: Rect) {
         ("← h / → l", "Month nav / NW range"),
         ("Enter", "Drill into detail"),
         ("/", "Search transactions"),
+        ("y / Y", "Year back/fwd (Monthly)"),
+        ("Y", "Copy view to clipboard"),
         ("c", "Toggle expense colors"),
         ("Esc", "Back / quit"),
         ("r", "Refresh data"),
@@ -336,6 +342,48 @@ fn render_search_overlay(f: &mut Frame, app: &mut App, area: Rect) {
         ),
     ]));
     f.render_widget(hint, chunks[2]);
+}
+
+fn render_price_alerts(f: &mut Frame, app: &App, area: Rect) {
+    if !app.show_alerts || app.price_alerts.is_empty() {
+        return;
+    }
+
+    let h = 3u16.min(area.height);
+    let banner = Rect {
+        x: area.x + 2,
+        y: area.y + 1,
+        width: area.width.saturating_sub(4),
+        height: h,
+    };
+    f.render_widget(Clear, banner);
+
+    let mut spans = vec![
+        Span::styled("  Price moves: ", Style::default().fg(GOLD).bold()),
+    ];
+    for (i, alert) in app.price_alerts.iter().enumerate() {
+        if i > 0 {
+            spans.push(Span::styled(", ", Style::default().fg(MUTED)));
+        }
+        let (prefix, color) = if alert.change_pct >= 0.0 {
+            ("+", GREEN)
+        } else {
+            ("", RED)
+        };
+        spans.push(Span::styled(
+            format!("{} {prefix}{:.1}%", alert.coin, alert.change_pct),
+            Style::default().fg(color).bold(),
+        ));
+    }
+    spans.push(Span::styled("  [any key dismiss]", Style::default().fg(MUTED)));
+
+    let block = Block::default()
+        .borders(Borders::ALL)
+        .border_type(BorderType::Rounded)
+        .border_style(Style::default().fg(GOLD))
+        .style(Style::default().bg(Color::Rgb(20, 20, 30)));
+
+    f.render_widget(Paragraph::new(Line::from(spans)).block(block), banner);
 }
 
 fn render_status(f: &mut Frame, app: &App, area: Rect) {
@@ -1218,11 +1266,17 @@ fn render_monthly_chart(f: &mut Frame, app: &App, area: Rect) {
         })
         .collect();
 
+    let chart_title = if app.monthly_year_offset == 0 {
+        " Income vs Expenses ".to_string()
+    } else {
+        format!(" Income vs Expenses ({})  [y/Y] ", app.displayed_year())
+    };
+
     let mut chart = BarChart::default()
         .block(
             Block::default()
                 .title(Span::styled(
-                    " Income vs Expenses ",
+                    chart_title,
                     Style::default().fg(ACCENT).bold(),
                 ))
                 .borders(Borders::ALL)
@@ -1309,7 +1363,11 @@ fn render_monthly_summary(f: &mut Frame, app: &App, area: Rect) {
         .split(area)
     };
 
-    let nav_title = format!(" ◀ {} ▶ ", m.month_name);
+    let nav_title = if app.monthly_year_offset != 0 {
+        format!(" ◀ {} {} ▶  [y/Y] ", m.month_name, app.displayed_year())
+    } else {
+        format!(" ◀ {} ▶ ", m.month_name)
+    };
 
     let mut text = vec![
         Line::from(vec![

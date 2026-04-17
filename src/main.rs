@@ -18,6 +18,25 @@ use std::{
     time::{Duration, Instant},
 };
 
+fn copy_to_clipboard(text: &str) -> Result<()> {
+    #[cfg(target_os = "macos")]
+    let mut cmd = std::process::Command::new("pbcopy");
+    #[cfg(not(target_os = "macos"))]
+    let mut cmd = {
+        let mut c = std::process::Command::new("xclip");
+        c.args(["-selection", "clipboard"]);
+        c
+    };
+
+    let mut child = cmd.stdin(std::process::Stdio::piped()).spawn()?;
+    if let Some(mut stdin) = child.stdin.take() {
+        use std::io::Write;
+        stdin.write_all(text.as_bytes())?;
+    }
+    child.wait()?;
+    Ok(())
+}
+
 fn find_journal(config: &config::Config) -> Result<PathBuf> {
     let args: Vec<String> = std::env::args().collect();
     if args.len() > 1 {
@@ -134,6 +153,10 @@ fn run(terminal: &mut Terminal<CrosstermBackend<io::Stdout>>, journal_path: Path
                             KeyCode::Down => app.search_scroll_down(),
                             _ => {}
                         }
+                    } else if app.show_alerts {
+                        app.show_alerts = false;
+                        app.alert_dismissed = true;
+                        continue;
                     } else if app.show_help {
                         match key.code {
                             KeyCode::Char('?') | KeyCode::Char('q') | KeyCode::Esc => {
@@ -177,6 +200,22 @@ fn run(terminal: &mut Terminal<CrosstermBackend<io::Stdout>>, journal_path: Path
                                 app::Tab::Accounts => app.nw_range_right(),
                                 app::Tab::Monthly => app.month_right(),
                             },
+                            KeyCode::Char('y') => {
+                                if app.tab == app::Tab::Monthly {
+                                    app.cycle_year_back();
+                                }
+                            }
+                            KeyCode::Char('Y') => {
+                                if app.tab == app::Tab::Monthly {
+                                    app.cycle_year_forward();
+                                } else {
+                                    let data = app.export_current_view();
+                                    match copy_to_clipboard(&data) {
+                                        Ok(()) => app.status_msg = "Copied to clipboard".to_string(),
+                                        Err(e) => app.status_msg = format!("Clipboard error: {e}"),
+                                    }
+                                }
+                            }
                             KeyCode::Char('c') => app.expense_colors = !app.expense_colors,
                             KeyCode::Char('r') => app.start_refresh(),
                             _ => {}

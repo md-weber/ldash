@@ -271,6 +271,11 @@ pub struct GoalProgress {
     pub pct: f64,
 }
 
+pub struct PriceAlert {
+    pub coin: String,
+    pub change_pct: f64,
+}
+
 pub struct App {
     pub journal_path: PathBuf,
     pub journal_dir: PathBuf,
@@ -286,6 +291,7 @@ pub struct App {
     pub nw_range: NetWorthRange,
     pub monthly: MonthlyData,
     pub last_year: MonthlyData,
+    pub monthly_year_offset: i32,
     pub selected_holding: usize,
     pub account_state: TableState,
     pub expense_state: TableState,
@@ -302,6 +308,9 @@ pub struct App {
     pub search_query: String,
     pub search_results: Vec<Transaction>,
     pub search_state: TableState,
+    pub price_alerts: Vec<PriceAlert>,
+    pub show_alerts: bool,
+    pub alert_dismissed: bool,
     pub last_refresh: Instant,
     pub tabs_loaded: [bool; 3],
     refresh_rx: Option<mpsc::Receiver<RefreshResult>>,
@@ -343,6 +352,7 @@ impl App {
             nw_range: NetWorthRange::Year2,
             monthly: MonthlyData::default(),
             last_year: MonthlyData::default(),
+            monthly_year_offset: 0,
             selected_holding: 0,
             account_state: TableState::default().with_selected(0),
             expense_state: TableState::default().with_selected(0),
@@ -359,6 +369,9 @@ impl App {
             search_query: String::new(),
             search_results: Vec::new(),
             search_state: TableState::default(),
+            price_alerts: Vec::new(),
+            show_alerts: false,
+            alert_dismissed: false,
             last_refresh: Instant::now(),
             tabs_loaded: [false; 3],
             refresh_rx: None,
@@ -459,6 +472,10 @@ impl App {
             self.status_msg = r.errors.last().unwrap().clone();
         }
         self.loading = false;
+
+        if self.price_alerts.is_empty() && !self.alert_dismissed {
+            self.compute_price_alerts();
+        }
     }
 
     pub fn auto_refresh(&mut self) {
@@ -672,6 +689,113 @@ impl App {
                 pct,
             }
         }).collect()
+    }
+
+    pub fn cycle_year_back(&mut self) {
+        if self.monthly_year_offset > -3 {
+            self.monthly_year_offset -= 1;
+            self.reload_monthly_year();
+        }
+    }
+
+    pub fn cycle_year_forward(&mut self) {
+        if self.monthly_year_offset < 0 {
+            self.monthly_year_offset += 1;
+            self.reload_monthly_year();
+        }
+    }
+
+    fn reload_monthly_year(&mut self) {
+        let year = Local::now().date_naive().year() + self.monthly_year_offset;
+        let period = format!("monthly in {year}");
+        match data::load_monthly_for_period(&self.journal_path, &period) {
+            Ok(m) => self.monthly = m,
+            Err(e) => self.status_msg = format!("Error loading {year} data: {e}"),
+        }
+    }
+
+    pub fn displayed_year(&self) -> i32 {
+        Local::now().date_naive().year() + self.monthly_year_offset
+    }
+
+    fn compute_price_alerts(&mut self) {
+        if self.alert_dismissed || self.price_history.len() < 2 {
+            return;
+        }
+
+        let today = Local::now().date_naive();
+        let yesterday = today - chrono::Duration::days(1);
+        let mut alerts = Vec::new();
+
+        let coins: Vec<String> = self.holdings.iter().map(|h| h.commodity.clone()).collect();
+        for coin in &coins {
+            let prices: Vec<_> = self.price_history.iter()
+                .filter(|e| &e.commodity == coin)
+                .collect();
+
+            let current = prices.last().map(|e| e.price_eur);
+            let prev = prices.iter().rev()
+                .find(|e| e.date <= yesterday)
+                .map(|e| e.price_eur);
+
+            if let (Some(cur), Some(old)) = (current, prev) {
+                if old > 0.0 {
+                    let change = (cur - old) / old * 100.0;
+                    if change.abs() >= 2.0 {
+                        alerts.push(PriceAlert { coin: coin.clone(), change_pct: change });
+                    }
+                }
+            }
+        }
+
+        if !alerts.is_empty() {
+            alerts.sort_by(|a, b| b.change_pct.abs().partial_cmp(&a.change_pct.abs())
+                .unwrap_or(std::cmp::Ordering::Equal));
+            self.price_alerts = alerts;
+            self.show_alerts = true;
+        }
+    }
+
+    pub fn export_current_view(&self) -> String {
+        match self.tab {
+            Tab::Portfolio => {
+                let mut csv = String::from("Coin,Amount,Price EUR,Value EUR,Allocation %\n");
+                let total = self.total_portfolio_value();
+                for h in &self.holdings {
+                    let alloc = if total > 0.0 { h.value_eur / total * 100.0 } else { 0.0 };
+                    csv.push_str(&format!(
+                        "{},{:.6},{:.2},{:.2},{:.1}\n",
+                        h.commodity, h.amount, h.price_eur, h.value_eur, alloc
+                    ));
+                }
+                csv
+            }
+            Tab::Accounts => {
+                if let Some(sel) = self.account_state.selected() {
+                    if let Some(b) = self.account_balances.get(sel) {
+                        return format!("{}\t{:.2} €", b.account, b.amount);
+                    }
+                }
+                let mut csv = String::from("Account,Balance EUR\n");
+                for b in &self.account_balances {
+                    csv.push_str(&format!("{},{:.2}\n", b.account, b.amount));
+                }
+                csv
+            }
+            Tab::Monthly => {
+                let empty = data::SingleMonth::default();
+                let m = self.current_month().unwrap_or(&empty);
+                let mut csv = format!("# {} Income/Expenses\n", m.month_name);
+                csv.push_str("Category,Amount\n");
+                for (name, amount) in &m.income {
+                    csv.push_str(&format!("{},{:.2}\n", name, amount));
+                }
+                for (name, amount) in &m.expenses {
+                    csv.push_str(&format!("{},-{:.2}\n", name, amount));
+                }
+                csv
+            }
+        }
     }
 
     pub fn month_left(&mut self) {
