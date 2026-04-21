@@ -373,8 +373,8 @@ fn render_loading_overlay(f: &mut Frame, area: Rect, theme: &Theme) {
 }
 
 fn render_help_popup(f: &mut Frame, area: Rect, theme: &Theme) {
-    let w = 66u16.min(area.width.saturating_sub(4));
-    let h = 24u16.min(area.height.saturating_sub(4));
+    let w = 68u16.min(area.width.saturating_sub(4));
+    let h = 30u16.min(area.height.saturating_sub(4));
     let popup = Rect {
         x: area.x + (area.width.saturating_sub(w)) / 2,
         y: area.y + (area.height.saturating_sub(h)) / 2,
@@ -384,35 +384,50 @@ fn render_help_popup(f: &mut Frame, area: Rect, theme: &Theme) {
 
     f.render_widget(Clear, popup);
 
+    // ("§", "Title") → section header   ("", "") → blank spacer
     let bindings: &[(&str, &str)] = &[
-        ("1 / 2 / 3",        "Switch tab"),
-        ("Tab / Shift-Tab",  "Next / prev tab"),
-        ("↑ k / ↓ j",        "Scroll / select"),
-        ("PgUp / PgDn",      "Page up / down"),
-        ("Home / End",       "Jump to first / last row"),
-        ("← h / → l",        "Month nav / NW range"),
-        ("Enter",            "Drill into category detail"),
-        ("a-z … (Accounts)", "Type to filter accounts"),
-        ("Backspace",        "Delete filter char"),
-        ("i",                "Toggle income/expense focus (Monthly)"),
-        ("/",                "Search transactions"),
-        ("y / Y",            "Year back / forward (Monthly)"),
-        ("Y",                "Copy view to clipboard (non-Monthly)"),
-        ("s",                "Toggle chart stacked / unstacked"),
-        ("c",                "Toggle expense colors"),
-        ("r",                "Refresh data"),
-        ("Esc",              "Close detail / back / quit"),
-        ("? / q",            "Toggle help / quit"),
-        ("Mouse click",      "Select tab / row"),
-        ("Scroll wheel",     "Scroll table"),
+        ("", ""),
+        ("§", "Navigation"),
+        ("1/2/3  Tab/⇧Tab",      "Switch tab"),
+        ("↑k / ↓j",              "Scroll / select row"),
+        ("PgUp/PgDn  Home/End",  "Page up/down · first/last"),
+        ("←h / →l",              "Month · NW range · chart range"),
+        ("Enter  /",             "Open detail · search"),
+        ("", ""),
+        ("§", "Tab-specific"),
+        ("y / Y",                "Year back / forward  (Monthly)"),
+        ("i",                    "Income/expense focus  (Monthly)"),
+        ("a–z  Backspace",       "Filter · clear char  (Accounts)"),
+        ("", ""),
+        ("§", "Data & view"),
+        ("e",                    "Export view to file"),
+        ("Y",                    "Copy view to clipboard  (non-Monthly)"),
+        ("s",                    "Toggle chart stacked / unstacked"),
+        ("c",                    "Toggle expense colors"),
+        ("r",                    "Refresh data"),
+        ("", ""),
+        ("§", "General"),
+        ("? / q",                "Toggle help / quit"),
+        ("Esc",                  "Close detail / back"),
+        ("Mouse click",          "Select tab / row"),
+        ("Scroll wheel",         "Scroll table"),
     ];
 
-    let mut lines = vec![Line::from("")];
+    let mut lines: Vec<Line> = Vec::new();
     for (key, desc) in bindings {
-        lines.push(Line::from(vec![
-            Span::styled(format!("  {:<20}", key), Style::default().fg(theme.accent).bold()),
-            Span::styled(*desc, Style::default().fg(theme.fg)),
-        ]));
+        if *key == "§" {
+            lines.push(Line::from(Span::styled(
+                format!("  {}", desc),
+                Style::default().fg(theme.gold).bold(),
+            )));
+        } else if key.is_empty() {
+            lines.push(Line::from(""));
+        } else {
+            lines.push(Line::from(vec![
+                Span::styled(format!("    {:<22}", key), Style::default().fg(theme.accent).bold()),
+                Span::styled(*desc, Style::default().fg(theme.fg)),
+            ]));
+        }
     }
     lines.push(Line::from(""));
     lines.push(Line::from(Span::styled(

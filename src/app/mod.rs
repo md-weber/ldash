@@ -874,6 +874,43 @@ impl App {
         }
     }
 
+    pub fn export_to_file(&self) -> Result<PathBuf, String> {
+        let dir = if let Some(ref d) = self.config.export_dir {
+            let expanded = if d.starts_with('~') {
+                if let Ok(home) = std::env::var("HOME") {
+                    d.replacen('~', &home, 1)
+                } else {
+                    d.clone()
+                }
+            } else {
+                d.clone()
+            };
+            PathBuf::from(expanded)
+        } else {
+            std::env::var("HOME")
+                .map(PathBuf::from)
+                .unwrap_or_else(|_| PathBuf::from("."))
+        };
+
+        let tab_str = match self.tab {
+            Tab::Portfolio => "portfolio",
+            Tab::Accounts => "accounts",
+            Tab::Monthly => "monthly",
+        };
+        let ts = Local::now().format("%Y-%m-%d-%H%M%S");
+        let filename = format!("ldash-{tab_str}-{ts}.csv");
+        let path = dir.join(&filename);
+
+        std::fs::create_dir_all(&dir)
+            .map_err(|e| format!("Cannot create dir {}: {e}", dir.display()))?;
+
+        let content = self.export_current_view();
+        std::fs::write(&path, content)
+            .map_err(|e| format!("Cannot write {}: {e}", path.display()))?;
+
+        Ok(path)
+    }
+
     pub fn month_left(&mut self) {
         self.monthly.selected = self.monthly.selected.saturating_sub(1);
     }

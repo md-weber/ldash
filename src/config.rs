@@ -23,6 +23,7 @@ pub struct Config {
     pub theme: ThemeConfig,
     pub budgets: HashMap<String, f64>,
     pub goals: Vec<SavingsGoal>,
+    pub export_dir: Option<String>,
 }
 
 #[derive(Debug, Deserialize, Clone)]
@@ -66,6 +67,7 @@ impl Default for Config {
             theme: ThemeConfig::default(),
             budgets: HashMap::new(),
             goals: Vec::new(),
+            export_dir: None,
         }
     }
 }
@@ -129,6 +131,9 @@ const DEFAULT_CONFIG: &str = r##"# ldash configuration
 # fg = "white"
 # background = "#14141e"
 
+# Directory where `e` writes export files. Default: ~/
+# export_dir = "~/Documents/ldash-exports"
+
 # Savings goals — track progress toward financial targets
 # Each goal maps a target amount to an account prefix.
 # Shown on the Accounts tab as a progress bar.
@@ -190,6 +195,7 @@ impl Config {
         self.theme = fresh.theme;
         self.budgets = fresh.budgets;
         self.goals = fresh.goals;
+        self.export_dir = fresh.export_dir;
         None
     }
 
