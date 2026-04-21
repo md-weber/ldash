@@ -583,6 +583,17 @@ fn render_price_alerts(f: &mut Frame, app: &App, area: Rect, theme: &Theme) {
 }
 
 fn render_status(f: &mut Frame, app: &App, area: Rect, theme: &Theme) {
+    if app.export_prompt_active {
+        let text = Line::from(vec![
+            Span::styled("  Export to: ", Style::default().fg(theme.gold).bold()),
+            Span::styled(&app.export_prompt_path, Style::default().fg(theme.fg)),
+            Span::styled("█", Style::default().fg(theme.accent)),
+            Span::styled("  [Enter] confirm  [Esc] cancel", Style::default().fg(theme.muted)),
+        ]);
+        f.render_widget(Paragraph::new(text), area);
+        return;
+    }
+
     let help = "  [1-3] tab  [↑↓/jk] navigate  [PgUp/PgDn/Home/End] scroll  [←→/hl] month/range  [r] refresh  [?] help  [q] quit";
     let text = Line::from(vec![
         Span::styled(&app.status_msg, Style::default().fg(theme.accent)),

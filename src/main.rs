@@ -284,7 +284,22 @@ fn run(terminal: &mut Terminal<CrosstermBackend<io::Stdout>>, journal_path: Path
 
             if let Event::Key(key) = ev {
                 if key.kind == KeyEventKind::Press {
-                    if app.search_active {
+                    if app.export_prompt_active {
+                        match key.code {
+                            KeyCode::Esc => app.cancel_export_prompt(),
+                            KeyCode::Enter => {
+                                let path = app.export_prompt_path.clone();
+                                app.export_prompt_active = false;
+                                match app.export_to_file(&path) {
+                                    Ok(written) => app.status_msg = format!("Exported → {written}"),
+                                    Err(e)      => app.status_msg = format!("Export error: {e}"),
+                                }
+                            }
+                            KeyCode::Backspace => { app.export_prompt_path.pop(); }
+                            KeyCode::Char(c) => app.export_prompt_path.push(c),
+                            _ => {}
+                        }
+                    } else if app.search_active {
                         match key.code {
                             KeyCode::Esc => app.close_search(),
                             KeyCode::Enter => app.execute_search(),
@@ -393,12 +408,7 @@ fn run(terminal: &mut Terminal<CrosstermBackend<io::Stdout>>, journal_path: Path
                                     }
                                 }
                             }
-                            KeyCode::Char('e') => {
-                                match app.export_to_file() {
-                                    Ok(p) => app.status_msg = format!("Exported to {}", p.display()),
-                                    Err(e) => app.status_msg = format!("Export error: {e}"),
-                                }
-                            }
+                            KeyCode::Char('e') => app.open_export_prompt(),
                             KeyCode::Char('s') => app.chart_stacked = !app.chart_stacked,
                             KeyCode::Char('c') => app.expense_colors = !app.expense_colors,
                             KeyCode::Char('r') => app.start_refresh(),

@@ -24,6 +24,7 @@ pub struct Config {
     pub budgets: HashMap<String, f64>,
     pub goals: Vec<SavingsGoal>,
     pub export_dir: Option<String>,
+    pub export_format: String,
 }
 
 #[derive(Debug, Deserialize, Clone)]
@@ -68,6 +69,7 @@ impl Default for Config {
             budgets: HashMap::new(),
             goals: Vec::new(),
             export_dir: None,
+            export_format: "html".to_string(),
         }
     }
 }
@@ -131,7 +133,10 @@ const DEFAULT_CONFIG: &str = r##"# ldash configuration
 # fg = "white"
 # background = "#14141e"
 
-# Directory where `e` writes export files. Default: ~/
+# Export format: "html" (default), "json", or "both"
+# export_format = "html"
+
+# Seeds the path shown in the export prompt (e key). Default: ~/Downloads
 # export_dir = "~/Documents/ldash-exports"
 
 # Savings goals — track progress toward financial targets
@@ -196,6 +201,7 @@ impl Config {
         self.budgets = fresh.budgets;
         self.goals = fresh.goals;
         self.export_dir = fresh.export_dir;
+        self.export_format = fresh.export_format;
         None
     }
 
