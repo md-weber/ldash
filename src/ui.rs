@@ -1855,3 +1855,46 @@ fn render_monthly_expenses(f: &mut Frame, app: &mut App, area: Rect) {
 
     f.render_stateful_widget(table, area, &mut app.expense_state);
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::app::App;
+    use ratatui::{backend::TestBackend, Terminal};
+
+    fn render_to_string(app: &mut App) -> String {
+        let backend = TestBackend::new(120, 40);
+        let mut terminal = Terminal::new(backend).unwrap();
+        terminal.draw(|f| render(f, app)).unwrap();
+        let buf = terminal.backend().buffer().clone();
+        let width = buf.area.width;
+        let height = buf.area.height;
+        let mut rows = Vec::with_capacity(height as usize);
+        for y in 0..height {
+            let mut row = String::new();
+            for x in 0..width {
+                row.push_str(buf.cell((x, y)).map_or(" ", |c| c.symbol()));
+            }
+            rows.push(row.trim_end().to_string());
+        }
+        rows.join("\n")
+    }
+
+    #[test]
+    fn snapshot_accounts_empty() {
+        let mut app = App::fixture_empty();
+        insta::assert_snapshot!(render_to_string(&mut app));
+    }
+
+    #[test]
+    fn snapshot_accounts_with_data() {
+        let mut app = App::fixture_with_accounts();
+        insta::assert_snapshot!(render_to_string(&mut app));
+    }
+
+    #[test]
+    fn snapshot_monthly_tab() {
+        let mut app = App::fixture_with_monthly();
+        insta::assert_snapshot!(render_to_string(&mut app));
+    }
+}

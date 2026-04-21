@@ -362,7 +362,7 @@ fn parse_monthly_csv(
     Ok(MonthlyData { months, selected })
 }
 
-fn month_name(m: usize) -> &'static str {
+pub(crate) fn month_name(m: usize) -> &'static str {
     match m {
         1 => "January",
         2 => "February",
@@ -970,4 +970,208 @@ pub fn load_all_coin_chart_series(
     }
 
     result
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    // ── parse_eu_number ───────────────────────────────────────────────────────
+
+    #[test]
+    fn eu_number_plain_comma() {
+        assert!((parse_eu_number("74,52").unwrap() - 74.52).abs() < 1e-10);
+    }
+
+    #[test]
+    fn eu_number_thousands_dot() {
+        assert!((parse_eu_number("1.524,00").unwrap() - 1524.0).abs() < 1e-10);
+    }
+
+    #[test]
+    fn eu_number_small_decimal() {
+        assert!((parse_eu_number("0,02352448").unwrap() - 0.02352448).abs() < 1e-10);
+    }
+
+    #[test]
+    fn eu_number_negative_comma() {
+        assert!((parse_eu_number("-74,52").unwrap() - (-74.52)).abs() < 1e-10);
+    }
+
+    #[test]
+    fn eu_number_negative_thousands() {
+        assert!((parse_eu_number("-1.524,00").unwrap() - (-1524.0)).abs() < 1e-10);
+    }
+
+    #[test]
+    fn eu_number_zero() {
+        assert_eq!(parse_eu_number("0"), Some(0.0));
+    }
+
+    #[test]
+    fn eu_number_plain_dot_decimal() {
+        assert!((parse_eu_number("1234.56").unwrap() - 1234.56).abs() < 1e-10);
+    }
+
+    #[test]
+    fn eu_number_whitespace() {
+        assert!((parse_eu_number("  74,52  ").unwrap() - 74.52).abs() < 1e-10);
+    }
+
+    #[test]
+    fn eu_number_empty() {
+        assert_eq!(parse_eu_number(""), None);
+    }
+
+    #[test]
+    fn eu_number_non_numeric() {
+        assert_eq!(parse_eu_number("abc"), None);
+    }
+
+    // ── parse_amount_str ──────────────────────────────────────────────────────
+
+    #[test]
+    fn amount_str_crypto() {
+        let (amt, com) = parse_amount_str("4,40140000 SOL").unwrap();
+        assert!((amt - 4.4014).abs() < 1e-6);
+        assert_eq!(com, "SOL");
+    }
+
+    #[test]
+    fn amount_str_euros_thousands() {
+        let (amt, com) = parse_amount_str("1.430,15 €").unwrap();
+        assert!((amt - 1430.15).abs() < 1e-10);
+        assert_eq!(com, "€");
+    }
+
+    #[test]
+    fn amount_str_negative_eur() {
+        let (amt, com) = parse_amount_str("-200,00 EUR").unwrap();
+        assert!((amt - (-200.0)).abs() < 1e-10);
+        assert_eq!(com, "EUR");
+    }
+
+    #[test]
+    fn amount_str_zero_returns_none() {
+        assert_eq!(parse_amount_str("0"), None);
+    }
+
+    #[test]
+    fn amount_str_empty_returns_none() {
+        assert_eq!(parse_amount_str(""), None);
+    }
+
+    #[test]
+    fn amount_str_strips_outer_quotes() {
+        let (amt, com) = parse_amount_str("\"1.000,00 €\"").unwrap();
+        assert!((amt - 1000.0).abs() < 1e-10);
+        assert_eq!(com, "€");
+    }
+
+    // ── parse_balance_csv ─────────────────────────────────────────────────────
+
+    #[test]
+    fn balance_csv_parses_two_accounts() {
+        let csv = "account,balance\n\
+                   assets:bank:checking,\"1.430,15 €\"\n\
+                   assets:crypto:btc,\"0,05 BTC\"\n";
+        let result = parse_balance_csv(csv).unwrap();
+        assert_eq!(result.len(), 2);
+
+        let checking = result.iter().find(|b| b.account == "assets:bank:checking").unwrap();
+        assert!((checking.amount - 1430.15).abs() < 1e-10);
+        assert_eq!(checking.commodity, "€");
+
+        let btc = result.iter().find(|b| b.account == "assets:crypto:btc").unwrap();
+        assert!((btc.amount - 0.05).abs() < 1e-10);
+        assert_eq!(btc.commodity, "BTC");
+    }
+
+    #[test]
+    fn balance_csv_skips_zero_balance() {
+        let csv = "account,balance\nassets:empty,0\n";
+        let result = parse_balance_csv(csv).unwrap();
+        assert!(result.is_empty());
+    }
+
+    #[test]
+    fn balance_csv_empty_input() {
+        let result = parse_balance_csv("").unwrap();
+        assert!(result.is_empty());
+    }
+
+    #[test]
+    fn balance_csv_skips_malformed_rows() {
+        let csv = "account,balance\nbad_row_only_one_field\nassets:good,\"100,00 €\"\n";
+        let result = parse_balance_csv(csv).unwrap();
+        assert_eq!(result.len(), 1);
+        assert_eq!(result[0].account, "assets:good");
+    }
+
+    // ── parse_monthly_csv ─────────────────────────────────────────────────────
+
+    fn two_month_csv(sym: &str) -> String {
+        format!(
+            "Monthly Income Statement,Jan 2024,Feb 2024\n\
+             Revenues,,\n\
+             income:salary,\"2.000,00 {sym}\",\"2.000,00 {sym}\"\n\
+             Expenses,,\n\
+             expenses:food,\"150,00 {sym}\",0\n\
+             expenses:housing,0,\"800,00 {sym}\"\n"
+        )
+    }
+
+    #[test]
+    fn monthly_csv_two_months_income_and_expenses() {
+        let csv = two_month_csv("€");
+        let data = parse_monthly_csv(&csv, 0, "€").unwrap();
+
+        assert_eq!(data.months.len(), 2);
+
+        let jan = &data.months[0];
+        assert_eq!(jan.month_name, "January");
+        assert!((jan.total_income - 2000.0).abs() < 0.01);
+        assert!((jan.total_expenses - 150.0).abs() < 0.01);
+        assert_eq!(jan.income.len(), 1);
+        assert_eq!(jan.expenses.len(), 1);
+
+        let feb = &data.months[1];
+        assert_eq!(feb.month_name, "February");
+        assert!((feb.total_income - 2000.0).abs() < 0.01);
+        assert!((feb.total_expenses - 800.0).abs() < 0.01);
+    }
+
+    #[test]
+    fn monthly_csv_selected_defaults_to_last_when_no_match() {
+        let csv = two_month_csv("€");
+        let data = parse_monthly_csv(&csv, 0, "€").unwrap();
+        assert_eq!(data.selected, 1);
+    }
+
+    #[test]
+    fn monthly_csv_selected_points_to_current_month() {
+        let csv = two_month_csv("€");
+        let data = parse_monthly_csv(&csv, 1, "€").unwrap();
+        assert_eq!(data.selected, 0);
+    }
+
+    #[test]
+    fn monthly_csv_ignores_wrong_currency() {
+        let csv = two_month_csv("$");
+        let data = parse_monthly_csv(&csv, 0, "€").unwrap();
+        assert!(data.months.is_empty());
+    }
+
+    #[test]
+    fn monthly_csv_expenses_sorted_descending() {
+        let csv = "Monthly Income Statement,Jan 2024\n\
+                   Revenues,\n\
+                   income:salary,\"3.000,00 €\"\n\
+                   Expenses,\n\
+                   expenses:food,\"100,00 €\"\n\
+                   expenses:housing,\"1.200,00 €\"\n";
+        let data = parse_monthly_csv(csv, 0, "€").unwrap();
+        let jan = &data.months[0];
+        assert!(jan.expenses[0].1 >= jan.expenses[1].1, "expenses not sorted descending");
+    }
 }

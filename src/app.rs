@@ -1040,6 +1040,163 @@ pub fn budget_spent(category: &str, expenses: &[(String, f64)]) -> f64 {
         .sum()
 }
 
+#[cfg(test)]
+impl App {
+    pub fn fixture_empty() -> Self {
+        Self {
+            journal_path: std::path::PathBuf::from("/tmp/test.journal"),
+            journal_dir: std::path::PathBuf::from("/tmp"),
+            config: Config::default(),
+            tab: Tab::Accounts,
+            has_crypto: false,
+            price_history: Vec::new(),
+            latest_prices: HashMap::new(),
+            holdings: Vec::new(),
+            coin_chart_cache: HashMap::new(),
+            account_balances: Vec::new(),
+            liabilities: Vec::new(),
+            net_worth_history: crate::data::NetWorthSeries::default(),
+            nw_range: NetWorthRange::All,
+            monthly: crate::data::MonthlyData::default(),
+            last_year: crate::data::MonthlyData::default(),
+            monthly_year_offset: 0,
+            selected_holding: 0,
+            account_state: ratatui::widgets::TableState::default().with_selected(0),
+            expense_state: ratatui::widgets::TableState::default().with_selected(0),
+            account_detail: None,
+            detail_account_name: None,
+            expense_detail: None,
+            detail_expense_name: None,
+            portfolio_range: PortfolioRange::All,
+            chart_stacked: true,
+            expense_colors: false,
+            status_msg: "Test mode".to_string(),
+            loading: false,
+            show_help: false,
+            search_active: false,
+            search_query: String::new(),
+            search_results: Vec::new(),
+            search_state: ratatui::widgets::TableState::default(),
+            price_alerts: Vec::new(),
+            show_alerts: false,
+            alert_dismissed: false,
+            alert_shown_at: None,
+            last_refresh: Instant::now(),
+            tabs_loaded: [true; 3],
+            refresh_rx: None,
+            watcher: None,
+            last_journal_mtime: None,
+            last_config_mtime: None,
+        }
+    }
+
+    pub fn fixture_with_accounts() -> Self {
+        let mut app = Self::fixture_empty();
+        app.account_balances = vec![
+            crate::data::AccountBalance {
+                account: "assets:bank:checking".to_string(),
+                amount: 5000.0,
+                commodity: "€".to_string(),
+            },
+            crate::data::AccountBalance {
+                account: "assets:savings".to_string(),
+                amount: 10000.0,
+                commodity: "€".to_string(),
+            },
+        ];
+        app
+    }
+
+    pub fn fixture_with_monthly() -> Self {
+        let mut app = Self::fixture_empty();
+        app.tab = Tab::Monthly;
+        app.monthly = crate::data::MonthlyData {
+            months: vec![
+                crate::data::SingleMonth {
+                    month_name: "January".to_string(),
+                    income: vec![("income:salary".to_string(), 3000.0)],
+                    expenses: vec![
+                        ("expenses:housing".to_string(), 1200.0),
+                        ("expenses:food".to_string(), 500.0),
+                    ],
+                    total_income: 3000.0,
+                    total_expenses: 1700.0,
+                },
+                crate::data::SingleMonth {
+                    month_name: "February".to_string(),
+                    income: vec![("income:salary".to_string(), 3000.0)],
+                    expenses: vec![
+                        ("expenses:housing".to_string(), 1200.0),
+                        ("expenses:food".to_string(), 450.0),
+                    ],
+                    total_income: 3000.0,
+                    total_expenses: 1650.0,
+                },
+            ],
+            selected: 0,
+        };
+        app
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn budget_matches_exact() {
+        assert!(budget_matches("expenses:food", "expenses:food"));
+    }
+
+    #[test]
+    fn budget_matches_child() {
+        assert!(budget_matches("expenses:food", "expenses:food:restaurants"));
+    }
+
+    #[test]
+    fn budget_matches_without_prefix() {
+        assert!(budget_matches("food", "expenses:food"));
+    }
+
+    #[test]
+    fn budget_no_match_sibling() {
+        assert!(!budget_matches("expenses:food", "expenses:transport"));
+    }
+
+    #[test]
+    fn budget_no_match_partial_name() {
+        assert!(!budget_matches("expenses:foo", "expenses:food"));
+    }
+
+    #[test]
+    fn budget_spent_sums_matching_leaves() {
+        let expenses = vec![
+            ("expenses:food:restaurants".to_string(), 120.0),
+            ("expenses:food:groceries".to_string(), 80.0),
+            ("expenses:transport".to_string(), 50.0),
+        ];
+        let spent = budget_spent("expenses:food", &expenses);
+        assert!((spent - 200.0).abs() < 0.01);
+    }
+
+    #[test]
+    fn budget_spent_skips_parent_when_child_present() {
+        let expenses = vec![
+            ("expenses:food".to_string(), 200.0),
+            ("expenses:food:groceries".to_string(), 80.0),
+        ];
+        let spent = budget_spent("expenses:food", &expenses);
+        assert!((spent - 80.0).abs() < 0.01, "should only count leaf, got {spent}");
+    }
+
+    #[test]
+    fn budget_spent_zero_when_no_match() {
+        let expenses = vec![("expenses:transport".to_string(), 50.0)];
+        let spent = budget_spent("expenses:food", &expenses);
+        assert_eq!(spent, 0.0);
+    }
+}
+
 fn month_name_to_period(month_name: &str, year: i32) -> String {
     let month_num = match month_name {
         "January" => 1,

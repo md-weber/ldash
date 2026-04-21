@@ -1,0 +1,18 @@
+; Minimal fixture journal for integration tests.
+; Uses plain EUR commodity so hledger doesn't need price conversion.
+
+2026-01-15 Salary
+    income:salary          -2000.00 EUR
+    assets:bank:checking    2000.00 EUR
+
+2026-01-20 Groceries
+    expenses:food            150.00 EUR
+    assets:bank:checking   -150.00 EUR
+
+2026-02-15 Salary
+    income:salary          -2000.00 EUR
+    assets:bank:checking    2000.00 EUR
+
+2026-02-22 Rent
+    expenses:housing         800.00 EUR
+    assets:bank:checking   -800.00 EUR

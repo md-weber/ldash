@@ -1,0 +1,39 @@
+---
+description: Test requirements for ldash — write tests alongside code changes
+globs: src/**/*.rs
+alwaysApply: false
+---
+
+# Tests
+
+See `plans/p0-tests.md` for the full test strategy.
+
+## Rules
+
+- **Any new public or `pub(crate)` function** → add unit tests in a `#[cfg(test)]` module in the same file.
+- **Any change to `src/data.rs`** → keep the unit tests for `parse_eu_number`, `parse_amount_str`, `parse_balance_csv`, `parse_monthly_csv` passing and extend them if the function's behaviour changes.
+- **Any change to UI rendering in `src/ui.rs`** → update the `insta` snapshot tests (`cargo insta review`).
+- **Any new hledger-calling function** → add a matching integration test in `tests/integration.rs` guarded by an hledger availability check.
+
+## Fixture helpers
+
+```rust
+// Guard hledger-dependent integration tests:
+if std::process::Command::new("hledger").arg("--version").output().is_err() {
+    return;
+}
+
+// Fixture path helper:
+fn fixture(name: &str) -> std::path::PathBuf {
+    std::path::Path::new(env!("CARGO_MANIFEST_DIR"))
+        .join("tests/fixtures")
+        .join(name)
+}
+```
+
+## Run
+
+```
+cargo test
+cargo insta review   # after UI changes
+```
