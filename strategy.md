@@ -11,23 +11,6 @@ Solid foundation. Below = what's missing before shipping 1.0.
 
 ---
 
-## Must Have (P0)
-
-### Tests
-
-- Zero test coverage currently
-- Unit tests for: `parse_eu_number`, `parse_amount_str`, `parse_balance_csv`, `parse_monthly_csv`
-- Integration test: known journal → expected data structures
-- Snapshot test for UI rendering (ratatui `TestBackend`)
-
-### Error resilience
-
-- hledger returning non-zero exit code → show stderr in status bar, don't silently fail
-- Malformed CSV from hledger → graceful degradation per tab
-- Journal file deleted while running → recover on re-create
-
----
-
 ## Should Have (P1)
 
 ### Income drill-down

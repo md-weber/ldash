@@ -77,6 +77,27 @@ fn parse_amount_str(s: &str) -> Option<(f64, String)> {
     Some((amount, commodity))
 }
 
+/// Run hledger with the given args. Returns stdout on success.
+/// On non-zero exit, returns an Err whose message includes the captured stderr.
+pub(crate) fn run_hledger(args: &[&str]) -> Result<String> {
+    let output = Command::new("hledger")
+        .args(args)
+        .output()
+        .context("Failed to spawn hledger — is it installed and on PATH?")?;
+
+    if !output.status.success() {
+        let stderr = String::from_utf8_lossy(&output.stderr).trim().to_string();
+        let msg = if stderr.is_empty() {
+            format!("hledger exited with {}", output.status)
+        } else {
+            stderr
+        };
+        return Err(anyhow::anyhow!(msg));
+    }
+
+    Ok(String::from_utf8_lossy(&output.stdout).into_owned())
+}
+
 pub fn load_price_history(journal_dir: &Path) -> Vec<PriceEntry> {
     let prices_file = journal_dir.join("prices.journal");
     let content = std::fs::read_to_string(&prices_file).unwrap_or_default();
@@ -124,61 +145,20 @@ pub fn latest_prices(price_history: &[PriceEntry]) -> HashMap<String, f64> {
 }
 
 pub fn load_crypto_balances(journal_path: &Path) -> Result<Vec<AccountBalance>> {
-    let output = Command::new("hledger")
-        .args([
-            "-f",
-            journal_path.to_str().unwrap_or("all.journal"),
-            "balance",
-            "--flat",
-            "-O",
-            "csv",
-            "--no-total",
-            "assets:crypto",
-        ])
-        .output()
-        .context("Failed to run hledger")?;
-
-    let text = String::from_utf8_lossy(&output.stdout);
+    let jp = journal_path.to_str().unwrap_or("all.journal");
+    let text = run_hledger(&["-f", jp, "balance", "--flat", "-O", "csv", "--no-total", "assets:crypto"])?;
     parse_balance_csv(&text)
 }
 
 pub fn load_account_balances_eur(journal_path: &Path) -> Result<Vec<AccountBalance>> {
-    let output = Command::new("hledger")
-        .args([
-            "-f",
-            journal_path.to_str().unwrap_or("all.journal"),
-            "balance",
-            "--flat",
-            "-O",
-            "csv",
-            "--no-total",
-            "-V",
-            "assets",
-        ])
-        .output()
-        .context("Failed to run hledger")?;
-
-    let text = String::from_utf8_lossy(&output.stdout);
+    let jp = journal_path.to_str().unwrap_or("all.journal");
+    let text = run_hledger(&["-f", jp, "balance", "--flat", "-O", "csv", "--no-total", "-V", "assets"])?;
     parse_balance_csv(&text)
 }
 
 pub fn load_liability_balances_eur(journal_path: &Path) -> Result<Vec<AccountBalance>> {
-    let output = Command::new("hledger")
-        .args([
-            "-f",
-            journal_path.to_str().unwrap_or("all.journal"),
-            "balance",
-            "--flat",
-            "-O",
-            "csv",
-            "--no-total",
-            "-V",
-            "liabilities",
-        ])
-        .output()
-        .context("Failed to run hledger for liabilities")?;
-
-    let text = String::from_utf8_lossy(&output.stdout);
+    let jp = journal_path.to_str().unwrap_or("all.journal");
+    let text = run_hledger(&["-f", jp, "balance", "--flat", "-O", "csv", "--no-total", "-V", "liabilities"])?;
     parse_balance_csv(&text)
 }
 
@@ -206,28 +186,21 @@ fn parse_balance_csv(text: &str) -> Result<Vec<AccountBalance>> {
         }
     }
 
+    if result.is_empty() && text.len() > 20 {
+        let first_line = text.lines().next().unwrap_or("");
+        if !first_line.contains("account") {
+            return Err(anyhow::anyhow!("Unexpected hledger CSV format: {:?}", first_line));
+        }
+    }
+
     Ok(result)
 }
 
 pub fn load_monthly_data(journal_path: &Path, currency_symbol: &str) -> Result<MonthlyData> {
     let now = chrono::Local::now().date_naive();
     let current_month = now.month() as usize;
-
-    let output = Command::new("hledger")
-        .args([
-            "-f",
-            journal_path.to_str().unwrap_or("all.journal"),
-            "incomestatement",
-            "-O",
-            "csv",
-            "--no-total",
-            "-p",
-            "monthly this year",
-        ])
-        .output()
-        .context("Failed to run hledger incomestatement")?;
-
-    let text = String::from_utf8_lossy(&output.stdout);
+    let jp = journal_path.to_str().unwrap_or("all.journal");
+    let text = run_hledger(&["-f", jp, "incomestatement", "-O", "csv", "--no-total", "-p", "monthly this year"])?;
     parse_monthly_csv(&text, current_month, currency_symbol)
 }
 
@@ -236,21 +209,8 @@ pub fn load_monthly_for_period(
     period: &str,
     currency_symbol: &str,
 ) -> Result<MonthlyData> {
-    let output = Command::new("hledger")
-        .args([
-            "-f",
-            journal_path.to_str().unwrap_or("all.journal"),
-            "incomestatement",
-            "-O",
-            "csv",
-            "--no-total",
-            "-p",
-            period,
-        ])
-        .output()
-        .context("Failed to run hledger incomestatement")?;
-
-    let text = String::from_utf8_lossy(&output.stdout);
+    let jp = journal_path.to_str().unwrap_or("all.journal");
+    let text = run_hledger(&["-f", jp, "incomestatement", "-O", "csv", "--no-total", "-p", period])?;
     parse_monthly_csv(&text, 0, currency_symbol)
 }
 
@@ -258,21 +218,8 @@ pub fn load_last_year_monthly(
     journal_path: &Path,
     currency_symbol: &str,
 ) -> Result<MonthlyData> {
-    let output = Command::new("hledger")
-        .args([
-            "-f",
-            journal_path.to_str().unwrap_or("all.journal"),
-            "incomestatement",
-            "-O",
-            "csv",
-            "--no-total",
-            "-p",
-            "monthly last year",
-        ])
-        .output()
-        .context("Failed to run hledger incomestatement for last year")?;
-
-    let text = String::from_utf8_lossy(&output.stdout);
+    let jp = journal_path.to_str().unwrap_or("all.journal");
+    let text = run_hledger(&["-f", jp, "incomestatement", "-O", "csv", "--no-total", "-p", "monthly last year"])?;
     parse_monthly_csv(&text, 0, currency_symbol)
 }
 
@@ -391,33 +338,16 @@ pub fn load_net_worth_history(
     period: &str,
     currency_symbol: &str,
 ) -> Result<NetWorthSeries> {
-    let output = Command::new("hledger")
-        .args([
-            "-f",
-            journal_path.to_str().unwrap_or("all.journal"),
-            "balance",
-            "assets",
-            "liabilities",
-            "-H",
-            "-p",
-            period,
-            "-O",
-            "csv",
-            "--layout",
-            "bare",
-            "-V",
-            "--no-total",
-            "--empty",
-        ])
-        .output()
-        .context("Failed to run hledger balance for net worth history")?;
-
-    let text = String::from_utf8_lossy(&output.stdout);
+    let jp = journal_path.to_str().unwrap_or("all.journal");
+    let text = run_hledger(&[
+        "-f", jp, "balance", "assets", "liabilities",
+        "-H", "-p", period, "-O", "csv", "--layout", "bare", "-V", "--no-total", "--empty",
+    ])?;
     let mut rdr = csv::ReaderBuilder::new()
         .flexible(true)
         .from_reader(text.as_bytes());
 
-    let headers = rdr.headers().context("No CSV headers")?.clone();
+    let headers = rdr.headers().context("No CSV headers from hledger balance")?.clone();
     // --layout bare produces: "account", "commodity", "2024-01", "2024-02", …
     let month_cols: Vec<(usize, NaiveDate)> = headers
         .iter()
@@ -490,21 +420,13 @@ pub fn load_recent_transactions(
     n: usize,
     period: Option<&str>,
 ) -> Result<Vec<Transaction>> {
-    let mut cmd = Command::new("hledger");
-    cmd.args([
-        "-f",
-        journal_path.to_str().unwrap_or("all.journal"),
-        "register",
-        account,
-        "-O",
-        "csv",
-    ]);
+    let jp = journal_path.to_str().unwrap_or("all.journal");
+    let mut args = vec!["-f", jp, "register", account, "-O", "csv"];
     if let Some(p) = period {
-        cmd.args(["-p", p]);
+        args.push("-p");
+        args.push(p);
     }
-    let output = cmd.output().context("Failed to run hledger register")?;
-
-    let text = String::from_utf8_lossy(&output.stdout);
+    let text = run_hledger(&args)?;
     let mut rdr = csv::ReaderBuilder::new().from_reader(text.as_bytes());
 
     let mut txns = Vec::new();
@@ -540,19 +462,9 @@ pub fn load_recent_transactions(
 }
 
 pub fn search_transactions(journal_path: &Path, query: &str) -> Result<Vec<Transaction>> {
-    let output = Command::new("hledger")
-        .args([
-            "-f",
-            journal_path.to_str().unwrap_or("all.journal"),
-            "register",
-            "-O",
-            "csv",
-            &format!("desc:{}", query),
-        ])
-        .output()
-        .context("Failed to run hledger register for search")?;
-
-    let text = String::from_utf8_lossy(&output.stdout);
+    let jp = journal_path.to_str().unwrap_or("all.journal");
+    let query_arg = format!("desc:{}", query);
+    let text = run_hledger(&["-f", jp, "register", "-O", "csv", &query_arg])?;
     let mut rdr = csv::ReaderBuilder::new().from_reader(text.as_bytes());
 
     let mut txns = Vec::new();
@@ -648,23 +560,15 @@ struct RegisterEntry {
     account: String,
 }
 
-fn run_register_full(journal_path: &Path, args: &[&str]) -> Vec<RegisterEntry> {
-    let output = Command::new("hledger")
-        .arg("-f")
-        .arg(journal_path.to_str().unwrap_or("all.journal"))
-        .arg("register")
-        .args(args)
-        .arg("-O")
-        .arg("csv")
-        .output();
-
-    let output = match output {
-        Ok(o) => o,
-        Err(_) => return vec![],
-    };
+fn run_register_full(journal_path: &Path, args: &[&str]) -> Result<Vec<RegisterEntry>> {
+    let jp = journal_path.to_str().unwrap_or("all.journal");
+    let mut all_args = vec!["-f", jp, "register"];
+    all_args.extend_from_slice(args);
+    all_args.extend_from_slice(&["-O", "csv"]);
+    let text = run_hledger(&all_args)?;
 
     let mut result = Vec::new();
-    let mut rdr = csv::ReaderBuilder::new().from_reader(output.stdout.as_slice());
+    let mut rdr = csv::ReaderBuilder::new().from_reader(text.as_bytes());
 
     for row in rdr.records() {
         let fields = match row {
@@ -692,7 +596,7 @@ fn run_register_full(journal_path: &Path, args: &[&str]) -> Vec<RegisterEntry> {
         }
     }
 
-    result
+    Ok(result)
 }
 
 /// Build chart series for all coins in 3 bulk hledger calls instead of 3×N.
@@ -707,8 +611,8 @@ pub fn load_all_coin_chart_series(
     price_history: &[PriceEntry],
     coins: &[String],
     currency_symbol: &str,
-) -> HashMap<String, CoinChartSeries> {
-    let (cost_entries, asset_entries, income_entries) = std::thread::scope(|s| {
+) -> Result<HashMap<String, CoinChartSeries>> {
+    let (cost_res, asset_res, income_res) = std::thread::scope(|s| {
         let t_cost = s.spawn(|| run_register_full(journal_path, &["assets:crypto", "--cost"]));
         let t_asset = s.spawn(|| run_register_full(journal_path, &["assets:crypto"]));
         let t_income = s.spawn(|| run_register_full(journal_path, &["income"]));
@@ -718,6 +622,9 @@ pub fn load_all_coin_chart_series(
             t_income.join().unwrap(),
         )
     });
+    let cost_entries = cost_res?;
+    let asset_entries = asset_res?;
+    let income_entries = income_res?;
 
     // Fiat-leg detection: the configured display currency plus the common
     // EUR/USD aliases hledger journals use ("EUR", "USD", "$"). Anything else
@@ -969,7 +876,7 @@ pub fn load_all_coin_chart_series(
         );
     }
 
-    result
+    Ok(result)
 }
 
 #[cfg(test)]
@@ -1069,6 +976,15 @@ mod tests {
     }
 
     // ── parse_balance_csv ─────────────────────────────────────────────────────
+
+    #[test]
+    fn balance_csv_garbage_input_returns_err() {
+        let garbage = "this is not csv at all and it is definitely longer than twenty chars";
+        let result = parse_balance_csv(garbage);
+        assert!(result.is_err(), "expected Err for garbage CSV input");
+        let msg = result.unwrap_err().to_string();
+        assert!(msg.contains("Unexpected hledger CSV format"), "got: {msg}");
+    }
 
     #[test]
     fn balance_csv_parses_two_accounts() {

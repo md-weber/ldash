@@ -16,18 +16,25 @@ use crate::data::{
 };
 use crate::watcher::JournalWatcher;
 
+/// Per-tab load result. Distinguishes "not requested", "ok data", and "errored
+/// (keep stale data, surface message in status bar)".
+pub enum TabData<T> {
+    NotRequested,
+    Ok(T),
+    Err(String),
+}
+
 pub struct RefreshResult {
     pub tabs: [bool; 3],
     pub price_history: Vec<PriceEntry>,
     pub latest_prices: HashMap<String, f64>,
-    pub holdings: Option<Vec<CryptoHolding>>,
-    pub coin_chart_cache: Option<HashMap<String, CoinChartSeries>>,
-    pub account_balances: Option<Vec<AccountBalance>>,
-    pub liabilities: Option<Vec<AccountBalance>>,
-    pub net_worth_history: Option<NetWorthSeries>,
-    pub monthly: Option<MonthlyData>,
-    pub last_year: Option<MonthlyData>,
-    pub errors: Vec<String>,
+    pub holdings: TabData<Vec<CryptoHolding>>,
+    pub coin_chart_cache: TabData<HashMap<String, CoinChartSeries>>,
+    pub account_balances: TabData<Vec<AccountBalance>>,
+    pub liabilities: TabData<Vec<AccountBalance>>,
+    pub net_worth_history: TabData<NetWorthSeries>,
+    pub monthly: TabData<MonthlyData>,
+    pub last_year: TabData<MonthlyData>,
 }
 
 fn load_all_data(
@@ -37,8 +44,6 @@ fn load_all_data(
     currency_symbol: &str,
     tabs: [bool; 3],
 ) -> RefreshResult {
-    let mut errors = Vec::new();
-
     let price_history = load_price_history(journal_dir);
     let lp = latest_prices(&price_history);
 
@@ -71,66 +76,61 @@ fn load_all_data(
             )
         });
 
-    let holdings = crypto_res.map(|res| match res {
-        Ok(balances) => compute_portfolio(&balances, &lp),
-        Err(e) => {
-            errors.push(format!("Error loading crypto balances: {e}"));
-            Vec::new()
-        }
-    });
+    let holdings: TabData<Vec<CryptoHolding>> = match crypto_res {
+        None => TabData::NotRequested,
+        Some(Ok(balances)) => TabData::Ok(compute_portfolio(&balances, &lp)),
+        Some(Err(e)) => TabData::Err(e.to_string()),
+    };
 
-    let coin_chart_cache = holdings.as_ref().map(|h| {
-        let coins: Vec<String> = h.iter().map(|holding| holding.commodity.clone()).collect();
-        load_all_coin_chart_series(journal_path, &price_history, &coins, currency_symbol)
-    });
-
-    let account_balances = accounts_res.map(|res| {
-        let mut balances = match res {
-            Ok(b) => b,
-            Err(e) => {
-                errors.push(format!("Error loading account balances: {e}"));
-                Vec::new()
+    let coin_chart_cache: TabData<HashMap<String, CoinChartSeries>> =
+        if let TabData::Ok(ref h) = holdings {
+            let coins: Vec<String> =
+                h.iter().map(|holding| holding.commodity.clone()).collect();
+            match load_all_coin_chart_series(journal_path, &price_history, &coins, currency_symbol)
+            {
+                Ok(cache) => TabData::Ok(cache),
+                Err(e) => TabData::Err(e.to_string()),
             }
+        } else {
+            TabData::NotRequested
         };
-        balances.sort_by(|a, b| {
-            b.amount
-                .partial_cmp(&a.amount)
-                .unwrap_or(std::cmp::Ordering::Equal)
-        });
-        balances
-    });
 
-    let liabilities = liab_res.map(|res| match res {
-        Ok(l) => l,
-        Err(e) => {
-            errors.push(format!("Error loading liabilities: {e}"));
-            Vec::new()
+    let account_balances: TabData<Vec<AccountBalance>> = match accounts_res {
+        None => TabData::NotRequested,
+        Some(Ok(mut b)) => {
+            b.sort_by(|a, b| {
+                b.amount
+                    .partial_cmp(&a.amount)
+                    .unwrap_or(std::cmp::Ordering::Equal)
+            });
+            TabData::Ok(b)
         }
-    });
+        Some(Err(e)) => TabData::Err(e.to_string()),
+    };
 
-    let net_worth_history = nw_res.map(|res| match res {
-        Ok(s) => s,
-        Err(e) => {
-            errors.push(format!("Error loading net worth history: {e}"));
-            NetWorthSeries::default()
-        }
-    });
+    let liabilities: TabData<Vec<AccountBalance>> = match liab_res {
+        None => TabData::NotRequested,
+        Some(Ok(l)) => TabData::Ok(l),
+        Some(Err(e)) => TabData::Err(e.to_string()),
+    };
 
-    let monthly = monthly_res.map(|res| match res {
-        Ok(m) => m,
-        Err(e) => {
-            errors.push(format!("Error loading monthly data: {e}"));
-            MonthlyData::default()
-        }
-    });
+    let net_worth_history: TabData<NetWorthSeries> = match nw_res {
+        None => TabData::NotRequested,
+        Some(Ok(s)) => TabData::Ok(s),
+        Some(Err(e)) => TabData::Err(e.to_string()),
+    };
 
-    let last_year = ly_res.map(|res| match res {
-        Ok(ly) => ly,
-        Err(e) => {
-            errors.push(format!("Error loading last year data: {e}"));
-            MonthlyData::default()
-        }
-    });
+    let monthly: TabData<MonthlyData> = match monthly_res {
+        None => TabData::NotRequested,
+        Some(Ok(m)) => TabData::Ok(m),
+        Some(Err(e)) => TabData::Err(e.to_string()),
+    };
+
+    let last_year: TabData<MonthlyData> = match ly_res {
+        None => TabData::NotRequested,
+        Some(Ok(ly)) => TabData::Ok(ly),
+        Some(Err(e)) => TabData::Err(e.to_string()),
+    };
 
     RefreshResult {
         tabs,
@@ -143,7 +143,6 @@ fn load_all_data(
         net_worth_history,
         monthly,
         last_year,
-        errors,
     }
 }
 
@@ -479,31 +478,49 @@ impl App {
         self.price_history = r.price_history;
         self.latest_prices = r.latest_prices;
 
-        if let Some(h) = r.holdings {
-            let detected = !h.is_empty();
-            self.holdings = h;
-            if detected != self.has_crypto {
-                self.has_crypto = detected;
-                self.fix_tab_after_visibility_change();
+        let mut errors: Vec<String> = Vec::new();
+
+        match r.holdings {
+            TabData::Ok(h) => {
+                let detected = !h.is_empty();
+                self.holdings = h;
+                if detected != self.has_crypto {
+                    self.has_crypto = detected;
+                    self.fix_tab_after_visibility_change();
+                }
             }
+            TabData::Err(msg) => errors.push(msg),
+            TabData::NotRequested => {}
         }
-        if let Some(c) = r.coin_chart_cache {
-            self.coin_chart_cache = c;
+        match r.coin_chart_cache {
+            TabData::Ok(c) => self.coin_chart_cache = c,
+            TabData::Err(msg) => errors.push(msg),
+            TabData::NotRequested => {}
         }
-        if let Some(a) = r.account_balances {
-            self.account_balances = a;
+        match r.account_balances {
+            TabData::Ok(a) => self.account_balances = a,
+            TabData::Err(msg) => errors.push(msg),
+            TabData::NotRequested => {}
         }
-        if let Some(l) = r.liabilities {
-            self.liabilities = l;
+        match r.liabilities {
+            TabData::Ok(l) => self.liabilities = l,
+            TabData::Err(msg) => errors.push(msg),
+            TabData::NotRequested => {}
         }
-        if let Some(nw) = r.net_worth_history {
-            self.net_worth_history = nw;
+        match r.net_worth_history {
+            TabData::Ok(nw) => self.net_worth_history = nw,
+            TabData::Err(msg) => errors.push(msg),
+            TabData::NotRequested => {}
         }
-        if let Some(m) = r.monthly {
-            self.monthly = m;
+        match r.monthly {
+            TabData::Ok(m) => self.monthly = m,
+            TabData::Err(msg) => errors.push(msg),
+            TabData::NotRequested => {}
         }
-        if let Some(ly) = r.last_year {
-            self.last_year = ly;
+        match r.last_year {
+            TabData::Ok(ly) => self.last_year = ly,
+            TabData::Err(msg) => errors.push(msg),
+            TabData::NotRequested => {}
         }
 
         if !self.holdings.is_empty() && self.selected_holding >= self.holdings.len() {
@@ -520,11 +537,11 @@ impl App {
         self.last_journal_mtime = std::fs::metadata(&self.journal_path)
             .and_then(|m| m.modified())
             .ok();
-        if r.errors.is_empty() {
+        if errors.is_empty() {
             let now = Local::now().format("%H:%M:%S");
             self.status_msg = format!("Updated at {now}");
         } else {
-            self.status_msg = r.errors.last().unwrap().clone();
+            self.status_msg = errors.last().unwrap().clone();
         }
         self.loading = false;
 
@@ -533,8 +550,22 @@ impl App {
         }
     }
 
+    fn journal_exists(&self) -> bool {
+        self.journal_path.exists()
+    }
+
     pub fn auto_refresh(&mut self) {
         self.check_config_reload();
+
+        if !self.journal_exists() {
+            if !self.status_msg.starts_with("Journal not found") {
+                self.status_msg = format!(
+                    "Journal not found: {} — waiting for re-creation",
+                    self.journal_path.display()
+                );
+            }
+            return;
+        }
 
         let watcher_changed = self
             .watcher
@@ -1142,6 +1173,86 @@ impl App {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    fn empty_refresh_result(tabs: [bool; 3]) -> RefreshResult {
+        RefreshResult {
+            tabs,
+            price_history: Vec::new(),
+            latest_prices: HashMap::new(),
+            holdings: TabData::NotRequested,
+            coin_chart_cache: TabData::NotRequested,
+            account_balances: TabData::NotRequested,
+            liabilities: TabData::NotRequested,
+            net_worth_history: TabData::NotRequested,
+            monthly: TabData::NotRequested,
+            last_year: TabData::NotRequested,
+        }
+    }
+
+    #[test]
+    fn apply_refresh_err_keeps_stale_data_and_sets_status() {
+        let mut app = App::fixture_with_accounts();
+        let stale = app.account_balances.clone();
+
+        let mut r = empty_refresh_result([false, true, false]);
+        r.account_balances = TabData::Err("hledger: parse error line 42".to_string());
+
+        app.apply_refresh(r);
+
+        assert_eq!(app.account_balances.len(), stale.len(), "stale data should be preserved");
+        assert_eq!(app.account_balances[0].account, stale[0].account);
+        assert!(
+            app.status_msg.contains("parse error"),
+            "status should contain error, got: {}",
+            app.status_msg
+        );
+    }
+
+    #[test]
+    fn apply_refresh_ok_overwrites_stale_data() {
+        let mut app = App::fixture_with_accounts();
+        let mut r = empty_refresh_result([false, true, false]);
+        r.account_balances = TabData::Ok(vec![crate::data::AccountBalance {
+            account: "assets:new".to_string(),
+            amount: 1.0,
+            commodity: "€".to_string(),
+        }]);
+
+        app.apply_refresh(r);
+
+        assert_eq!(app.account_balances.len(), 1);
+        assert_eq!(app.account_balances[0].account, "assets:new");
+    }
+
+    #[test]
+    fn auto_refresh_missing_journal_sets_status_no_refresh() {
+        let mut app = App::fixture_empty();
+        app.journal_path = std::path::PathBuf::from("/tmp/does_not_exist_xyz.journal");
+        app.tabs_loaded = [false; 3];
+
+        app.auto_refresh();
+
+        assert!(app.refresh_rx.is_none(), "should not start refresh when journal missing");
+        assert!(
+            app.status_msg.starts_with("Journal not found"),
+            "got: {}",
+            app.status_msg
+        );
+    }
+
+    #[test]
+    fn auto_refresh_missing_journal_does_not_overwrite_message() {
+        let mut app = App::fixture_empty();
+        app.journal_path = std::path::PathBuf::from("/tmp/does_not_exist_xyz.journal");
+        app.status_msg = "Journal not found: /tmp/does_not_exist_xyz.journal — waiting for re-creation".to_string();
+
+        app.auto_refresh();
+
+        assert_eq!(
+            app.status_msg,
+            "Journal not found: /tmp/does_not_exist_xyz.journal — waiting for re-creation"
+        );
+    }
 
     #[test]
     fn budget_matches_exact() {
