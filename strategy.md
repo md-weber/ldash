@@ -13,17 +13,6 @@ Solid foundation. Below = what's missing before shipping 1.0.
 
 ## Should Have (P1)
 
-### Income drill-down
-
-- Expense drill-down works (Enter on Monthly tab) but income categories can't be drilled into
-- Symmetric behavior expected by users
-
-### Mouse support
-
-- Click on tabs, table rows, chart range selectors
-- Scroll wheel for tables
-- crossterm already supports mouse events — low effort, big UX win
-
 ### Page-level scrolling
 
 - `PgUp` / `PgDn` / `Home` / `End` for long account/expense lists

@@ -215,6 +215,7 @@ fn render_accounts_table(f: &mut Frame, app: &mut App, area: Rect) {
                 .border_style(Style::default().fg(MUTED)),
         );
 
+    app.table_area = area;
     f.render_stateful_widget(table, area, &mut app.account_state);
 }
 

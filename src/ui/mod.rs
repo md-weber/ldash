@@ -222,7 +222,7 @@ fn render_title(f: &mut Frame, area: Rect) {
 
 // ── Tab bar ───────────────────────────────────────────────────────────────────
 
-fn render_tabs(f: &mut Frame, app: &App, area: Rect) {
+fn render_tabs(f: &mut Frame, app: &mut App, area: Rect) {
     let visible = app.visible_tabs();
     let labels: Vec<String> = visible
         .iter()
@@ -236,6 +236,19 @@ fn render_tabs(f: &mut Frame, app: &App, area: Rect) {
         .iter()
         .position(|&t| t == app.tab)
         .unwrap_or(0);
+
+    // record geometry for mouse hit-testing
+    app.tab_bar_area = area;
+    app.tab_rects.clear();
+    // labels are rendered inside the block border; x starts at area.x + 1
+    // each label is separated by the default Tabs divider "|" (1 char)
+    let mut x = area.x + 1;
+    for label in &labels {
+        let w = label.chars().count() as u16;
+        app.tab_rects.push(Rect { x, y: area.y + 1, width: w, height: 1 });
+        x += w + 1; // label width + divider
+    }
+
     let tabs = Tabs::new(labels)
         .block(
             Block::default()
@@ -291,7 +304,7 @@ fn render_loading_overlay(f: &mut Frame, area: Rect) {
 
 fn render_help_popup(f: &mut Frame, area: Rect) {
     let w = 66u16.min(area.width.saturating_sub(4));
-    let h = 20u16.min(area.height.saturating_sub(4));
+    let h = 22u16.min(area.height.saturating_sub(4));
     let popup = Rect {
         x: area.x + (area.width.saturating_sub(w)) / 2,
         y: area.y + (area.height.saturating_sub(h)) / 2,
@@ -316,6 +329,8 @@ fn render_help_popup(f: &mut Frame, area: Rect) {
         ("r", "Refresh data"),
         ("Esc", "Close detail / back / quit"),
         ("? / q", "Toggle help / quit"),
+        ("Mouse click", "Select tab / row"),
+        ("Scroll wheel", "Scroll table"),
     ];
 
     let mut lines = vec![Line::from("")];
@@ -479,7 +494,7 @@ fn render_price_alerts(f: &mut Frame, app: &App, area: Rect) {
 }
 
 fn render_status(f: &mut Frame, app: &App, area: Rect) {
-    let help = "  [1-3] tab  [↑↓/jk] navigate  [←→/hl] month/range  [r] refresh  [?] help  [q] quit";
+    let help = "  [1-3] tab  [↑↓/jk] navigate  [←→/hl] month/range  [r] refresh  [?] help  [q] quit  [mouse] click tab/row";
     let text = Line::from(vec![
         Span::styled(&app.status_msg, Style::default().fg(ACCENT)),
         Span::styled(help, Style::default().fg(MUTED)),

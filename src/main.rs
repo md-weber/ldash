@@ -8,7 +8,7 @@ use anyhow::{Context, Result};
 use app::App;
 use clap::Parser;
 use crossterm::{
-    event::{self, Event, KeyCode, KeyEventKind},
+    event::{self, DisableMouseCapture, EnableMouseCapture, Event, KeyCode, KeyEventKind},
     terminal::{
         disable_raw_mode, enable_raw_mode, EnterAlternateScreen, LeaveAlternateScreen, SetTitle,
     },
@@ -230,12 +230,15 @@ fn run_tui(
     let original_hook = std::panic::take_hook();
     std::panic::set_hook(Box::new(move |info| {
         let _ = disable_raw_mode();
+        let _ = io::stdout().execute(DisableMouseCapture);
         let _ = io::stdout().execute(LeaveAlternateScreen);
         original_hook(info);
     }));
 
     let mut stdout = io::stdout();
     stdout.execute(EnterAlternateScreen)?;
+    // swallow error on dumb terminals that don't support mouse
+    let _ = stdout.execute(EnableMouseCapture);
     stdout.execute(SetTitle("Ledger Dashboard"))?;
 
     let backend = CrosstermBackend::new(stdout);
@@ -244,6 +247,7 @@ fn run_tui(
     let result = run(&mut terminal, journal_path, config, config_warnings);
 
     let _ = disable_raw_mode();
+    let _ = io::stdout().execute(DisableMouseCapture);
     let _ = io::stdout().execute(LeaveAlternateScreen);
 
     result
@@ -273,6 +277,11 @@ fn run(terminal: &mut Terminal<CrosstermBackend<io::Stdout>>, journal_path: Path
             if matches!(ev, Event::Resize(_, _)) {
                 continue;
             }
+            if let Event::Mouse(mouse) = ev {
+                app.handle_mouse(mouse);
+                continue;
+            }
+
             if let Event::Key(key) = ev {
                 if key.kind == KeyEventKind::Press {
                     if app.search_active {

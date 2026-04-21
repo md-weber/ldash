@@ -58,7 +58,7 @@ fn holding_pl(
     }
 }
 
-pub(super) fn render_portfolio(f: &mut Frame, app: &App, area: Rect) {
+pub(super) fn render_portfolio(f: &mut Frame, app: &mut App, area: Rect) {
     if area.width < 100 {
         let chunks = Layout::vertical([
             Constraint::Percentage(45),
@@ -84,7 +84,7 @@ pub(super) fn render_portfolio(f: &mut Frame, app: &App, area: Rect) {
     }
 }
 
-fn render_holdings_table(f: &mut Frame, app: &App, area: Rect) {
+fn render_holdings_table(f: &mut Frame, app: &mut App, area: Rect) {
     let total = app.total_portfolio_value();
     let narrow = area.width < 100;
     let very_narrow = area.width < 80;
@@ -324,6 +324,7 @@ fn render_holdings_table(f: &mut Frame, app: &App, area: Rect) {
                 .border_style(Style::default().fg(MUTED)),
         );
 
+    app.table_area = area;
     f.render_widget(table, area);
 
     let hint_area = Rect {

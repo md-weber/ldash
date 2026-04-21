@@ -3,6 +3,8 @@ pub use types::*;
 
 use anyhow::Result;
 use chrono::{Datelike, Local, NaiveDate};
+use crossterm::event::{MouseButton, MouseEvent, MouseEventKind};
+use ratatui::layout::Rect;
 use ratatui::widgets::TableState;
 use std::collections::HashMap;
 use std::path::{Path, PathBuf};
@@ -172,6 +174,15 @@ pub struct App {
     pub alert_shown_at: Option<Instant>,
     pub last_refresh: Instant,
     pub tabs_loaded: [bool; 3],
+    // geometry written by the render pass, used for mouse hit-testing
+    pub tab_bar_area: Rect,
+    pub tab_rects: Vec<Rect>,
+    pub table_area: Rect,
+    pub income_table_area: Rect,
+    pub expense_table_area: Rect,
+    pub monthly_chart_area: Rect,
+    pub range_selector_rects: Vec<Rect>,
+    pub portfolio_scroll_offset: usize,
     refresh_rx: Option<mpsc::Receiver<RefreshResult>>,
     watcher: Option<JournalWatcher>,
     last_journal_mtime: Option<SystemTime>,
@@ -241,6 +252,14 @@ impl App {
             alert_shown_at: None,
             last_refresh: Instant::now(),
             tabs_loaded: [false; 3],
+            tab_bar_area: Rect::default(),
+            tab_rects: Vec::new(),
+            table_area: Rect::default(),
+            income_table_area: Rect::default(),
+            expense_table_area: Rect::default(),
+            monthly_chart_area: Rect::default(),
+            range_selector_rects: Vec::new(),
+            portfolio_scroll_offset: 0,
             refresh_rx: None,
             watcher,
             last_journal_mtime: None,
@@ -928,6 +947,181 @@ impl App {
             self.search_state.select(Some(i + 1));
         }
     }
+
+    pub fn handle_mouse(&mut self, ev: MouseEvent) {
+        if self.loading {
+            return;
+        }
+        match ev.kind {
+            MouseEventKind::Down(MouseButton::Left) => {
+                self.on_left_click(ev.column, ev.row);
+            }
+            MouseEventKind::ScrollDown => {
+                if !self.search_active {
+                    self.scroll_down();
+                }
+            }
+            MouseEventKind::ScrollUp => {
+                if !self.search_active {
+                    self.scroll_up();
+                }
+            }
+            _ => {}
+        }
+    }
+
+    fn on_left_click(&mut self, col: u16, row: u16) {
+        if self.show_alerts {
+            self.show_alerts = false;
+            self.alert_dismissed = true;
+            return;
+        }
+
+        if self.search_active {
+            return;
+        }
+
+        let tab_rects = self.tab_rects.clone();
+        for (i, rect) in tab_rects.iter().enumerate() {
+            if rect_contains(*rect, col, row) {
+                self.select_tab(i);
+                return;
+            }
+        }
+
+        let range_rects = self.range_selector_rects.clone();
+        for (i, rect) in range_rects.iter().enumerate() {
+            if rect_contains(*rect, col, row) {
+                self.select_range(i);
+                return;
+            }
+        }
+
+        if self.tab == Tab::Monthly && rect_contains(self.monthly_chart_area, col, row) {
+            self.on_monthly_chart_click(col);
+            return;
+        }
+
+        match self.tab {
+            Tab::Monthly => {
+                if rect_contains(self.income_table_area, col, row) {
+                    if self.monthly_focus != MonthlyFocus::Income {
+                        self.monthly_focus = MonthlyFocus::Income;
+                    }
+                    self.on_table_click(col, row);
+                } else if rect_contains(self.expense_table_area, col, row) {
+                    if self.monthly_focus != MonthlyFocus::Expenses {
+                        self.monthly_focus = MonthlyFocus::Expenses;
+                    }
+                    self.on_table_click(col, row);
+                }
+            }
+            _ => {
+                if rect_contains(self.table_area, col, row) {
+                    self.on_table_click(col, row);
+                }
+            }
+        }
+    }
+
+    fn on_table_click(&mut self, _col: u16, row: u16) {
+        let area = match self.tab {
+            Tab::Monthly => match self.monthly_focus {
+                MonthlyFocus::Income => self.income_table_area,
+                MonthlyFocus::Expenses => self.expense_table_area,
+            },
+            _ => self.table_area,
+        };
+        // border (1) + header row (1) + header bottom_margin (1) = 3 rows before data
+        let content_y = area.y + 3;
+        if row < content_y {
+            return;
+        }
+        let clicked_idx = (row - content_y) as usize;
+        match self.tab {
+            Tab::Accounts => {
+                let offset = self.account_state.offset();
+                let abs = clicked_idx + offset;
+                if abs < self.account_balances.len() {
+                    self.account_state.select(Some(abs));
+                }
+            }
+            Tab::Monthly => match self.monthly_focus {
+                MonthlyFocus::Income => {
+                    let offset = self.income_state.offset();
+                    let abs = clicked_idx + offset;
+                    let len = self.current_month().map(|m| m.income.len()).unwrap_or(0);
+                    if abs < len {
+                        self.income_state.select(Some(abs));
+                    }
+                }
+                MonthlyFocus::Expenses => {
+                    let offset = self.expense_state.offset();
+                    let abs = clicked_idx + offset;
+                    let len = self.current_month().map(|m| m.expenses.len()).unwrap_or(0);
+                    if abs < len {
+                        self.expense_state.select(Some(abs));
+                    }
+                }
+            },
+            Tab::Portfolio => {
+                let abs = clicked_idx + self.portfolio_scroll_offset;
+                if abs < self.holdings.len() {
+                    self.selected_holding = abs;
+                }
+            }
+        }
+    }
+
+    fn on_monthly_chart_click(&mut self, col: u16) {
+        let area = self.monthly_chart_area;
+        // inner x: border (1) + left padding (1) = +2
+        let inner_x = area.x + 2;
+        if col < inner_x {
+            return;
+        }
+        // each group: 2 bars × bar_width(3) + bar_gap(0) + group_gap(2) = 8 chars
+        let group_width = 8u16;
+        let slot = (col - inner_x) / group_width;
+        let n = self.monthly.months.len();
+        if (slot as usize) < n {
+            self.monthly.selected = slot as usize;
+        }
+    }
+
+    fn select_range(&mut self, idx: usize) {
+        match self.tab {
+            Tab::Portfolio => {
+                let ranges = [
+                    PortfolioRange::Month3,
+                    PortfolioRange::Month6,
+                    PortfolioRange::Ytd,
+                    PortfolioRange::All,
+                ];
+                if let Some(&r) = ranges.get(idx) {
+                    self.portfolio_range = r;
+                }
+            }
+            Tab::Accounts => {
+                let ranges = [
+                    NetWorthRange::Ytd,
+                    NetWorthRange::Year1,
+                    NetWorthRange::Year2,
+                    NetWorthRange::Year5,
+                    NetWorthRange::All,
+                ];
+                if let Some(&r) = ranges.get(idx) {
+                    self.nw_range = r;
+                    self.reload_net_worth();
+                }
+            }
+            _ => {}
+        }
+    }
+}
+
+fn rect_contains(r: Rect, col: u16, row: u16) -> bool {
+    col >= r.x && col < r.x + r.width && row >= r.y && row < r.y + r.height
 }
 
 #[cfg(test)]
@@ -977,6 +1171,14 @@ impl App {
             alert_shown_at: None,
             last_refresh: Instant::now(),
             tabs_loaded: [true; 3],
+            tab_bar_area: Rect::default(),
+            tab_rects: Vec::new(),
+            table_area: Rect::default(),
+            income_table_area: Rect::default(),
+            expense_table_area: Rect::default(),
+            monthly_chart_area: Rect::default(),
+            range_selector_rects: Vec::new(),
+            portfolio_scroll_offset: 0,
             refresh_rx: None,
             watcher: None,
             last_journal_mtime: None,

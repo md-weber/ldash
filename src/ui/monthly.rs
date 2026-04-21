@@ -15,6 +15,7 @@ pub(super) fn render_monthly(f: &mut Frame, app: &mut App, area: Rect) {
     ])
     .split(area);
 
+    app.monthly_chart_area = chunks[0];
     render_monthly_chart(f, app, chunks[0]);
     render_monthly_summary(f, app, chunks[1]);
 
@@ -438,6 +439,7 @@ fn render_monthly_income(f: &mut Frame, app: &mut App, area: Rect) {
                 .border_style(Style::default().fg(border_color)),
         );
 
+    app.income_table_area = area;
     f.render_stateful_widget(table, area, &mut app.income_state);
 }
 
@@ -536,5 +538,6 @@ fn render_monthly_expenses(f: &mut Frame, app: &mut App, area: Rect) {
                 .border_style(Style::default().fg(if focused { ACCENT } else { MUTED })),
         );
 
+    app.expense_table_area = area;
     f.render_stateful_widget(table, area, &mut app.expense_state);
 }

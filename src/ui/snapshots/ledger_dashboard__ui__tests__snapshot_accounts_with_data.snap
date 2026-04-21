@@ -1,6 +1,5 @@
 ---
 source: src/ui/mod.rs
-assertion_line: 523
 expression: render_to_string(&mut app)
 ---
   ⬡ Ledger Dashboard v0.1.0
@@ -42,4 +41,4 @@ expression: render_to_string(&mut app)
 │                                                                                                                      │
 │                                                                                                                      │
 ╰──────────────────────────────────────────────────────────────────────────────────────────────────────────────────────╯
-Test mode  [1-3] tab  [↑↓/jk] navigate  [←→/hl] month/range  [r] refresh  [?] help  [q] quit
+Test mode  [1-3] tab  [↑↓/jk] navigate  [←→/hl] month/range  [r] refresh  [?] help  [q] quit  [mouse] click tab/row
