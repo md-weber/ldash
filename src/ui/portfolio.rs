@@ -1,7 +1,7 @@
 use ratatui::{prelude::*, widgets::*};
 
+use super::{coin_color, nice_y_axis, Theme};
 use crate::app::App;
-use super::{Theme, coin_color, nice_y_axis};
 
 fn series_interp(series: &[(f64, f64)], day: f64) -> f64 {
     match series.iter().rposition(|p| p.0 <= day) {
@@ -43,7 +43,11 @@ fn holding_pl(
         let value_at_start = series_value_at_day(series, min_x);
         let pl_at_start = value_at_start - basis_at_start;
         let pl_range = current_pl - pl_at_start;
-        let denom = if value_at_start > 0.0 { value_at_start } else { invested };
+        let denom = if value_at_start > 0.0 {
+            value_at_start
+        } else {
+            invested
+        };
 
         if pl_range.abs() > h.value_eur {
             let price_at_start = series_interp(&series.price, min_x);
@@ -60,17 +64,13 @@ fn holding_pl(
 
 pub(super) fn render_portfolio(f: &mut Frame, app: &mut App, area: Rect, theme: &Theme) {
     if area.width < 100 {
-        let chunks = Layout::vertical([
-            Constraint::Percentage(45),
-            Constraint::Percentage(55),
-        ])
-        .split(area);
+        let chunks =
+            Layout::vertical([Constraint::Percentage(45), Constraint::Percentage(55)]).split(area);
         render_holdings_table(f, app, chunks[0], theme);
         render_price_chart(f, app, chunks[1], theme);
     } else {
-        let chunks =
-            Layout::horizontal([Constraint::Percentage(38), Constraint::Percentage(62)])
-                .split(area);
+        let chunks = Layout::horizontal([Constraint::Percentage(38), Constraint::Percentage(62)])
+            .split(area);
 
         let left = Layout::vertical([
             Constraint::Min(0),
@@ -142,12 +142,19 @@ fn render_holdings_table(f: &mut Frame, app: &mut App, area: Rect, theme: &Theme
                         let (pl_abs, basis) = holding_pl(app, h, series, first_date);
 
                         if basis > 0.0 {
-                            let abs_color = if pl_abs >= 0.0 { theme.positive } else { theme.negative };
+                            let abs_color = if pl_abs >= 0.0 {
+                                theme.positive
+                            } else {
+                                theme.negative
+                            };
                             let abs_prefix = if pl_abs >= 0.0 { "+" } else { "" };
                             let pct = pl_abs / basis * 100.0;
                             let pct_clamped = pct.clamp(-9999.0, 9999.0);
-                            let (prefix, color) =
-                                if pct >= 0.0 { ("+", theme.positive) } else { ("", theme.negative) };
+                            let (prefix, color) = if pct >= 0.0 {
+                                ("+", theme.positive)
+                            } else {
+                                ("", theme.negative)
+                            };
                             let pct_str = if pct.abs() > 9999.0 {
                                 format!("{prefix}{:.0}%", pct_clamped)
                             } else {
@@ -190,14 +197,14 @@ fn render_holdings_table(f: &mut Frame, app: &mut App, area: Rect, theme: &Theme
                     ),
                 };
 
-            let mut cells = vec![
-                Cell::from(format!("{indicator}{}", h.commodity)).style(coin_style),
-            ];
+            let mut cells =
+                vec![Cell::from(format!("{indicator}{}", h.commodity)).style(coin_style)];
             if !very_narrow {
-                cells.push(
-                    Cell::from(amt_str)
-                        .style(Style::default().fg(if selected { theme.gold } else { theme.muted })),
-                );
+                cells.push(Cell::from(amt_str).style(Style::default().fg(if selected {
+                    theme.gold
+                } else {
+                    theme.muted
+                })));
             }
             cells.extend([
                 Cell::from(price_str).style(Style::default().fg(theme.accent)),
@@ -238,12 +245,14 @@ fn render_holdings_table(f: &mut Frame, app: &mut App, area: Rect, theme: &Theme
         };
         (total_pl, pct)
     };
-    let pl_color = if pl_abs >= 0.0 { theme.positive } else { theme.negative };
+    let pl_color = if pl_abs >= 0.0 {
+        theme.positive
+    } else {
+        theme.negative
+    };
     let pl_prefix = if pl_abs >= 0.0 { "+" } else { "" };
 
-    let mut total_cells = vec![
-        Cell::from("──────").style(Style::default().fg(theme.muted)),
-    ];
+    let mut total_cells = vec![Cell::from("──────").style(Style::default().fg(theme.muted))];
     if !very_narrow {
         total_cells.push(Cell::from(""));
     }
@@ -256,8 +265,11 @@ fn render_holdings_table(f: &mut Frame, app: &mut App, area: Rect, theme: &Theme
     ]);
     if !very_narrow {
         total_cells.push(
-            Cell::from(format!("{pl_prefix}{}", app.config.fmt_amount_compact(pl_abs, 2)))
-                .style(Style::default().fg(pl_color).bold()),
+            Cell::from(format!(
+                "{pl_prefix}{}",
+                app.config.fmt_amount_compact(pl_abs, 2)
+            ))
+            .style(Style::default().fg(pl_color).bold()),
         );
     }
     rows.push(Row::new(total_cells).height(1));
@@ -341,7 +353,10 @@ fn render_holdings_table(f: &mut Frame, app: &mut App, area: Rect, theme: &Theme
 
 fn render_allocation_chart(f: &mut Frame, app: &App, area: Rect, theme: &Theme) {
     let block = Block::default()
-        .title(Span::styled(" Allocation ", Style::default().fg(theme.accent).bold()))
+        .title(Span::styled(
+            " Allocation ",
+            Style::default().fg(theme.accent).bold(),
+        ))
         .borders(Borders::ALL)
         .border_type(BorderType::Rounded)
         .border_style(Style::default().fg(theme.muted));
@@ -358,7 +373,11 @@ fn render_allocation_chart(f: &mut Frame, app: &App, area: Rect, theme: &Theme) 
             break;
         }
         let y = inner.y + i as u16;
-        let pct = if total > 0.0 { h.value_eur / total * 100.0 } else { 0.0 };
+        let pct = if total > 0.0 {
+            h.value_eur / total * 100.0
+        } else {
+            0.0
+        };
         let bar_len = ((pct / 100.0) * bar_area_w as f64) as usize;
         let color = coin_color(&h.commodity, theme);
 
@@ -366,20 +385,36 @@ fn render_allocation_chart(f: &mut Frame, app: &App, area: Rect, theme: &Theme) 
             format!(" {:<w$}", h.commodity, w = (label_w - 1) as usize),
             Style::default().fg(color).bold(),
         );
-        f.render_widget(Paragraph::new(Line::from(label)),
-            Rect { x: inner.x, y, width: label_w, height: 1 });
-
-        let pct_str = Span::styled(
-            format!("{:>4.1}% ", pct),
-            Style::default().fg(theme.muted),
+        f.render_widget(
+            Paragraph::new(Line::from(label)),
+            Rect {
+                x: inner.x,
+                y,
+                width: label_w,
+                height: 1,
+            },
         );
-        f.render_widget(Paragraph::new(Line::from(pct_str)),
-            Rect { x: inner.x + label_w, y, width: pct_w, height: 1 });
+
+        let pct_str = Span::styled(format!("{:>4.1}% ", pct), Style::default().fg(theme.muted));
+        f.render_widget(
+            Paragraph::new(Line::from(pct_str)),
+            Rect {
+                x: inner.x + label_w,
+                y,
+                width: pct_w,
+                height: 1,
+            },
+        );
 
         let bar = "█".repeat(bar_len.min(bar_area_w as usize));
         f.render_widget(
             Paragraph::new(Line::from(Span::styled(bar, Style::default().fg(color)))),
-            Rect { x: inner.x + label_w + pct_w, y, width: bar_area_w, height: 1 },
+            Rect {
+                x: inner.x + label_w + pct_w,
+                y,
+                width: bar_area_w,
+                height: 1,
+            },
         );
     }
 }
@@ -388,10 +423,17 @@ fn render_price_chart(f: &mut Frame, app: &App, area: Rect, theme: &Theme) {
     let selected_coin = app.selected_coin().unwrap_or("SOL");
     let range_label = app.portfolio_range.label();
 
-    let mode_label = if app.chart_stacked { "stacked" } else { "unstacked" };
+    let mode_label = if app.chart_stacked {
+        "stacked"
+    } else {
+        "unstacked"
+    };
     let block = Block::default()
         .title(Span::styled(
-            format!(" {} Portfolio Analysis [{range_label}] [{mode_label}]  ◀ ▶ ", selected_coin),
+            format!(
+                " {} Portfolio Analysis [{range_label}] [{mode_label}]  ◀ ▶ ",
+                selected_coin
+            ),
             Style::default().fg(theme.accent).bold(),
         ))
         .borders(Borders::ALL)
@@ -419,37 +461,62 @@ fn render_price_chart(f: &mut Frame, app: &App, area: Rect, theme: &Theme) {
         .iter()
         .filter(|e| e.commodity == selected_coin)
         .collect();
-    let first_date = coin_entries.first().map(|e| e.date).unwrap_or(chrono::Local::now().date_naive());
+    let first_date = coin_entries
+        .first()
+        .map(|e| e.date)
+        .unwrap_or(chrono::Local::now().date_naive());
     let today = chrono::Local::now().date_naive();
     let today_x = (today - first_date).num_days() as f64;
 
     let min_x = app.portfolio_range_min_x(first_date);
 
-    let filtered_inv: Vec<(f64, f64)> = series.investment.iter().filter(|p| p.0 >= min_x).copied().collect();
-    let filtered_price: Vec<(f64, f64)> = series.price_growth.iter().filter(|p| p.0 >= min_x).copied().collect();
-    let filtered_staking: Vec<(f64, f64)> = series.staking_growth.iter().filter(|p| p.0 >= min_x).copied().collect();
+    let filtered_inv: Vec<(f64, f64)> = series
+        .investment
+        .iter()
+        .filter(|p| p.0 >= min_x)
+        .copied()
+        .collect();
+    let filtered_price: Vec<(f64, f64)> = series
+        .price_growth
+        .iter()
+        .filter(|p| p.0 >= min_x)
+        .copied()
+        .collect();
+    let filtered_staking: Vec<(f64, f64)> = series
+        .staking_growth
+        .iter()
+        .filter(|p| p.0 >= min_x)
+        .copied()
+        .collect();
 
     type ChartLines<'a> = (Vec<(f64, f64)>, Vec<(f64, f64)>, &'a str, &'a str);
-    let (line2_data, line3_data, line2_name, line3_name): ChartLines<'_> =
-        if app.chart_stacked {
-            let purchased: Vec<(f64, f64)> = filtered_inv.iter()
-                .zip(filtered_price.iter())
-                .map(|(inv, pg)| (inv.0, inv.1 + pg.1))
-                .collect();
-            let total: Vec<(f64, f64)> = filtered_inv.iter()
-                .zip(filtered_price.iter())
-                .zip(filtered_staking.iter())
-                .map(|((inv, pg), sg)| (inv.0, inv.1 + pg.1 + sg.1))
-                .collect();
-            (purchased, total, "Purchased value", "Total value")
-        } else {
-            (filtered_price.clone(), filtered_staking.clone(), "Price gain", "Staking gain")
-        };
+    let (line2_data, line3_data, line2_name, line3_name): ChartLines<'_> = if app.chart_stacked {
+        let purchased: Vec<(f64, f64)> = filtered_inv
+            .iter()
+            .zip(filtered_price.iter())
+            .map(|(inv, pg)| (inv.0, inv.1 + pg.1))
+            .collect();
+        let total: Vec<(f64, f64)> = filtered_inv
+            .iter()
+            .zip(filtered_price.iter())
+            .zip(filtered_staking.iter())
+            .map(|((inv, pg), sg)| (inv.0, inv.1 + pg.1 + sg.1))
+            .collect();
+        (purchased, total, "Purchased value", "Total value")
+    } else {
+        (
+            filtered_price.clone(),
+            filtered_staking.clone(),
+            "Price gain",
+            "Staking gain",
+        )
+    };
 
     let x_min = min_x;
     let x_max = today_x.max(filtered_inv.last().map(|p| p.0).unwrap_or(1.0));
 
-    let all_y = filtered_inv.iter()
+    let all_y = filtered_inv
+        .iter()
         .chain(line2_data.iter())
         .chain(line3_data.iter())
         .map(|p| p.1);
@@ -457,7 +524,8 @@ fn render_price_chart(f: &mut Frame, app: &App, area: Rect, theme: &Theme) {
     let y_max_raw = all_y.fold(f64::NEG_INFINITY, f64::max);
     let (y_min, y_max, y_labels) = nice_y_axis(y_min_raw, y_max_raw, 4, &app.config, theme.muted);
 
-    let filtered_entries: Vec<_> = coin_entries.iter()
+    let filtered_entries: Vec<_> = coin_entries
+        .iter()
         .filter(|e| {
             let day = (e.date - first_date).num_days() as f64;
             day >= min_x
@@ -466,11 +534,18 @@ fn render_price_chart(f: &mut Frame, app: &App, area: Rect, theme: &Theme) {
     let x_labels: Vec<Span> = {
         let n = filtered_entries.len();
         let count = if area.width < 60 { 3 } else { 5 };
-        let indices: Vec<usize> = (0..count).map(|i| i * n.saturating_sub(1) / (count - 1).max(1)).collect();
+        let indices: Vec<usize> = (0..count)
+            .map(|i| i * n.saturating_sub(1) / (count - 1).max(1))
+            .collect();
         indices
             .iter()
             .filter_map(|&i| filtered_entries.get(i))
-            .map(|e| Span::styled(e.date.format("%b %y").to_string(), Style::default().fg(theme.muted)))
+            .map(|e| {
+                Span::styled(
+                    e.date.format("%b %y").to_string(),
+                    Style::default().fg(theme.muted),
+                )
+            })
             .collect()
     };
 

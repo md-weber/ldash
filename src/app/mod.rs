@@ -41,8 +41,7 @@ fn load_all_data(
 
     let (crypto_res, accounts_res, liab_res, nw_res, monthly_res, ly_res) =
         std::thread::scope(|s| {
-            let t_crypto =
-                want_portfolio.then(|| s.spawn(|| load_crypto_balances(journal_path)));
+            let t_crypto = want_portfolio.then(|| s.spawn(|| load_crypto_balances(journal_path)));
             let t_accounts =
                 want_accounts.then(|| s.spawn(|| load_account_balances_eur(journal_path)));
             let t_liabilities =
@@ -50,8 +49,8 @@ fn load_all_data(
             let t_nw = want_accounts.then(|| {
                 s.spawn(|| load_net_worth_history(journal_path, nw_period, currency_symbol))
             });
-            let t_monthly = want_monthly
-                .then(|| s.spawn(|| load_monthly_data(journal_path, currency_symbol)));
+            let t_monthly =
+                want_monthly.then(|| s.spawn(|| load_monthly_data(journal_path, currency_symbol)));
             let t_ly = want_monthly
                 .then(|| s.spawn(|| load_last_year_monthly(journal_path, currency_symbol)));
             (
@@ -70,18 +69,17 @@ fn load_all_data(
         Some(Err(e)) => TabData::Err(e.to_string()),
     };
 
-    let coin_chart_cache: TabData<HashMap<String, CoinChartSeries>> =
-        if let TabData::Ok(ref h) = holdings {
-            let coins: Vec<String> =
-                h.iter().map(|holding| holding.commodity.clone()).collect();
-            match load_all_coin_chart_series(journal_path, &price_history, &coins, currency_symbol)
-            {
-                Ok(cache) => TabData::Ok(cache),
-                Err(e) => TabData::Err(e.to_string()),
-            }
-        } else {
-            TabData::NotRequested
-        };
+    let coin_chart_cache: TabData<HashMap<String, CoinChartSeries>> = if let TabData::Ok(ref h) =
+        holdings
+    {
+        let coins: Vec<String> = h.iter().map(|holding| holding.commodity.clone()).collect();
+        match load_all_coin_chart_series(journal_path, &price_history, &coins, currency_symbol) {
+            Ok(cache) => TabData::Ok(cache),
+            Err(e) => TabData::Err(e.to_string()),
+        }
+    } else {
+        TabData::NotRequested
+    };
 
     let account_balances: TabData<Vec<AccountBalance>> = match accounts_res {
         None => TabData::NotRequested,
@@ -615,13 +613,15 @@ impl App {
                     let n = self.page_size_for(self.income_table_area).max(1);
                     let i = self.income_state.selected().unwrap_or(0);
                     let len = self.current_month().map(|m| m.income.len()).unwrap_or(0);
-                    self.income_state.select(Some((i + n).min(len.saturating_sub(1))));
+                    self.income_state
+                        .select(Some((i + n).min(len.saturating_sub(1))));
                 }
                 MonthlyFocus::Expenses => {
                     let n = self.page_size_for(self.expense_table_area).max(1);
                     let i = self.expense_state.selected().unwrap_or(0);
                     let len = self.current_month().map(|m| m.expenses.len()).unwrap_or(0);
-                    self.expense_state.select(Some((i + n).min(len.saturating_sub(1))));
+                    self.expense_state
+                        .select(Some((i + n).min(len.saturating_sub(1))));
                 }
             },
         }
@@ -732,31 +732,49 @@ impl App {
             Some(m) => m,
             None => return Vec::new(),
         };
-        self.config.budgets.iter().map(|(category, &limit)| {
-            let spent = budget_spent(category, &m.expenses);
-            BudgetItem {
-                category: category.clone(),
-                limit,
-                spent,
-                pct: if limit > 0.0 { spent / limit * 100.0 } else { 0.0 },
-            }
-        }).collect()
+        self.config
+            .budgets
+            .iter()
+            .map(|(category, &limit)| {
+                let spent = budget_spent(category, &m.expenses);
+                BudgetItem {
+                    category: category.clone(),
+                    limit,
+                    spent,
+                    pct: if limit > 0.0 {
+                        spent / limit * 100.0
+                    } else {
+                        0.0
+                    },
+                }
+            })
+            .collect()
     }
 
     pub fn goal_progress(&self) -> Vec<GoalProgress> {
-        self.config.goals.iter().map(|g| {
-            let current = self.account_balances.iter()
-                .filter(|b| b.account.starts_with(&g.account))
-                .map(|b| b.amount)
-                .sum::<f64>();
-            let pct = if g.target > 0.0 { (current / g.target * 100.0).min(100.0) } else { 0.0 };
-            GoalProgress {
-                name: g.name.clone(),
-                target: g.target,
-                current,
-                pct,
-            }
-        }).collect()
+        self.config
+            .goals
+            .iter()
+            .map(|g| {
+                let current = self
+                    .account_balances
+                    .iter()
+                    .filter(|b| b.account.starts_with(&g.account))
+                    .map(|b| b.amount)
+                    .sum::<f64>();
+                let pct = if g.target > 0.0 {
+                    (current / g.target * 100.0).min(100.0)
+                } else {
+                    0.0
+                };
+                GoalProgress {
+                    name: g.name.clone(),
+                    target: g.target,
+                    current,
+                    pct,
+                }
+            })
+            .collect()
     }
 
     pub fn cycle_year_back(&mut self) {
@@ -776,7 +794,11 @@ impl App {
     fn reload_monthly_year(&mut self) {
         let year = Local::now().date_naive().year() + self.monthly_year_offset;
         let period = format!("monthly in {year}");
-        match data::load_monthly_for_period(&self.journal_path, &period, &self.config.currency_symbol) {
+        match data::load_monthly_for_period(
+            &self.journal_path,
+            &period,
+            &self.config.currency_symbol,
+        ) {
             Ok(m) => self.monthly = m,
             Err(e) => self.status_msg = format!("Error loading {year} data: {e}"),
         }
@@ -797,12 +819,16 @@ impl App {
 
         let coins: Vec<String> = self.holdings.iter().map(|h| h.commodity.clone()).collect();
         for coin in &coins {
-            let prices: Vec<_> = self.price_history.iter()
+            let prices: Vec<_> = self
+                .price_history
+                .iter()
                 .filter(|e| &e.commodity == coin)
                 .collect();
 
             let current = prices.last().map(|e| e.price_eur);
-            let prev = prices.iter().rev()
+            let prev = prices
+                .iter()
+                .rev()
                 .find(|e| e.date <= yesterday)
                 .map(|e| e.price_eur);
 
@@ -810,15 +836,22 @@ impl App {
                 if old > 0.0 {
                     let change = (cur - old) / old * 100.0;
                     if change.abs() >= 2.0 {
-                        alerts.push(PriceAlert { coin: coin.clone(), change_pct: change });
+                        alerts.push(PriceAlert {
+                            coin: coin.clone(),
+                            change_pct: change,
+                        });
                     }
                 }
             }
         }
 
         if !alerts.is_empty() {
-            alerts.sort_by(|a, b| b.change_pct.abs().partial_cmp(&a.change_pct.abs())
-                .unwrap_or(std::cmp::Ordering::Equal));
+            alerts.sort_by(|a, b| {
+                b.change_pct
+                    .abs()
+                    .partial_cmp(&a.change_pct.abs())
+                    .unwrap_or(std::cmp::Ordering::Equal)
+            });
             self.price_alerts = alerts;
             self.show_alerts = true;
             self.alert_shown_at = Some(Instant::now());
@@ -840,13 +873,15 @@ impl App {
         let sym = &self.config.currency_symbol;
         match self.tab {
             Tab::Portfolio => {
-                let header = format!(
-                    "Coin,Amount,Price {sym},Value {sym},Allocation %\n"
-                );
+                let header = format!("Coin,Amount,Price {sym},Value {sym},Allocation %\n");
                 let mut csv = header;
                 let total = self.total_portfolio_value();
                 for h in &self.holdings {
-                    let alloc = if total > 0.0 { h.value_eur / total * 100.0 } else { 0.0 };
+                    let alloc = if total > 0.0 {
+                        h.value_eur / total * 100.0
+                    } else {
+                        0.0
+                    };
                     csv.push_str(&format!(
                         "{},{:.6},{:.2},{:.2},{:.1}\n",
                         h.commodity, h.amount, h.price_eur, h.value_eur, alloc
@@ -950,7 +985,11 @@ impl App {
         let mut portfolio_rows = String::new();
         let total = self.total_portfolio_value();
         for h in &self.holdings {
-            let alloc = if total > 0.0 { h.value_eur / total * 100.0 } else { 0.0 };
+            let alloc = if total > 0.0 {
+                h.value_eur / total * 100.0
+            } else {
+                0.0
+            };
             portfolio_rows.push_str(&format!(
                 "<tr><td>{}</td><td>{:.6}</td><td>{:.2}</td><td>{:.2}</td><td>{:.1}%</td></tr>\n",
                 h.commodity, h.amount, h.price_eur, h.value_eur, alloc
@@ -970,17 +1009,20 @@ impl App {
         let m = self.current_month().unwrap_or(&empty);
         for (name, amount) in &m.income {
             monthly_rows.push_str(&format!(
-                "<tr><td>{}</td><td class=\"pos\">{:.2}</td></tr>\n", name, amount
+                "<tr><td>{}</td><td class=\"pos\">{:.2}</td></tr>\n",
+                name, amount
             ));
         }
         for (name, amount) in &m.expenses {
             monthly_rows.push_str(&format!(
-                "<tr><td>{}</td><td class=\"neg\">-{:.2}</td></tr>\n", name, amount
+                "<tr><td>{}</td><td class=\"neg\">-{:.2}</td></tr>\n",
+                name, amount
             ));
         }
         let month_title = &m.month_name;
 
-        format!(r#"<!DOCTYPE html>
+        format!(
+            r#"<!DOCTYPE html>
 <html lang="en">
 <head>
 <meta charset="utf-8">
@@ -1019,7 +1061,8 @@ impl App {
 <footer>Generated by ldash &bull; {ts}</footer>
 </body>
 </html>
-"#)
+"#
+        )
     }
 
     fn render_json(&self) -> String {
@@ -1038,18 +1081,34 @@ impl App {
             )
         }).collect();
 
-        let accounts: Vec<String> = self.account_balances.iter().map(|b| {
-            format!(r#"    {{"account":{},"balance":{:.2}}}"#, json_str(&b.account), b.amount)
-        }).collect();
+        let accounts: Vec<String> = self
+            .account_balances
+            .iter()
+            .map(|b| {
+                format!(
+                    r#"    {{"account":{},"balance":{:.2}}}"#,
+                    json_str(&b.account),
+                    b.amount
+                )
+            })
+            .collect();
 
         let empty = data::SingleMonth::default();
         let m = self.current_month().unwrap_or(&empty);
         let mut monthly: Vec<String> = Vec::new();
         for (name, amount) in &m.income {
-            monthly.push(format!(r#"    {{"category":{},"type":"income","amount":{:.2}}}"#, json_str(name), amount));
+            monthly.push(format!(
+                r#"    {{"category":{},"type":"income","amount":{:.2}}}"#,
+                json_str(name),
+                amount
+            ));
         }
         for (name, amount) in &m.expenses {
-            monthly.push(format!(r#"    {{"category":{},"type":"expense","amount":{:.2}}}"#, json_str(name), -amount));
+            monthly.push(format!(
+                r#"    {{"category":{},"type":"expense","amount":{:.2}}}"#,
+                json_str(name),
+                -amount
+            ));
         }
 
         format!(
@@ -1135,7 +1194,9 @@ impl App {
 
     pub fn detail_scroll_down(&mut self) {
         let i = self.detail_state.selected().unwrap_or(0);
-        let len = self.account_detail.as_ref()
+        let len = self
+            .account_detail
+            .as_ref()
             .or(self.expense_detail.as_ref())
             .or(self.income_detail.as_ref())
             .map(|d| d.len())
@@ -1177,7 +1238,10 @@ impl App {
         let sel = self.expense_state.selected().unwrap_or(0);
         let (category, period) = match self.current_month() {
             Some(m) => match m.expenses.get(sel) {
-                Some((cat, _)) => (cat.clone(), month_name_to_period(&m.month_name, self.displayed_year())),
+                Some((cat, _)) => (
+                    cat.clone(),
+                    month_name_to_period(&m.month_name, self.displayed_year()),
+                ),
                 None => return,
             },
             None => return,
@@ -1200,11 +1264,16 @@ impl App {
     }
 
     pub fn open_income_detail(&mut self) {
-        if self.tab != Tab::Monthly || self.income_detail.is_some() { return; }
+        if self.tab != Tab::Monthly || self.income_detail.is_some() {
+            return;
+        }
         let sel = self.income_state.selected().unwrap_or(0);
         let (category, period) = match self.current_month() {
             Some(m) => match m.income.get(sel) {
-                Some((cat, _)) => (cat.clone(), month_name_to_period(&m.month_name, self.displayed_year())),
+                Some((cat, _)) => (
+                    cat.clone(),
+                    month_name_to_period(&m.month_name, self.displayed_year()),
+                ),
                 None => return,
             },
             None => return,
@@ -1226,7 +1295,7 @@ impl App {
 
     pub fn toggle_monthly_focus(&mut self) {
         self.monthly_focus = match self.monthly_focus {
-            MonthlyFocus::Income   => MonthlyFocus::Expenses,
+            MonthlyFocus::Income => MonthlyFocus::Expenses,
             MonthlyFocus::Expenses => MonthlyFocus::Income,
         };
     }
@@ -1263,11 +1332,18 @@ impl App {
             "json" => "json",
             _ => "html",
         };
-        let base_dir = self.config.export_dir.as_deref()
-            .map(|d| if d.starts_with('~') {
-                std::env::var("HOME").map(|h| d.replacen('~', &h, 1)).unwrap_or_else(|_| d.to_string())
-            } else {
-                d.to_string()
+        let base_dir = self
+            .config
+            .export_dir
+            .as_deref()
+            .map(|d| {
+                if d.starts_with('~') {
+                    std::env::var("HOME")
+                        .map(|h| d.replacen('~', &h, 1))
+                        .unwrap_or_else(|_| d.to_string())
+                } else {
+                    d.to_string()
+                }
             })
             .unwrap_or_else(|| {
                 std::env::var("HOME")
@@ -1335,15 +1411,11 @@ impl App {
             MouseEventKind::Down(MouseButton::Left) => {
                 self.on_left_click(ev.column, ev.row);
             }
-            MouseEventKind::ScrollDown => {
-                if !self.search_active {
-                    self.scroll_down();
-                }
+            MouseEventKind::ScrollDown if !self.search_active => {
+                self.scroll_down();
             }
-            MouseEventKind::ScrollUp => {
-                if !self.search_active {
-                    self.scroll_up();
-                }
+            MouseEventKind::ScrollUp if !self.search_active => {
+                self.scroll_up();
             }
             _ => {}
         }
@@ -1649,7 +1721,11 @@ mod tests {
 
         app.apply_refresh(r);
 
-        assert_eq!(app.account_balances.len(), stale.len(), "stale data should be preserved");
+        assert_eq!(
+            app.account_balances.len(),
+            stale.len(),
+            "stale data should be preserved"
+        );
         assert_eq!(app.account_balances[0].account, stale[0].account);
         assert!(
             app.status_msg.contains("parse error"),
@@ -1682,7 +1758,10 @@ mod tests {
 
         app.auto_refresh();
 
-        assert!(app.refresh_rx.is_none(), "should not start refresh when journal missing");
+        assert!(
+            app.refresh_rx.is_none(),
+            "should not start refresh when journal missing"
+        );
         assert!(
             app.status_msg.starts_with("Journal not found"),
             "got: {}",
@@ -1694,7 +1773,9 @@ mod tests {
     fn auto_refresh_missing_journal_does_not_overwrite_message() {
         let mut app = App::fixture_empty();
         app.journal_path = std::path::PathBuf::from("/tmp/does_not_exist_xyz.journal");
-        app.status_msg = "Journal not found: /tmp/does_not_exist_xyz.journal — waiting for re-creation".to_string();
+        app.status_msg =
+            "Journal not found: /tmp/does_not_exist_xyz.journal — waiting for re-creation"
+                .to_string();
 
         app.auto_refresh();
 
@@ -1747,7 +1828,10 @@ mod tests {
             ("expenses:food:groceries".to_string(), 80.0),
         ];
         let spent = budget_spent("expenses:food", &expenses);
-        assert!((spent - 80.0).abs() < 0.01, "should only count leaf, got {spent}");
+        assert!(
+            (spent - 80.0).abs() < 0.01,
+            "should only count leaf, got {spent}"
+        );
     }
 
     #[test]

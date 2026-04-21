@@ -39,13 +39,37 @@ fn integration_load_monthly_data_two_months() {
 
     assert_eq!(data.months.len(), 2, "expected Jan + Feb");
 
-    let jan = data.months.iter().find(|m| m.month_name == "January").unwrap();
-    assert!((jan.total_income - 2000.0).abs() < 0.01, "jan income {}", jan.total_income);
-    assert!((jan.total_expenses - 150.0).abs() < 0.01, "jan expenses {}", jan.total_expenses);
+    let jan = data
+        .months
+        .iter()
+        .find(|m| m.month_name == "January")
+        .unwrap();
+    assert!(
+        (jan.total_income - 2000.0).abs() < 0.01,
+        "jan income {}",
+        jan.total_income
+    );
+    assert!(
+        (jan.total_expenses - 150.0).abs() < 0.01,
+        "jan expenses {}",
+        jan.total_expenses
+    );
 
-    let feb = data.months.iter().find(|m| m.month_name == "February").unwrap();
-    assert!((feb.total_income - 2000.0).abs() < 0.01, "feb income {}", feb.total_income);
-    assert!((feb.total_expenses - 800.0).abs() < 0.01, "feb expenses {}", feb.total_expenses);
+    let feb = data
+        .months
+        .iter()
+        .find(|m| m.month_name == "February")
+        .unwrap();
+    assert!(
+        (feb.total_income - 2000.0).abs() < 0.01,
+        "feb income {}",
+        feb.total_income
+    );
+    assert!(
+        (feb.total_expenses - 800.0).abs() < 0.01,
+        "feb expenses {}",
+        feb.total_expenses
+    );
 }
 
 #[test]

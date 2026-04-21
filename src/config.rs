@@ -44,13 +44,13 @@ pub struct ColorConfig {
 #[serde(default)]
 pub struct ThemeConfig {
     /// Built-in preset: "dark" (default), "light", "solarized"
-    pub preset:     Option<String>,
-    pub accent:     Option<String>,
-    pub positive:   Option<String>,
-    pub negative:   Option<String>,
-    pub muted:      Option<String>,
-    pub gold:       Option<String>,
-    pub fg:         Option<String>,
+    pub preset: Option<String>,
+    pub accent: Option<String>,
+    pub positive: Option<String>,
+    pub negative: Option<String>,
+    pub muted: Option<String>,
+    pub gold: Option<String>,
+    pub fg: Option<String>,
     pub background: Option<String>,
 }
 
@@ -160,10 +160,7 @@ impl Config {
             }),
             Err(_) => {
                 if explicit {
-                    warnings.push(format!(
-                        "Config file not found: {}",
-                        path.display()
-                    ));
+                    warnings.push(format!("Config file not found: {}", path.display()));
                 } else {
                     Self::init_default_config(&path);
                 }
@@ -175,9 +172,8 @@ impl Config {
 
     pub fn load_strict() -> anyhow::Result<Self> {
         let path = config_path();
-        let content = std::fs::read_to_string(&path).map_err(|e| {
-            anyhow::anyhow!("Cannot read config {}: {}", path.display(), e)
-        })?;
+        let content = std::fs::read_to_string(&path)
+            .map_err(|e| anyhow::anyhow!("Cannot read config {}: {}", path.display(), e))?;
         toml::from_str(&content)
             .map_err(|e| anyhow::anyhow!("Config parse error in {}: {}", path.display(), e))
     }
@@ -267,13 +263,21 @@ impl Config {
 
     /// Format an amount with currency symbol, e.g. `"1.234,56 €"` or `"1,234.56 $"`.
     pub fn fmt_amount(&self, amount: f64, decimals: usize) -> String {
-        format!("{} {}", self.fmt_number(amount, decimals), self.currency_symbol)
+        format!(
+            "{} {}",
+            self.fmt_number(amount, decimals),
+            self.currency_symbol
+        )
     }
 
     /// Like `fmt_amount` but no space between number and symbol — e.g. `"1.234,56€"`.
     /// Used in tight spots (axis labels, P/L cells).
     pub fn fmt_amount_compact(&self, amount: f64, decimals: usize) -> String {
-        format!("{}{}", self.fmt_number(amount, decimals), self.currency_symbol)
+        format!(
+            "{}{}",
+            self.fmt_number(amount, decimals),
+            self.currency_symbol
+        )
     }
 }
 

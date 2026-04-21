@@ -1,8 +1,8 @@
 use chrono::Datelike;
 use ratatui::{prelude::*, widgets::*};
 
+use super::{expense_color, render_detail_with_title, Theme};
 use crate::app::{budget_matches, budget_spent, App, MonthlyFocus};
-use super::{Theme, expense_color, render_detail_with_title};
 
 pub(super) fn render_monthly(f: &mut Frame, app: &mut App, area: Rect, theme: &Theme) {
     let narrow = area.width < 100;
@@ -20,30 +20,52 @@ pub(super) fn render_monthly(f: &mut Frame, app: &mut App, area: Rect, theme: &T
     render_monthly_summary(f, app, chunks[1], theme);
 
     let detail_chunks = if very_narrow {
-        Layout::vertical([Constraint::Percentage(50), Constraint::Percentage(50)])
-            .split(chunks[2])
+        Layout::vertical([Constraint::Percentage(50), Constraint::Percentage(50)]).split(chunks[2])
     } else {
         Layout::horizontal([Constraint::Percentage(50), Constraint::Percentage(50)])
             .split(chunks[2])
     };
 
-    if let (Some(txns), Some(name)) = (&app.income_detail.clone(), &app.detail_income_name.clone()) {
+    if let (Some(txns), Some(name)) = (&app.income_detail.clone(), &app.detail_income_name.clone())
+    {
         let short = name.strip_prefix("income:").unwrap_or(name);
-        let month = app.current_month().map(|m| m.month_name.as_str()).unwrap_or("");
+        let month = app
+            .current_month()
+            .map(|m| m.month_name.as_str())
+            .unwrap_or("");
         let title = format!(" {} — {}  [Esc back] ", short, month);
-        render_detail_with_title(f, txns, &title, &app.config, detail_chunks[0], theme, &mut app.detail_state);
+        render_detail_with_title(
+            f,
+            txns,
+            &title,
+            &app.config,
+            detail_chunks[0],
+            theme,
+            &mut app.detail_state,
+        );
     } else {
         render_monthly_income(f, app, detail_chunks[0], theme);
     }
 
-    if let (Some(txns), Some(name)) = (&app.expense_detail.clone(), &app.detail_expense_name.clone()) {
+    if let (Some(txns), Some(name)) = (
+        &app.expense_detail.clone(),
+        &app.detail_expense_name.clone(),
+    ) {
         let short = name.strip_prefix("expenses:").unwrap_or(name);
         let month = app
             .current_month()
             .map(|m| m.month_name.as_str())
             .unwrap_or("");
         let title = format!(" {} — {}  [Esc back] ", short, month);
-        render_detail_with_title(f, txns, &title, &app.config, detail_chunks[1], theme, &mut app.detail_state);
+        render_detail_with_title(
+            f,
+            txns,
+            &title,
+            &app.config,
+            detail_chunks[1],
+            theme,
+            &mut app.detail_state,
+        );
     } else {
         render_monthly_expenses(f, app, detail_chunks[1], theme);
     }
@@ -67,7 +89,13 @@ fn render_monthly_chart(f: &mut Frame, app: &App, area: Rect, theme: &Theme) {
 
             let label = &m.month_name[..3];
             BarGroup::default()
-                .label(Line::from(label.to_string()).style(Style::default().fg(if selected { theme.accent } else { theme.muted })))
+                .label(
+                    Line::from(label.to_string()).style(Style::default().fg(if selected {
+                        theme.accent
+                    } else {
+                        theme.muted
+                    })),
+                )
                 .bars(&[
                     Bar::default()
                         .value(m.total_income as u64)
@@ -114,7 +142,11 @@ fn render_monthly_summary(f: &mut Frame, app: &App, area: Rect, theme: &Theme) {
     let empty = crate::data::SingleMonth::default();
     let m = app.current_month().unwrap_or(&empty);
     let net = m.total_income - m.total_expenses;
-    let net_color = if net >= 0.0 { theme.positive } else { theme.negative };
+    let net_color = if net >= 0.0 {
+        theme.positive
+    } else {
+        theme.negative
+    };
     let net_prefix = if net >= 0.0 { "+" } else { "" };
 
     let savings_rate = if m.total_income > 0.0 {
@@ -254,7 +286,10 @@ fn render_monthly_summary(f: &mut Frame, app: &App, area: Rect, theme: &Theme) {
     }
 
     let left_block = Block::default()
-        .title(Span::styled(nav_title, Style::default().fg(theme.accent).bold()))
+        .title(Span::styled(
+            nav_title,
+            Style::default().fg(theme.accent).bold(),
+        ))
         .borders(Borders::ALL)
         .border_type(BorderType::Rounded)
         .border_style(Style::default().fg(theme.muted));
@@ -283,7 +318,11 @@ fn render_monthly_summary(f: &mut Frame, app: &App, area: Rect, theme: &Theme) {
 
     let ytd = app.ytd_stats();
     let ytd_net = ytd.total_income - ytd.total_expenses;
-    let ytd_net_color = if ytd_net >= 0.0 { theme.positive } else { theme.negative };
+    let ytd_net_color = if ytd_net >= 0.0 {
+        theme.positive
+    } else {
+        theme.negative
+    };
     let ytd_prefix = if ytd_net >= 0.0 { "+" } else { "" };
 
     let ytd_block = Block::default()
@@ -297,10 +336,7 @@ fn render_monthly_summary(f: &mut Frame, app: &App, area: Rect, theme: &Theme) {
     let ytd_area = ytd_block.inner(chunks[2]);
     f.render_widget(ytd_block, chunks[2]);
 
-    let ytd_split = Layout::vertical([
-        Constraint::Length(3),
-        Constraint::Min(0),
-    ]).split(ytd_area);
+    let ytd_split = Layout::vertical([Constraint::Length(3), Constraint::Min(0)]).split(ytd_area);
 
     let ytd_text = vec![
         Line::from(vec![
@@ -341,39 +377,57 @@ fn render_monthly_summary(f: &mut Frame, app: &App, area: Rect, theme: &Theme) {
 
     let spark_months = &app.monthly.months[app.monthly.months.len().saturating_sub(6)..];
     let inc_data: Vec<u64> = spark_months.iter().map(|m| m.total_income as u64).collect();
-    let exp_data: Vec<u64> = spark_months.iter().map(|m| m.total_expenses as u64).collect();
-    let net_data: Vec<u64> = spark_months.iter()
-        .map(|m| (m.total_income - m.total_expenses).max(0.0) as u64).collect();
+    let exp_data: Vec<u64> = spark_months
+        .iter()
+        .map(|m| m.total_expenses as u64)
+        .collect();
+    let net_data: Vec<u64> = spark_months
+        .iter()
+        .map(|m| (m.total_income - m.total_expenses).max(0.0) as u64)
+        .collect();
 
     let spark_rows = Layout::vertical([
         Constraint::Ratio(1, 3),
         Constraint::Ratio(1, 3),
         Constraint::Ratio(1, 3),
-    ]).split(ytd_split[1]);
+    ])
+    .split(ytd_split[1]);
 
     let spark_inc = Sparkline::default()
-        .block(Block::default()
-            .title(Span::styled(" Income ▁▃▅ ", Style::default().fg(theme.positive)))
-            .borders(Borders::TOP)
-            .border_style(Style::default().fg(theme.muted)))
+        .block(
+            Block::default()
+                .title(Span::styled(
+                    " Income ▁▃▅ ",
+                    Style::default().fg(theme.positive),
+                ))
+                .borders(Borders::TOP)
+                .border_style(Style::default().fg(theme.muted)),
+        )
         .data(&inc_data)
         .style(Style::default().fg(theme.positive).bg(theme.background));
     f.render_widget(spark_inc, spark_rows[0]);
 
     let spark_exp = Sparkline::default()
-        .block(Block::default()
-            .title(Span::styled(" Expenses ▁▃▅ ", Style::default().fg(theme.negative)))
-            .borders(Borders::TOP)
-            .border_style(Style::default().fg(theme.muted)))
+        .block(
+            Block::default()
+                .title(Span::styled(
+                    " Expenses ▁▃▅ ",
+                    Style::default().fg(theme.negative),
+                ))
+                .borders(Borders::TOP)
+                .border_style(Style::default().fg(theme.muted)),
+        )
         .data(&exp_data)
         .style(Style::default().fg(theme.negative).bg(theme.background));
     f.render_widget(spark_exp, spark_rows[1]);
 
     let spark_net = Sparkline::default()
-        .block(Block::default()
-            .title(Span::styled(" Net ▁▃▅ ", Style::default().fg(theme.gold)))
-            .borders(Borders::TOP)
-            .border_style(Style::default().fg(theme.muted)))
+        .block(
+            Block::default()
+                .title(Span::styled(" Net ▁▃▅ ", Style::default().fg(theme.gold)))
+                .borders(Borders::TOP)
+                .border_style(Style::default().fg(theme.muted)),
+        )
         .data(&net_data)
         .style(Style::default().fg(theme.gold).bg(theme.background));
     f.render_widget(spark_net, spark_rows[2]);
@@ -385,7 +439,11 @@ fn render_monthly_income(f: &mut Frame, app: &mut App, area: Rect, theme: &Theme
     let empty = crate::data::SingleMonth::default();
     let m = app.current_month().unwrap_or(&empty);
     let max_val = m.income.first().map(|i| i.1).unwrap_or(1.0);
-    let bar_width = if narrow { 0 } else { area.width.saturating_sub(40) as usize };
+    let bar_width = if narrow {
+        0
+    } else {
+        area.width.saturating_sub(40) as usize
+    };
 
     let rows: Vec<Row> = m
         .income
@@ -394,7 +452,8 @@ fn render_monthly_income(f: &mut Frame, app: &mut App, area: Rect, theme: &Theme
             let short = name.strip_prefix("income:").unwrap_or(name);
             let mut cells = vec![
                 Cell::from(short.to_string()).style(Style::default().fg(theme.fg)),
-                Cell::from(app.config.fmt_amount(*amount, 2)).style(Style::default().fg(theme.positive)),
+                Cell::from(app.config.fmt_amount(*amount, 2))
+                    .style(Style::default().fg(theme.positive)),
             ];
             if !narrow {
                 let bar_len = ((amount / max_val) * bar_width as f64) as usize;
@@ -408,7 +467,11 @@ fn render_monthly_income(f: &mut Frame, app: &mut App, area: Rect, theme: &Theme
     let widths: Vec<Constraint> = if narrow {
         vec![Constraint::Min(20), Constraint::Length(12)]
     } else {
-        vec![Constraint::Min(20), Constraint::Length(12), Constraint::Min(4)]
+        vec![
+            Constraint::Min(20),
+            Constraint::Length(12),
+            Constraint::Min(4),
+        ]
     };
 
     let mut header = vec!["Source", "Amount"];
@@ -434,7 +497,10 @@ fn render_monthly_income(f: &mut Frame, app: &mut App, area: Rect, theme: &Theme
         .highlight_symbol("▶ ")
         .block(
             Block::default()
-                .title(Span::styled(title, Style::default().fg(theme.positive).bold()))
+                .title(Span::styled(
+                    title,
+                    Style::default().fg(theme.positive).bold(),
+                ))
                 .borders(Borders::ALL)
                 .border_type(BorderType::Rounded)
                 .border_style(Style::default().fg(border_color)),
@@ -451,7 +517,11 @@ fn render_monthly_expenses(f: &mut Frame, app: &mut App, area: Rect, theme: &The
     let empty = crate::data::SingleMonth::default();
     let m = app.current_month().unwrap_or(&empty);
     let max_val = m.expenses.first().map(|e| e.1).unwrap_or(1.0);
-    let bar_width = if narrow { 0 } else { area.width.saturating_sub(if has_budgets { 56 } else { 40 }) as usize };
+    let bar_width = if narrow {
+        0
+    } else {
+        area.width.saturating_sub(if has_budgets { 56 } else { 40 }) as usize
+    };
 
     let rows: Vec<Row> = m
         .expenses
@@ -465,30 +535,48 @@ fn render_monthly_expenses(f: &mut Frame, app: &mut App, area: Rect, theme: &The
             };
             let mut cells = vec![
                 Cell::from(short.to_string()).style(Style::default().fg(color)),
-                Cell::from(app.config.fmt_amount(*amount, 2)).style(Style::default().fg(theme.negative)),
+                Cell::from(app.config.fmt_amount(*amount, 2))
+                    .style(Style::default().fg(theme.negative)),
             ];
             if !narrow {
                 let bar_len = ((amount / max_val) * bar_width as f64) as usize;
                 let bar = "█".repeat(bar_len.min(bar_width));
-                cells.push(Cell::from(bar).style(Style::default().fg(if app.expense_colors {
-                    color
-                } else {
-                    theme.negative
-                })));
+                cells.push(
+                    Cell::from(bar).style(Style::default().fg(if app.expense_colors {
+                        color
+                    } else {
+                        theme.negative
+                    })),
+                );
             }
             if has_budgets {
-                let matched = app.config.budgets.iter()
+                let matched = app
+                    .config
+                    .budgets
+                    .iter()
                     .find(|(cat, _)| budget_matches(cat, name));
                 if let Some((cat, &limit)) = matched {
                     let spent = budget_spent(cat, &m.expenses);
-                    let pct = if limit > 0.0 { spent / limit * 100.0 } else { 0.0 };
-                    let bar_color = if pct < 80.0 { theme.positive }
-                                    else if pct <= 100.0 { theme.gold }
-                                    else { theme.negative };
+                    let pct = if limit > 0.0 {
+                        spent / limit * 100.0
+                    } else {
+                        0.0
+                    };
+                    let bar_color = if pct < 80.0 {
+                        theme.positive
+                    } else if pct <= 100.0 {
+                        theme.gold
+                    } else {
+                        theme.negative
+                    };
                     let filled = ((pct / 100.0).min(1.0) * 8.0) as usize;
                     let empty_b = 8 - filled;
-                    let bar = format!("[{}{}] {:>3.0}%",
-                        "█".repeat(filled), "░".repeat(empty_b), pct);
+                    let bar = format!(
+                        "[{}{}] {:>3.0}%",
+                        "█".repeat(filled),
+                        "░".repeat(empty_b),
+                        pct
+                    );
                     cells.push(Cell::from(bar).style(Style::default().fg(bar_color)));
                 } else {
                     cells.push(Cell::from(""));
@@ -500,11 +588,19 @@ fn render_monthly_expenses(f: &mut Frame, app: &mut App, area: Rect, theme: &The
 
     let widths: Vec<Constraint> = if narrow {
         let mut w = vec![Constraint::Min(20), Constraint::Length(12)];
-        if has_budgets { w.push(Constraint::Length(16)); }
+        if has_budgets {
+            w.push(Constraint::Length(16));
+        }
         w
     } else {
-        let mut w = vec![Constraint::Min(20), Constraint::Length(12), Constraint::Min(4)];
-        if has_budgets { w.push(Constraint::Length(16)); }
+        let mut w = vec![
+            Constraint::Min(20),
+            Constraint::Length(12),
+            Constraint::Min(4),
+        ];
+        if has_budgets {
+            w.push(Constraint::Length(16));
+        }
         w
     };
 
@@ -536,7 +632,11 @@ fn render_monthly_expenses(f: &mut Frame, app: &mut App, area: Rect, theme: &The
                 ))
                 .borders(Borders::ALL)
                 .border_type(BorderType::Rounded)
-                .border_style(Style::default().fg(if focused { theme.accent } else { theme.muted })),
+                .border_style(Style::default().fg(if focused {
+                    theme.accent
+                } else {
+                    theme.muted
+                })),
         );
 
     app.expense_table_area = area;

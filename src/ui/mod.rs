@@ -11,13 +11,13 @@ mod portfolio;
 
 #[derive(Clone, Copy)]
 pub(super) struct Theme {
-    pub accent:       Color,
-    pub positive:     Color,
-    pub negative:     Color,
-    pub muted:        Color,
-    pub fg:           Color,
-    pub gold:         Color,
-    pub background:   Color,
+    pub accent: Color,
+    pub positive: Color,
+    pub negative: Color,
+    pub muted: Color,
+    pub fg: Color,
+    pub gold: Color,
+    pub background: Color,
     pub highlight_bg: Color,
 }
 
@@ -59,15 +59,36 @@ impl Theme {
                 ),
             };
 
-        let accent     = t.accent.as_deref().and_then(parse_color).unwrap_or(accent);
-        let positive   = t.positive.as_deref().and_then(parse_color).unwrap_or(positive);
-        let negative   = t.negative.as_deref().and_then(parse_color).unwrap_or(negative);
-        let muted      = t.muted.as_deref().and_then(parse_color).unwrap_or(muted);
-        let fg         = t.fg.as_deref().and_then(parse_color).unwrap_or(fg);
-        let gold       = t.gold.as_deref().and_then(parse_color).unwrap_or(gold);
-        let background = t.background.as_deref().and_then(parse_color).unwrap_or(background);
+        let accent = t.accent.as_deref().and_then(parse_color).unwrap_or(accent);
+        let positive = t
+            .positive
+            .as_deref()
+            .and_then(parse_color)
+            .unwrap_or(positive);
+        let negative = t
+            .negative
+            .as_deref()
+            .and_then(parse_color)
+            .unwrap_or(negative);
+        let muted = t.muted.as_deref().and_then(parse_color).unwrap_or(muted);
+        let fg = t.fg.as_deref().and_then(parse_color).unwrap_or(fg);
+        let gold = t.gold.as_deref().and_then(parse_color).unwrap_or(gold);
+        let background = t
+            .background
+            .as_deref()
+            .and_then(parse_color)
+            .unwrap_or(background);
 
-        Self { accent, positive, negative, muted, fg, gold, background, highlight_bg }
+        Self {
+            accent,
+            positive,
+            negative,
+            muted,
+            fg,
+            gold,
+            background,
+            highlight_bg,
+        }
     }
 }
 
@@ -75,14 +96,14 @@ impl Theme {
 
 pub(super) fn parse_color(s: &str) -> Option<Color> {
     match s.to_lowercase().as_str() {
-        "red"      => Some(Color::Red),
-        "green"    => Some(Color::Green),
-        "blue"     => Some(Color::Blue),
-        "yellow"   => Some(Color::Yellow),
-        "cyan"     => Some(Color::Cyan),
-        "magenta"  => Some(Color::Magenta),
-        "white"    => Some(Color::White),
-        "gray"     => Some(Color::Gray),
+        "red" => Some(Color::Red),
+        "green" => Some(Color::Green),
+        "blue" => Some(Color::Blue),
+        "yellow" => Some(Color::Yellow),
+        "cyan" => Some(Color::Cyan),
+        "magenta" => Some(Color::Magenta),
+        "white" => Some(Color::White),
+        "gray" => Some(Color::Gray),
         "darkgray" => Some(Color::DarkGray),
         s if s.starts_with('#') && s.len() == 7 => {
             let r = u8::from_str_radix(&s[1..3], 16).ok()?;
@@ -193,7 +214,11 @@ pub(super) fn render_detail_with_title(
     let rows: Vec<Row> = txns
         .iter()
         .map(|t| {
-            let amt_color = if t.amount >= 0.0 { theme.positive } else { theme.negative };
+            let amt_color = if t.amount >= 0.0 {
+                theme.positive
+            } else {
+                theme.negative
+            };
             Row::new(vec![
                 Cell::from(t.date.format("%Y-%m-%d").to_string())
                     .style(Style::default().fg(theme.muted)),
@@ -300,22 +325,24 @@ fn render_tabs(f: &mut Frame, app: &mut App, area: Rect, theme: &Theme) {
     let labels: Vec<String> = visible
         .iter()
         .map(|t| match t {
-            Tab::Accounts  => "  Accounts  ".to_string(),
-            Tab::Monthly   => "  Monthly  ".to_string(),
+            Tab::Accounts => "  Accounts  ".to_string(),
+            Tab::Monthly => "  Monthly  ".to_string(),
             Tab::Portfolio => "  Portfolio  ".to_string(),
         })
         .collect();
-    let selected = visible
-        .iter()
-        .position(|&t| t == app.tab)
-        .unwrap_or(0);
+    let selected = visible.iter().position(|&t| t == app.tab).unwrap_or(0);
 
     app.tab_bar_area = area;
     app.tab_rects.clear();
     let mut x = area.x + 1;
     for label in &labels {
         let w = label.chars().count() as u16;
-        app.tab_rects.push(Rect { x, y: area.y + 1, width: w, height: 1 });
+        app.tab_rects.push(Rect {
+            x,
+            y: area.y + 1,
+            width: w,
+            height: 1,
+        });
         x += w + 1;
     }
 
@@ -342,8 +369,8 @@ fn render_tabs(f: &mut Frame, app: &mut App, area: Rect, theme: &Theme) {
 fn render_content(f: &mut Frame, app: &mut App, area: Rect, theme: &Theme) {
     match app.tab {
         Tab::Portfolio => portfolio::render_portfolio(f, app, area, theme),
-        Tab::Accounts  => accounts::render_accounts(f, app, area, theme),
-        Tab::Monthly   => monthly::render_monthly(f, app, area, theme),
+        Tab::Accounts => accounts::render_accounts(f, app, area, theme),
+        Tab::Monthly => monthly::render_monthly(f, app, area, theme),
     }
 }
 
@@ -388,29 +415,29 @@ fn render_help_popup(f: &mut Frame, area: Rect, theme: &Theme) {
     let bindings: &[(&str, &str)] = &[
         ("", ""),
         ("§", "Navigation"),
-        ("1/2/3  Tab/⇧Tab",      "Switch tab"),
-        ("↑k / ↓j",              "Scroll / select row"),
-        ("PgUp/PgDn  Home/End",  "Page up/down · first/last"),
-        ("←h / →l",              "Month · NW range · chart range"),
-        ("Enter  /",             "Open detail · search"),
+        ("1/2/3  Tab/⇧Tab", "Switch tab"),
+        ("↑k / ↓j", "Scroll / select row"),
+        ("PgUp/PgDn  Home/End", "Page up/down · first/last"),
+        ("←h / →l", "Month · NW range · chart range"),
+        ("Enter  /", "Open detail · search"),
         ("", ""),
         ("§", "Tab-specific"),
-        ("y / Y",                "Year back / forward  (Monthly)"),
-        ("i",                    "Income/expense focus  (Monthly)"),
-        ("a–z  Backspace",       "Filter · clear char  (Accounts)"),
+        ("y / Y", "Year back / forward  (Monthly)"),
+        ("i", "Income/expense focus  (Monthly)"),
+        ("a–z  Backspace", "Filter · clear char  (Accounts)"),
         ("", ""),
         ("§", "Data & view"),
-        ("e",                    "Export view to file"),
-        ("Y",                    "Copy view to clipboard  (non-Monthly)"),
-        ("s",                    "Toggle chart stacked / unstacked"),
-        ("c",                    "Toggle expense colors"),
-        ("r",                    "Refresh data"),
+        ("e", "Export view to file"),
+        ("Y", "Copy view to clipboard  (non-Monthly)"),
+        ("s", "Toggle chart stacked / unstacked"),
+        ("c", "Toggle expense colors"),
+        ("r", "Refresh data"),
         ("", ""),
         ("§", "General"),
-        ("? / q",                "Toggle help / quit"),
-        ("Esc",                  "Close detail / back"),
-        ("Mouse click",          "Select tab / row"),
-        ("Scroll wheel",         "Scroll table"),
+        ("? / q", "Toggle help / quit"),
+        ("Esc", "Close detail / back"),
+        ("Mouse click", "Select tab / row"),
+        ("Scroll wheel", "Scroll table"),
     ];
 
     let mut lines: Vec<Line> = Vec::new();
@@ -424,7 +451,10 @@ fn render_help_popup(f: &mut Frame, area: Rect, theme: &Theme) {
             lines.push(Line::from(""));
         } else {
             lines.push(Line::from(vec![
-                Span::styled(format!("    {:<22}", key), Style::default().fg(theme.accent).bold()),
+                Span::styled(
+                    format!("    {:<22}", key),
+                    Style::default().fg(theme.accent).bold(),
+                ),
                 Span::styled(*desc, Style::default().fg(theme.fg)),
             ]));
         }
@@ -479,7 +509,11 @@ fn render_search_overlay(f: &mut Frame, app: &mut App, area: Rect, theme: &Theme
         .search_results
         .iter()
         .map(|t| {
-            let amt_color = if t.amount >= 0.0 { theme.positive } else { theme.negative };
+            let amt_color = if t.amount >= 0.0 {
+                theme.positive
+            } else {
+                theme.negative
+            };
             Row::new(vec![
                 Cell::from(t.date.format("%Y-%m-%d").to_string())
                     .style(Style::default().fg(theme.muted)),
@@ -554,9 +588,10 @@ fn render_price_alerts(f: &mut Frame, app: &App, area: Rect, theme: &Theme) {
     };
     f.render_widget(Clear, banner);
 
-    let mut spans = vec![
-        Span::styled("  Price moves: ", Style::default().fg(theme.gold).bold()),
-    ];
+    let mut spans = vec![Span::styled(
+        "  Price moves: ",
+        Style::default().fg(theme.gold).bold(),
+    )];
     for (i, alert) in app.price_alerts.iter().enumerate() {
         if i > 0 {
             spans.push(Span::styled(", ", Style::default().fg(theme.muted)));
@@ -571,7 +606,10 @@ fn render_price_alerts(f: &mut Frame, app: &App, area: Rect, theme: &Theme) {
             Style::default().fg(color).bold(),
         ));
     }
-    spans.push(Span::styled("  [any key dismiss]", Style::default().fg(theme.muted)));
+    spans.push(Span::styled(
+        "  [any key dismiss]",
+        Style::default().fg(theme.muted),
+    ));
 
     let block = Block::default()
         .borders(Borders::ALL)
@@ -588,7 +626,10 @@ fn render_status(f: &mut Frame, app: &App, area: Rect, theme: &Theme) {
             Span::styled("  Export to: ", Style::default().fg(theme.gold).bold()),
             Span::styled(&app.export_prompt_path, Style::default().fg(theme.fg)),
             Span::styled("█", Style::default().fg(theme.accent)),
-            Span::styled("  [Enter] confirm  [Esc] cancel", Style::default().fg(theme.muted)),
+            Span::styled(
+                "  [Enter] confirm  [Esc] cancel",
+                Style::default().fg(theme.muted),
+            ),
         ]);
         f.render_widget(Paragraph::new(text), area);
         return;

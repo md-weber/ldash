@@ -202,9 +202,11 @@ pub fn budget_spent(category: &str, expenses: &[(String, f64)]) -> f64 {
         .filter(|(name, _)| budget_matches(category, name))
         .filter(|(name, _)| {
             let name_lower = name.to_lowercase();
-            !expenses
-                .iter()
-                .any(|(other, _)| other.to_lowercase().starts_with(&format!("{}:", name_lower)))
+            !expenses.iter().any(|(other, _)| {
+                other
+                    .to_lowercase()
+                    .starts_with(&format!("{}:", name_lower))
+            })
         })
         .map(|(_, amount)| *amount)
         .sum()

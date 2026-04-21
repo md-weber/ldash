@@ -1,8 +1,8 @@
 use ratatui::{prelude::*, widgets::*};
 
+use super::{nice_y_axis, render_detail_with_title, Theme};
 use crate::app::App;
 use crate::config::Config;
-use super::{Theme, nice_y_axis, render_detail_with_title};
 
 pub(super) fn render_accounts(f: &mut Frame, app: &mut App, area: Rect, theme: &Theme) {
     let chunks = Layout::vertical([
@@ -32,19 +32,23 @@ pub(super) fn render_accounts(f: &mut Frame, app: &mut App, area: Rect, theme: &
 
     if let Some(txns) = app.account_detail.as_ref() {
         let name = app.detail_account_name.as_ref().unwrap();
-        render_account_detail(f, txns, name, &app.config, chunks[2], theme, &mut app.detail_state);
+        render_account_detail(
+            f,
+            txns,
+            name,
+            &app.config,
+            chunks[2],
+            theme,
+            &mut app.detail_state,
+        );
     } else if has_goals {
         let goal_h = (app.config.goals.len() as u16 + 2).min(8);
-        let bottom = Layout::vertical([
-            Constraint::Min(0),
-            Constraint::Length(goal_h),
-        ]).split(chunks[2]);
+        let bottom =
+            Layout::vertical([Constraint::Min(0), Constraint::Length(goal_h)]).split(chunks[2]);
 
         if !app.liabilities.is_empty() {
-            let split = Layout::vertical([
-                Constraint::Percentage(70),
-                Constraint::Percentage(30),
-            ]).split(bottom[0]);
+            let split = Layout::vertical([Constraint::Percentage(70), Constraint::Percentage(30)])
+                .split(bottom[0]);
             render_accounts_table(f, app, split[0], theme);
             render_liabilities_table(f, app, split[1], theme);
         } else {
@@ -53,11 +57,8 @@ pub(super) fn render_accounts(f: &mut Frame, app: &mut App, area: Rect, theme: &
 
         render_goals(f, app, bottom[1], theme);
     } else if !app.liabilities.is_empty() {
-        let split = Layout::vertical([
-            Constraint::Percentage(70),
-            Constraint::Percentage(30),
-        ])
-        .split(chunks[2]);
+        let split = Layout::vertical([Constraint::Percentage(70), Constraint::Percentage(30)])
+            .split(chunks[2]);
         render_accounts_table(f, app, split[0], theme);
         render_liabilities_table(f, app, split[1], theme);
     } else {
@@ -79,9 +80,12 @@ fn render_net_worth_chart(f: &mut Frame, app: &App, area: Rect, theme: &Theme) {
     let series = &app.net_worth_history;
     if series.points.len() < 2 {
         f.render_widget(
-            Paragraph::new(Span::styled("Not enough data", Style::default().fg(theme.muted)))
-                .block(block)
-                .alignment(Alignment::Center),
+            Paragraph::new(Span::styled(
+                "Not enough data",
+                Style::default().fg(theme.muted),
+            ))
+            .block(block)
+            .alignment(Alignment::Center),
             area,
         );
         return;
@@ -89,8 +93,16 @@ fn render_net_worth_chart(f: &mut Frame, app: &App, area: Rect, theme: &Theme) {
 
     let x_min = series.points.first().unwrap().0;
     let x_max = series.points.last().unwrap().0;
-    let y_min_raw = series.points.iter().map(|p| p.1).fold(f64::INFINITY, f64::min);
-    let y_max_raw = series.points.iter().map(|p| p.1).fold(f64::NEG_INFINITY, f64::max);
+    let y_min_raw = series
+        .points
+        .iter()
+        .map(|p| p.1)
+        .fold(f64::INFINITY, f64::min);
+    let y_max_raw = series
+        .points
+        .iter()
+        .map(|p| p.1)
+        .fold(f64::NEG_INFINITY, f64::max);
     let (y_min, y_max, y_labels) = nice_y_axis(y_min_raw, y_max_raw, 4, &app.config, theme.muted);
 
     let label_count = if area.width < 60 { 3 } else { 5 };
@@ -98,7 +110,12 @@ fn render_net_worth_chart(f: &mut Frame, app: &App, area: Rect, theme: &Theme) {
     let x_labels: Vec<Span> = (0..label_count)
         .map(|i| i * n.saturating_sub(1) / (label_count - 1).max(1))
         .filter_map(|i| series.labels.get(i))
-        .map(|(d, _)| Span::styled(d.format("%b %y").to_string(), Style::default().fg(theme.muted)))
+        .map(|(d, _)| {
+            Span::styled(
+                d.format("%b %y").to_string(),
+                Style::default().fg(theme.muted),
+            )
+        })
         .collect();
 
     let dataset = Dataset::default()
@@ -154,7 +171,10 @@ fn render_accounts_table(f: &mut Frame, app: &mut App, area: Rect, theme: &Theme
         let text = format!("{}_", app.account_filter);
         let para = Paragraph::new(text).block(
             Block::default()
-                .title(Span::styled(" Filter ", Style::default().fg(theme.accent).bold()))
+                .title(Span::styled(
+                    " Filter ",
+                    Style::default().fg(theme.accent).bold(),
+                ))
                 .borders(Borders::ALL)
                 .border_type(BorderType::Rounded)
                 .border_style(Style::default().fg(theme.accent)),
@@ -163,7 +183,11 @@ fn render_accounts_table(f: &mut Frame, app: &mut App, area: Rect, theme: &Theme
     }
 
     let narrow = table_area.width < 100;
-    let bar_width = if narrow { 0 } else { (table_area.width as f64 * 0.2) as usize };
+    let bar_width = if narrow {
+        0
+    } else {
+        (table_area.width as f64 * 0.2) as usize
+    };
 
     // Collect filtered accounts into owned data to avoid borrow conflicts.
     let accounts: Vec<(String, f64)> = app
@@ -172,7 +196,10 @@ fn render_accounts_table(f: &mut Frame, app: &mut App, area: Rect, theme: &Theme
         .map(|b| (b.account.clone(), b.amount))
         .collect();
 
-    let max_amount = accounts.iter().map(|(_, a)| a.abs()).fold(0.0_f64, f64::max);
+    let max_amount = accounts
+        .iter()
+        .map(|(_, a)| a.abs())
+        .fold(0.0_f64, f64::max);
 
     let rows: Vec<Row> = if accounts.is_empty() && show_filter {
         vec![Row::new(vec![Cell::from(Span::styled(
@@ -191,9 +218,7 @@ fn render_accounts_table(f: &mut Frame, app: &mut App, area: Rect, theme: &Theme
 
                 let amount_str = format!("{:>15}", app.config.fmt_amount(*amount, 2));
 
-                let short = account
-                    .strip_prefix("assets:")
-                    .unwrap_or(account);
+                let short = account.strip_prefix("assets:").unwrap_or(account);
                 let name = if narrow && short.len() > 30 {
                     format!("  {}…", &short[..29])
                 } else {
@@ -223,7 +248,11 @@ fn render_accounts_table(f: &mut Frame, app: &mut App, area: Rect, theme: &Theme
     let widths: Vec<Constraint> = if narrow {
         vec![Constraint::Min(30), Constraint::Length(16)]
     } else {
-        vec![Constraint::Min(38), Constraint::Length(16), Constraint::Min(10)]
+        vec![
+            Constraint::Min(38),
+            Constraint::Length(16),
+            Constraint::Min(10),
+        ]
     };
 
     let bal_header = format!("Balance ({})", app.config.currency_symbol);
@@ -280,12 +309,15 @@ fn render_liabilities_table(f: &mut Frame, app: &App, area: Rect, theme: &Theme)
                 "Account".to_string(),
                 format!("Balance ({})", app.config.currency_symbol),
             ])
-                .style(Style::default().fg(theme.muted).bold())
-                .bottom_margin(1),
+            .style(Style::default().fg(theme.muted).bold())
+            .bottom_margin(1),
         )
         .block(
             Block::default()
-                .title(Span::styled(title, Style::default().fg(theme.negative).bold()))
+                .title(Span::styled(
+                    title,
+                    Style::default().fg(theme.negative).bold(),
+                ))
                 .borders(Borders::ALL)
                 .border_type(BorderType::Rounded)
                 .border_style(Style::default().fg(theme.muted)),
@@ -296,7 +328,10 @@ fn render_liabilities_table(f: &mut Frame, app: &App, area: Rect, theme: &Theme)
 
 fn render_goals(f: &mut Frame, app: &App, area: Rect, theme: &Theme) {
     let block = Block::default()
-        .title(Span::styled(" Savings Goals ", Style::default().fg(theme.gold).bold()))
+        .title(Span::styled(
+            " Savings Goals ",
+            Style::default().fg(theme.gold).bold(),
+        ))
         .borders(Borders::ALL)
         .border_type(BorderType::Rounded)
         .border_style(Style::default().fg(theme.muted));
@@ -309,9 +344,13 @@ fn render_goals(f: &mut Frame, app: &App, area: Rect, theme: &Theme) {
             break;
         }
         let y = inner.y + i as u16;
-        let color = if g.pct >= 100.0 { theme.positive }
-                   else if g.pct >= 60.0 { theme.gold }
-                   else { theme.accent };
+        let color = if g.pct >= 100.0 {
+            theme.positive
+        } else if g.pct >= 60.0 {
+            theme.gold
+        } else {
+            theme.accent
+        };
 
         let label_w = 18u16.min(inner.width / 3);
         let pct_w = 22u16;
@@ -321,15 +360,27 @@ fn render_goals(f: &mut Frame, app: &App, area: Rect, theme: &Theme) {
             format!(" {:<w$}", g.name, w = (label_w - 1) as usize),
             Style::default().fg(theme.fg),
         );
-        f.render_widget(Paragraph::new(Line::from(label)),
-            Rect { x: inner.x, y, width: label_w, height: 1 });
+        f.render_widget(
+            Paragraph::new(Line::from(label)),
+            Rect {
+                x: inner.x,
+                y,
+                width: label_w,
+                height: 1,
+            },
+        );
 
         let filled = ((g.pct / 100.0).min(1.0) * bar_w as f64) as usize;
         let empty_b = bar_w as usize - filled;
         let bar = format!("{}{}", "█".repeat(filled), "░".repeat(empty_b));
         f.render_widget(
             Paragraph::new(Line::from(Span::styled(bar, Style::default().fg(color)))),
-            Rect { x: inner.x + label_w, y, width: bar_w, height: 1 },
+            Rect {
+                x: inner.x + label_w,
+                y,
+                width: bar_w,
+                height: 1,
+            },
         );
 
         let info = Span::styled(
@@ -341,7 +392,14 @@ fn render_goals(f: &mut Frame, app: &App, area: Rect, theme: &Theme) {
             ),
             Style::default().fg(theme.muted),
         );
-        f.render_widget(Paragraph::new(Line::from(info)),
-            Rect { x: inner.x + label_w + bar_w, y, width: pct_w, height: 1 });
+        f.render_widget(
+            Paragraph::new(Line::from(info)),
+            Rect {
+                x: inner.x + label_w + bar_w,
+                y,
+                width: pct_w,
+                height: 1,
+            },
+        );
     }
 }

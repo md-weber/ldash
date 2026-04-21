@@ -1,0 +1,113 @@
+name: Release
+
+on:
+  push:
+    tags:
+      - 'v*'
+
+env:
+  ZIG_VERSION: "0.13.0"
+
+jobs:
+  build:
+    name: Build ${{ matrix.target }}
+    runs-on: codeberg-medium
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - target: x86_64-unknown-linux-gnu
+            artifact: ldash-x86_64-unknown-linux-gnu
+            zigbuild: false
+          - target: aarch64-unknown-linux-gnu
+            artifact: ldash-aarch64-unknown-linux-gnu
+            zigbuild: true
+          - target: x86_64-apple-darwin
+            artifact: ldash-x86_64-apple-darwin
+            zigbuild: true
+          - target: aarch64-apple-darwin
+            artifact: ldash-aarch64-apple-darwin
+            zigbuild: true
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: https://github.com/dtolnay/rust-toolchain@stable
+        with:
+          targets: ${{ matrix.target }}
+
+      - uses: actions/cache@v4
+        with:
+          path: |
+            ~/.cargo/registry
+            ~/.cargo/git
+          key: cargo-release-${{ matrix.target }}-${{ hashFiles('**/Cargo.lock') }}
+          restore-keys: cargo-release-${{ matrix.target }}-
+
+      - name: Install zig + cargo-zigbuild
+        if: matrix.zigbuild
+        run: |
+          curl -fsSL "https://ziglang.org/download/${ZIG_VERSION}/zig-linux-x86_64-${ZIG_VERSION}.tar.xz" \
+            | tar -xJ -C /usr/local
+          echo "/usr/local/zig-linux-x86_64-${ZIG_VERSION}" >> "$GITHUB_PATH"
+          cargo install cargo-zigbuild --locked
+
+      - name: Build (native)
+        if: "!matrix.zigbuild"
+        run: cargo build --release --target ${{ matrix.target }}
+
+      - name: Build (zigbuild)
+        if: matrix.zigbuild
+        run: cargo zigbuild --release --target ${{ matrix.target }}
+
+      - name: Package
+        run: |
+          BIN="target/${{ matrix.target }}/release/ldash"
+          # strip only works on native target; skip silently for cross-compiled
+          strip "$BIN" 2>/dev/null || true
+          tar -czf "${{ matrix.artifact }}.tar.gz" \
+            -C "target/${{ matrix.target }}/release" ldash
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: ${{ matrix.artifact }}
+          path: ${{ matrix.artifact }}.tar.gz
+          if-no-files-found: error
+
+  release:
+    name: Create Release
+    needs: build
+    runs-on: codeberg-small
+    steps:
+      - uses: actions/download-artifact@v4
+        with:
+          path: artifacts
+          merge-multiple: true
+
+      - name: Checksums
+        run: |
+          cd artifacts
+          sha256sum *.tar.gz > SHA256SUMS
+          cat SHA256SUMS
+
+      - name: Publish release
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          TAG="${GITHUB_REF#refs/tags/}"
+          API="${GITHUB_API_URL}/repos/${GITHUB_REPOSITORY}/releases"
+
+          RELEASE_ID=$(curl -sf -X POST "$API" \
+            -H "Authorization: token ${GITHUB_TOKEN}" \
+            -H "Content-Type: application/json" \
+            -d "{\"tag_name\":\"${TAG}\",\"name\":\"${TAG}\",\"draft\":false,\"prerelease\":false}" \
+            | python3 -c "import sys,json; print(json.load(sys.stdin)['id'])")
+
+          for file in artifacts/*.tar.gz artifacts/SHA256SUMS; do
+            curl -sf -X POST \
+              "${API}/${RELEASE_ID}/assets?name=$(basename "$file")" \
+              -H "Authorization: token ${GITHUB_TOKEN}" \
+              -H "Content-Type: application/octet-stream" \
+              --data-binary @"$file"
+            echo "Uploaded $(basename "$file")"
+          done

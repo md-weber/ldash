@@ -253,7 +253,12 @@ fn run_tui(
     result
 }
 
-fn run(terminal: &mut Terminal<CrosstermBackend<io::Stdout>>, journal_path: PathBuf, config: config::Config, config_warnings: Vec<String>) -> Result<()> {
+fn run(
+    terminal: &mut Terminal<CrosstermBackend<io::Stdout>>,
+    journal_path: PathBuf,
+    config: config::Config,
+    config_warnings: Vec<String>,
+) -> Result<()> {
     let mut app = App::new(journal_path, config).context("Failed to initialize app")?;
     if let Some(w) = config_warnings.last() {
         app.status_msg = w.clone();
@@ -292,10 +297,12 @@ fn run(terminal: &mut Terminal<CrosstermBackend<io::Stdout>>, journal_path: Path
                                 app.export_prompt_active = false;
                                 match app.export_to_file(&path) {
                                     Ok(written) => app.status_msg = format!("Exported → {written}"),
-                                    Err(e)      => app.status_msg = format!("Export error: {e}"),
+                                    Err(e) => app.status_msg = format!("Export error: {e}"),
                                 }
                             }
-                            KeyCode::Backspace => { app.export_prompt_path.pop(); }
+                            KeyCode::Backspace => {
+                                app.export_prompt_path.pop();
+                            }
                             KeyCode::Char(c) => app.export_prompt_path.push(c),
                             _ => {}
                         }
@@ -303,7 +310,9 @@ fn run(terminal: &mut Terminal<CrosstermBackend<io::Stdout>>, journal_path: Path
                         match key.code {
                             KeyCode::Esc => app.close_search(),
                             KeyCode::Enter => app.execute_search(),
-                            KeyCode::Backspace => { app.search_query.pop(); }
+                            KeyCode::Backspace => {
+                                app.search_query.pop();
+                            }
                             KeyCode::Char(c) => app.search_query.push(c),
                             KeyCode::Up => app.search_scroll_up(),
                             KeyCode::Down => app.search_scroll_down(),
@@ -331,10 +340,18 @@ fn run(terminal: &mut Terminal<CrosstermBackend<io::Stdout>>, journal_path: Path
                             }
                             KeyCode::Backspace => app.account_filter_backspace(),
                             KeyCode::Up | KeyCode::Char('k') => {
-                                if app.has_open_detail() { app.detail_scroll_up(); } else { app.scroll_up(); }
+                                if app.has_open_detail() {
+                                    app.detail_scroll_up();
+                                } else {
+                                    app.scroll_up();
+                                }
                             }
                             KeyCode::Down | KeyCode::Char('j') => {
-                                if app.has_open_detail() { app.detail_scroll_down(); } else { app.scroll_down(); }
+                                if app.has_open_detail() {
+                                    app.detail_scroll_down();
+                                } else {
+                                    app.scroll_down();
+                                }
                             }
                             KeyCode::Enter => app.open_account_detail(),
                             KeyCode::Char(c) => app.account_filter_push(c),
@@ -359,12 +376,14 @@ fn run(terminal: &mut Terminal<CrosstermBackend<io::Stdout>>, journal_path: Path
                             KeyCode::Enter => match app.tab {
                                 app::Tab::Accounts => app.open_account_detail(),
                                 app::Tab::Monthly => match app.monthly_focus {
-                                    app::MonthlyFocus::Income   => app.open_income_detail(),
+                                    app::MonthlyFocus::Income => app.open_income_detail(),
                                     app::MonthlyFocus::Expenses => app.open_expense_detail(),
                                 },
                                 _ => {}
                             },
-                            KeyCode::Char('i') if app.tab == app::Tab::Monthly => app.toggle_monthly_focus(),
+                            KeyCode::Char('i') if app.tab == app::Tab::Monthly => {
+                                app.toggle_monthly_focus()
+                            }
                             KeyCode::Char('/') => app.open_search(),
                             KeyCode::Char('?') => app.show_help = true,
                             KeyCode::Tab => app.next_tab(),
@@ -373,10 +392,18 @@ fn run(terminal: &mut Terminal<CrosstermBackend<io::Stdout>>, journal_path: Path
                             KeyCode::Char('2') => app.select_tab(1),
                             KeyCode::Char('3') => app.select_tab(2),
                             KeyCode::Up | KeyCode::Char('k') => {
-                                if app.has_open_detail() { app.detail_scroll_up(); } else { app.scroll_up(); }
+                                if app.has_open_detail() {
+                                    app.detail_scroll_up();
+                                } else {
+                                    app.scroll_up();
+                                }
                             }
                             KeyCode::Down | KeyCode::Char('j') => {
-                                if app.has_open_detail() { app.detail_scroll_down(); } else { app.scroll_down(); }
+                                if app.has_open_detail() {
+                                    app.detail_scroll_down();
+                                } else {
+                                    app.scroll_down();
+                                }
                             }
                             KeyCode::PageUp => app.scroll_page_up(),
                             KeyCode::PageDown => app.scroll_page_down(),
@@ -392,10 +419,8 @@ fn run(terminal: &mut Terminal<CrosstermBackend<io::Stdout>>, journal_path: Path
                                 app::Tab::Accounts => app.nw_range_right(),
                                 app::Tab::Monthly => app.month_right(),
                             },
-                            KeyCode::Char('y') => {
-                                if app.tab == app::Tab::Monthly {
-                                    app.cycle_year_back();
-                                }
+                            KeyCode::Char('y') if app.tab == app::Tab::Monthly => {
+                                app.cycle_year_back();
                             }
                             KeyCode::Char('Y') => {
                                 if app.tab == app::Tab::Monthly {
@@ -403,7 +428,9 @@ fn run(terminal: &mut Terminal<CrosstermBackend<io::Stdout>>, journal_path: Path
                                 } else {
                                     let data = app.export_current_view();
                                     match copy_to_clipboard(&data) {
-                                        Ok(()) => app.status_msg = "Copied to clipboard".to_string(),
+                                        Ok(()) => {
+                                            app.status_msg = "Copied to clipboard".to_string()
+                                        }
                                         Err(e) => app.status_msg = format!("Clipboard error: {e}"),
                                     }
                                 }
@@ -412,8 +439,22 @@ fn run(terminal: &mut Terminal<CrosstermBackend<io::Stdout>>, journal_path: Path
                             KeyCode::Char('s') => app.chart_stacked = !app.chart_stacked,
                             KeyCode::Char('c') => app.expense_colors = !app.expense_colors,
                             KeyCode::Char('r') => app.start_refresh(),
-                            KeyCode::Char(c) if app.tab == app::Tab::Accounts
-                                && !matches!(c, 'q'|'/'|'?'|'r'|'s'|'c'|'y'|'Y'|'e'|'1'|'2'|'3') =>
+                            KeyCode::Char(c)
+                                if app.tab == app::Tab::Accounts
+                                    && !matches!(
+                                        c,
+                                        'q' | '/'
+                                            | '?'
+                                            | 'r'
+                                            | 's'
+                                            | 'c'
+                                            | 'y'
+                                            | 'Y'
+                                            | 'e'
+                                            | '1'
+                                            | '2'
+                                            | '3'
+                                    ) =>
                             {
                                 app.account_filter_active = true;
                                 app.account_filter.push(c);

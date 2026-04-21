@@ -146,19 +146,48 @@ pub fn latest_prices(price_history: &[PriceEntry]) -> HashMap<String, f64> {
 
 pub fn load_crypto_balances(journal_path: &Path) -> Result<Vec<AccountBalance>> {
     let jp = journal_path.to_str().unwrap_or("all.journal");
-    let text = run_hledger(&["-f", jp, "balance", "--flat", "-O", "csv", "--no-total", "assets:crypto"])?;
+    let text = run_hledger(&[
+        "-f",
+        jp,
+        "balance",
+        "--flat",
+        "-O",
+        "csv",
+        "--no-total",
+        "assets:crypto",
+    ])?;
     parse_balance_csv(&text)
 }
 
 pub fn load_account_balances_eur(journal_path: &Path) -> Result<Vec<AccountBalance>> {
     let jp = journal_path.to_str().unwrap_or("all.journal");
-    let text = run_hledger(&["-f", jp, "balance", "--flat", "-O", "csv", "--no-total", "-V", "assets"])?;
+    let text = run_hledger(&[
+        "-f",
+        jp,
+        "balance",
+        "--flat",
+        "-O",
+        "csv",
+        "--no-total",
+        "-V",
+        "assets",
+    ])?;
     parse_balance_csv(&text)
 }
 
 pub fn load_liability_balances_eur(journal_path: &Path) -> Result<Vec<AccountBalance>> {
     let jp = journal_path.to_str().unwrap_or("all.journal");
-    let text = run_hledger(&["-f", jp, "balance", "--flat", "-O", "csv", "--no-total", "-V", "liabilities"])?;
+    let text = run_hledger(&[
+        "-f",
+        jp,
+        "balance",
+        "--flat",
+        "-O",
+        "csv",
+        "--no-total",
+        "-V",
+        "liabilities",
+    ])?;
     parse_balance_csv(&text)
 }
 
@@ -181,7 +210,11 @@ fn parse_balance_csv(text: &str) -> Result<Vec<AccountBalance>> {
         }
         if let Some((amount, commodity)) = parse_amount_str(balance) {
             if amount.abs() > 1e-10 {
-                result.push(AccountBalance { account, amount, commodity });
+                result.push(AccountBalance {
+                    account,
+                    amount,
+                    commodity,
+                });
             }
         }
     }
@@ -189,7 +222,10 @@ fn parse_balance_csv(text: &str) -> Result<Vec<AccountBalance>> {
     if result.is_empty() && text.len() > 20 {
         let first_line = text.lines().next().unwrap_or("");
         if !first_line.contains("account") {
-            return Err(anyhow::anyhow!("Unexpected hledger CSV format: {:?}", first_line));
+            return Err(anyhow::anyhow!(
+                "Unexpected hledger CSV format: {:?}",
+                first_line
+            ));
         }
     }
 
@@ -200,7 +236,16 @@ pub fn load_monthly_data(journal_path: &Path, currency_symbol: &str) -> Result<M
     let now = chrono::Local::now().date_naive();
     let current_month = now.month() as usize;
     let jp = journal_path.to_str().unwrap_or("all.journal");
-    let text = run_hledger(&["-f", jp, "incomestatement", "-O", "csv", "--no-total", "-p", "monthly this year"])?;
+    let text = run_hledger(&[
+        "-f",
+        jp,
+        "incomestatement",
+        "-O",
+        "csv",
+        "--no-total",
+        "-p",
+        "monthly this year",
+    ])?;
     parse_monthly_csv(&text, current_month, currency_symbol)
 }
 
@@ -210,16 +255,31 @@ pub fn load_monthly_for_period(
     currency_symbol: &str,
 ) -> Result<MonthlyData> {
     let jp = journal_path.to_str().unwrap_or("all.journal");
-    let text = run_hledger(&["-f", jp, "incomestatement", "-O", "csv", "--no-total", "-p", period])?;
+    let text = run_hledger(&[
+        "-f",
+        jp,
+        "incomestatement",
+        "-O",
+        "csv",
+        "--no-total",
+        "-p",
+        period,
+    ])?;
     parse_monthly_csv(&text, 0, currency_symbol)
 }
 
-pub fn load_last_year_monthly(
-    journal_path: &Path,
-    currency_symbol: &str,
-) -> Result<MonthlyData> {
+pub fn load_last_year_monthly(journal_path: &Path, currency_symbol: &str) -> Result<MonthlyData> {
     let jp = journal_path.to_str().unwrap_or("all.journal");
-    let text = run_hledger(&["-f", jp, "incomestatement", "-O", "csv", "--no-total", "-p", "monthly last year"])?;
+    let text = run_hledger(&[
+        "-f",
+        jp,
+        "incomestatement",
+        "-O",
+        "csv",
+        "--no-total",
+        "-p",
+        "monthly last year",
+    ])?;
     parse_monthly_csv(&text, 0, currency_symbol)
 }
 
@@ -295,8 +355,10 @@ fn parse_monthly_csv(
         .into_iter()
         .filter(|m| m.total_income > 0.0 || m.total_expenses > 0.0)
         .map(|mut m| {
-            m.income.sort_by(|a, b| b.1.partial_cmp(&a.1).unwrap_or(std::cmp::Ordering::Equal));
-            m.expenses.sort_by(|a, b| b.1.partial_cmp(&a.1).unwrap_or(std::cmp::Ordering::Equal));
+            m.income
+                .sort_by(|a, b| b.1.partial_cmp(&a.1).unwrap_or(std::cmp::Ordering::Equal));
+            m.expenses
+                .sort_by(|a, b| b.1.partial_cmp(&a.1).unwrap_or(std::cmp::Ordering::Equal));
             m
         })
         .collect();
@@ -340,14 +402,30 @@ pub fn load_net_worth_history(
 ) -> Result<NetWorthSeries> {
     let jp = journal_path.to_str().unwrap_or("all.journal");
     let text = run_hledger(&[
-        "-f", jp, "balance", "assets", "liabilities",
-        "-H", "-p", period, "-O", "csv", "--layout", "bare", "-V", "--no-total", "--empty",
+        "-f",
+        jp,
+        "balance",
+        "assets",
+        "liabilities",
+        "-H",
+        "-p",
+        period,
+        "-O",
+        "csv",
+        "--layout",
+        "bare",
+        "-V",
+        "--no-total",
+        "--empty",
     ])?;
     let mut rdr = csv::ReaderBuilder::new()
         .flexible(true)
         .from_reader(text.as_bytes());
 
-    let headers = rdr.headers().context("No CSV headers from hledger balance")?.clone();
+    let headers = rdr
+        .headers()
+        .context("No CSV headers from hledger balance")?
+        .clone();
     // --layout bare produces: "account", "commodity", "2024-01", "2024-02", …
     let month_cols: Vec<(usize, NaiveDate)> = headers
         .iter()
@@ -451,7 +529,12 @@ pub fn load_recent_transactions(
             .map(|(a, _)| a)
             .unwrap_or(0.0);
 
-        txns.push(Transaction { date, description, amount, running_total });
+        txns.push(Transaction {
+            date,
+            description,
+            amount,
+            running_total,
+        });
     }
 
     if txns.len() > n {
@@ -519,11 +602,20 @@ pub fn compute_portfolio(
         .filter(|(_, amount)| *amount > 1e-8)
         .map(|(coin, amount)| {
             let price = latest_prices.get(&coin).copied().unwrap_or(0.0);
-            CryptoHolding { commodity: coin, amount, price_eur: price, value_eur: amount * price }
+            CryptoHolding {
+                commodity: coin,
+                amount,
+                price_eur: price,
+                value_eur: amount * price,
+            }
         })
         .collect();
 
-    holdings.sort_by(|a, b| b.value_eur.partial_cmp(&a.value_eur).unwrap_or(std::cmp::Ordering::Equal));
+    holdings.sort_by(|a, b| {
+        b.value_eur
+            .partial_cmp(&a.value_eur)
+            .unwrap_or(std::cmp::Ordering::Equal)
+    });
     holdings
 }
 
@@ -592,7 +684,13 @@ fn run_register_full(journal_path: &Path, args: &[&str]) -> Result<Vec<RegisterE
         }
 
         if let Some((amount, commodity)) = parse_amount_str(amount_str) {
-            result.push(RegisterEntry { txnidx, date, amount, commodity, account });
+            result.push(RegisterEntry {
+                txnidx,
+                date,
+                amount,
+                commodity,
+                account,
+            });
         }
     }
 
@@ -629,17 +727,17 @@ pub fn load_all_coin_chart_series(
     // Fiat-leg detection: the configured display currency plus the common
     // EUR/USD aliases hledger journals use ("EUR", "USD", "$"). Anything else
     // is treated as a coin commodity for FIFO basis calculations.
-    let fiat_commodities: Vec<&str> =
-        ["€", "EUR", "eur", "$", "USD", "usd", currency_symbol]
-            .into_iter()
-            .filter(|s| !s.is_empty())
-            .collect();
+    let fiat_commodities: Vec<&str> = ["€", "EUR", "eur", "$", "USD", "usd", currency_symbol]
+        .into_iter()
+        .filter(|s| !s.is_empty())
+        .collect();
     let coin_set: std::collections::HashSet<&str> = coins.iter().map(|s| s.as_str()).collect();
 
     // Account → coin mapping from asset entries (commodity IS the coin)
     let mut account_to_coin: HashMap<&str, &str> = HashMap::new();
     for e in &asset_entries {
-        if !fiat_commodities.contains(&e.commodity.as_str()) && coin_set.contains(e.commodity.as_str())
+        if !fiat_commodities.contains(&e.commodity.as_str())
+            && coin_set.contains(e.commodity.as_str())
         {
             account_to_coin.entry(&e.account).or_insert(&e.commodity);
         }
@@ -668,7 +766,11 @@ pub fn load_all_coin_chart_series(
     for e in &cost_entries {
         if fiat_commodities.contains(&e.commodity.as_str()) {
             if let Some(&coin) = account_to_coin.get(e.account.as_str()) {
-                *txn_eur_net.entry(coin).or_default().entry(e.txnidx).or_insert(0.0) += e.amount;
+                *txn_eur_net
+                    .entry(coin)
+                    .or_default()
+                    .entry(e.txnidx)
+                    .or_insert(0.0) += e.amount;
             }
         }
     }
@@ -724,8 +826,15 @@ pub fn load_all_coin_chart_series(
             if net_coin > 0.0 {
                 // Buy / inflow. cost_per_unit = max(net_eur, 0) / net_coin.
                 // Pure inflow with no EUR (staking, gifts) → 0 cost basis.
-                let cost_per_unit = if net_eur > 0.0 { net_eur / net_coin } else { 0.0 };
-                lots.push_back(Lot { amount: net_coin, cost_per_unit });
+                let cost_per_unit = if net_eur > 0.0 {
+                    net_eur / net_coin
+                } else {
+                    0.0
+                };
+                lots.push_back(Lot {
+                    amount: net_coin,
+                    cost_per_unit,
+                });
             } else {
                 let mut to_consume = -net_coin;
                 while to_consume > 1e-12 {
@@ -753,8 +862,10 @@ pub fn load_all_coin_chart_series(
 
     let mut result = HashMap::new();
     for coin in coins {
-        let coin_prices: Vec<&PriceEntry> =
-            price_history.iter().filter(|e| e.commodity == *coin).collect();
+        let coin_prices: Vec<&PriceEntry> = price_history
+            .iter()
+            .filter(|e| e.commodity == *coin)
+            .collect();
 
         if coin_prices.len() < 2 {
             result.insert(coin.clone(), CoinChartSeries::default());
@@ -768,7 +879,10 @@ pub fn load_all_coin_chart_series(
 
         let assets = asset_by_coin.get(coin.as_str());
         let staking = income_by_coin.get(coin.as_str());
-        let basis_snaps = basis_timeline.get(coin.as_str()).cloned().unwrap_or_default();
+        let basis_snaps = basis_timeline
+            .get(coin.as_str())
+            .cloned()
+            .unwrap_or_default();
         // Cost basis on a given date = last snapshot at or before that date.
         let basis_at = |date: NaiveDate| -> f64 {
             match basis_snaps.binary_search_by_key(&date, |s| s.0) {
@@ -867,12 +981,23 @@ pub fn load_all_coin_chart_series(
         }
 
         for d in sample_days {
-            sample_day(d, &mut investment, &mut price_growth, &mut staking_growth, &mut price_series);
+            sample_day(
+                d,
+                &mut investment,
+                &mut price_growth,
+                &mut staking_growth,
+                &mut price_series,
+            );
         }
 
         result.insert(
             coin.clone(),
-            CoinChartSeries { investment, price_growth, staking_growth, price: price_series },
+            CoinChartSeries {
+                investment,
+                price_growth,
+                staking_growth,
+                price: price_series,
+            },
         );
     }
 
@@ -994,11 +1119,17 @@ mod tests {
         let result = parse_balance_csv(csv).unwrap();
         assert_eq!(result.len(), 2);
 
-        let checking = result.iter().find(|b| b.account == "assets:bank:checking").unwrap();
+        let checking = result
+            .iter()
+            .find(|b| b.account == "assets:bank:checking")
+            .unwrap();
         assert!((checking.amount - 1430.15).abs() < 1e-10);
         assert_eq!(checking.commodity, "€");
 
-        let btc = result.iter().find(|b| b.account == "assets:crypto:btc").unwrap();
+        let btc = result
+            .iter()
+            .find(|b| b.account == "assets:crypto:btc")
+            .unwrap();
         assert!((btc.amount - 0.05).abs() < 1e-10);
         assert_eq!(btc.commodity, "BTC");
     }
@@ -1088,6 +1219,9 @@ mod tests {
                    expenses:housing,\"1.200,00 €\"\n";
         let data = parse_monthly_csv(csv, 0, "€").unwrap();
         let jan = &data.months[0];
-        assert!(jan.expenses[0].1 >= jan.expenses[1].1, "expenses not sorted descending");
+        assert!(
+            jan.expenses[0].1 >= jan.expenses[1].1,
+            "expenses not sorted descending"
+        );
     }
 }
