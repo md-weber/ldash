@@ -209,7 +209,7 @@ fn parse_balance_csv(text: &str) -> Result<Vec<AccountBalance>> {
     Ok(result)
 }
 
-pub fn load_monthly_data(journal_path: &Path) -> Result<MonthlyData> {
+pub fn load_monthly_data(journal_path: &Path, currency_symbol: &str) -> Result<MonthlyData> {
     let now = chrono::Local::now().date_naive();
     let current_month = now.month() as usize;
 
@@ -228,10 +228,14 @@ pub fn load_monthly_data(journal_path: &Path) -> Result<MonthlyData> {
         .context("Failed to run hledger incomestatement")?;
 
     let text = String::from_utf8_lossy(&output.stdout);
-    parse_monthly_csv(&text, current_month)
+    parse_monthly_csv(&text, current_month, currency_symbol)
 }
 
-pub fn load_monthly_for_period(journal_path: &Path, period: &str) -> Result<MonthlyData> {
+pub fn load_monthly_for_period(
+    journal_path: &Path,
+    period: &str,
+    currency_symbol: &str,
+) -> Result<MonthlyData> {
     let output = Command::new("hledger")
         .args([
             "-f",
@@ -247,10 +251,13 @@ pub fn load_monthly_for_period(journal_path: &Path, period: &str) -> Result<Mont
         .context("Failed to run hledger incomestatement")?;
 
     let text = String::from_utf8_lossy(&output.stdout);
-    parse_monthly_csv(&text, 0)
+    parse_monthly_csv(&text, 0, currency_symbol)
 }
 
-pub fn load_last_year_monthly(journal_path: &Path) -> Result<MonthlyData> {
+pub fn load_last_year_monthly(
+    journal_path: &Path,
+    currency_symbol: &str,
+) -> Result<MonthlyData> {
     let output = Command::new("hledger")
         .args([
             "-f",
@@ -266,10 +273,14 @@ pub fn load_last_year_monthly(journal_path: &Path) -> Result<MonthlyData> {
         .context("Failed to run hledger incomestatement for last year")?;
 
     let text = String::from_utf8_lossy(&output.stdout);
-    parse_monthly_csv(&text, 0)
+    parse_monthly_csv(&text, 0, currency_symbol)
 }
 
-fn parse_monthly_csv(text: &str, current_month: usize) -> Result<MonthlyData> {
+fn parse_monthly_csv(
+    text: &str,
+    current_month: usize,
+    currency_symbol: &str,
+) -> Result<MonthlyData> {
     let mut rdr = csv::ReaderBuilder::new()
         .flexible(true)
         .from_reader(text.as_bytes());
@@ -319,7 +330,7 @@ fn parse_monthly_csv(text: &str, current_month: usize) -> Result<MonthlyData> {
             }
             let val_str = &fields[col_idx];
             if let Some((amount, commodity)) = parse_amount_str(val_str) {
-                if commodity == "€" && amount.abs() > 0.005 {
+                if commodity == currency_symbol && amount.abs() > 0.005 {
                     let month = &mut months_data[col_idx - 1];
                     if in_revenues {
                         month.income.push((account.clone(), amount.abs()));
@@ -375,7 +386,11 @@ pub struct NetWorthSeries {
     pub labels: Vec<(NaiveDate, f64)>,
 }
 
-pub fn load_net_worth_history(journal_path: &Path, period: &str) -> Result<NetWorthSeries> {
+pub fn load_net_worth_history(
+    journal_path: &Path,
+    period: &str,
+    currency_symbol: &str,
+) -> Result<NetWorthSeries> {
     let output = Command::new("hledger")
         .args([
             "-f",
@@ -426,9 +441,10 @@ pub fn load_net_worth_history(journal_path: &Path, period: &str) -> Result<NetWo
             Ok(r) => r,
             Err(_) => continue,
         };
-        // Column 1 is the commodity in bare layout — only sum EUR rows
+        // Column 1 is the commodity in bare layout — only sum rows in the
+        // configured display currency.
         let commodity = fields.get(1).unwrap_or("").trim().trim_matches('"');
-        if commodity != "€" {
+        if commodity != currency_symbol {
             continue;
         }
         for (idx, &(col, _)) in month_cols.iter().enumerate() {
@@ -690,6 +706,7 @@ pub fn load_all_coin_chart_series(
     journal_path: &Path,
     price_history: &[PriceEntry],
     coins: &[String],
+    currency_symbol: &str,
 ) -> HashMap<String, CoinChartSeries> {
     let (cost_entries, asset_entries, income_entries) = std::thread::scope(|s| {
         let t_cost = s.spawn(|| run_register_full(journal_path, &["assets:crypto", "--cost"]));
@@ -702,13 +719,20 @@ pub fn load_all_coin_chart_series(
         )
     });
 
-    let eur_commodities: &[&str] = &["€", "EUR", "eur"];
+    // Fiat-leg detection: the configured display currency plus the common
+    // EUR/USD aliases hledger journals use ("EUR", "USD", "$"). Anything else
+    // is treated as a coin commodity for FIFO basis calculations.
+    let fiat_commodities: Vec<&str> =
+        ["€", "EUR", "eur", "$", "USD", "usd", currency_symbol]
+            .into_iter()
+            .filter(|s| !s.is_empty())
+            .collect();
     let coin_set: std::collections::HashSet<&str> = coins.iter().map(|s| s.as_str()).collect();
 
     // Account → coin mapping from asset entries (commodity IS the coin)
     let mut account_to_coin: HashMap<&str, &str> = HashMap::new();
     for e in &asset_entries {
-        if !eur_commodities.contains(&e.commodity.as_str()) && coin_set.contains(e.commodity.as_str())
+        if !fiat_commodities.contains(&e.commodity.as_str()) && coin_set.contains(e.commodity.as_str())
         {
             account_to_coin.entry(&e.account).or_insert(&e.commodity);
         }
@@ -735,7 +759,7 @@ pub fn load_all_coin_chart_series(
     // Per-txn EUR net (only crypto-account EUR rows in --cost output)
     let mut txn_eur_net: HashMap<&str, HashMap<u64, f64>> = HashMap::new();
     for e in &cost_entries {
-        if eur_commodities.contains(&e.commodity.as_str()) {
+        if fiat_commodities.contains(&e.commodity.as_str()) {
             if let Some(&coin) = account_to_coin.get(e.account.as_str()) {
                 *txn_eur_net.entry(coin).or_default().entry(e.txnidx).or_insert(0.0) += e.amount;
             }

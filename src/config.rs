@@ -18,6 +18,7 @@ pub struct Config {
     pub number_format: String,
     pub currency_symbol: String,
     pub chart_mode: String,
+    pub show_portfolio: Option<bool>,
     pub colors: ColorConfig,
     pub budgets: HashMap<String, f64>,
     pub goals: Vec<SavingsGoal>,
@@ -41,10 +42,11 @@ impl Default for Config {
         Self {
             journal: None,
             refresh_interval: 300,
-            default_tab: "portfolio".to_string(),
+            default_tab: "accounts".to_string(),
             number_format: "eu".to_string(),
             currency_symbol: "€".to_string(),
             chart_mode: "stacked".to_string(),
+            show_portfolio: None,
             colors: ColorConfig::default(),
             budgets: HashMap::new(),
             goals: Vec::new(),
@@ -69,6 +71,10 @@ const DEFAULT_CONFIG: &str = r##"# ldash configuration
 
 # Currency symbol shown in UI
 # currency_symbol = "€"
+
+# Force Portfolio tab visibility. Default: auto-detect from
+# presence of `assets:crypto` accounts.
+# show_portfolio = true
 
 # Portfolio chart mode: "stacked" or "unstacked"
 #   stacked   — lines show Invested / Purchased value / Total value
@@ -149,6 +155,7 @@ impl Config {
         self.number_format = fresh.number_format;
         self.currency_symbol = fresh.currency_symbol;
         self.chart_mode = fresh.chart_mode;
+        self.show_portfolio = fresh.show_portfolio;
         self.colors = fresh.colors;
         self.budgets = fresh.budgets;
         self.goals = fresh.goals;
@@ -168,20 +175,62 @@ impl Config {
             .ok()
     }
 
-    pub fn default_tab_index(&self) -> usize {
-        match self.default_tab.as_str() {
-            "accounts" => 1,
-            "monthly" => 2,
-            _ => 0,
-        }
-    }
-
     pub fn refresh_duration(&self) -> std::time::Duration {
         std::time::Duration::from_secs(if self.refresh_interval > 0 {
             self.refresh_interval
         } else {
             300
         })
+    }
+
+    /// Number-format separators per `number_format` setting.
+    /// Returns (thousands_sep, decimal_sep). "us" → (",", "."), else "eu" → (".", ",").
+    fn separators(&self) -> (char, char) {
+        match self.number_format.as_str() {
+            "us" => (',', '.'),
+            _ => ('.', ','),
+        }
+    }
+
+    /// Format a raw number with thousands separator and the configured decimal mark.
+    /// No currency symbol attached.
+    pub fn fmt_number(&self, amount: f64, decimals: usize) -> String {
+        let (thousands, decimal) = self.separators();
+        let neg = amount.is_sign_negative() && amount != 0.0;
+        let s = format!("{:.*}", decimals, amount.abs());
+        let (int_part, frac_part) = match s.find('.') {
+            Some(i) => (&s[..i], &s[i + 1..]),
+            None => (s.as_str(), ""),
+        };
+        let int_chars: Vec<char> = int_part.chars().collect();
+        let mut int_out = String::with_capacity(int_chars.len() + int_chars.len() / 3);
+        for (i, c) in int_chars.iter().enumerate() {
+            if i > 0 && (int_chars.len() - i).is_multiple_of(3) {
+                int_out.push(thousands);
+            }
+            int_out.push(*c);
+        }
+        let mut out = String::new();
+        if neg {
+            out.push('-');
+        }
+        out.push_str(&int_out);
+        if !frac_part.is_empty() {
+            out.push(decimal);
+            out.push_str(frac_part);
+        }
+        out
+    }
+
+    /// Format an amount with currency symbol, e.g. `"1.234,56 €"` or `"1,234.56 $"`.
+    pub fn fmt_amount(&self, amount: f64, decimals: usize) -> String {
+        format!("{} {}", self.fmt_number(amount, decimals), self.currency_symbol)
+    }
+
+    /// Like `fmt_amount` but no space between number and symbol — e.g. `"1.234,56€"`.
+    /// Used in tight spots (axis labels, P/L cells).
+    pub fn fmt_amount_compact(&self, amount: f64, decimals: usize) -> String {
+        format!("{}{}", self.fmt_number(amount, decimals), self.currency_symbol)
     }
 }
 

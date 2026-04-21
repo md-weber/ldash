@@ -1,7 +1,8 @@
 use chrono::Datelike;
 use ratatui::{prelude::*, widgets::*};
 
-use crate::app::{App, Tab};
+use crate::app::{budget_matches, budget_spent, App, Tab};
+use crate::config::Config;
 
 // ── Color palette ────────────────────────────────────────────────────────────
 const ACCENT: Color = Color::Cyan;
@@ -75,7 +76,12 @@ fn nice_step(range: f64, ticks: usize) -> f64 {
     nice * mag
 }
 
-fn nice_y_axis(y_min_raw: f64, y_max_raw: f64, ticks: usize) -> (f64, f64, Vec<Span<'static>>) {
+fn nice_y_axis(
+    y_min_raw: f64,
+    y_max_raw: f64,
+    ticks: usize,
+    cfg: &Config,
+) -> (f64, f64, Vec<Span<'static>>) {
     let range = (y_max_raw - y_min_raw).max(1.0);
     let step = nice_step(range, ticks);
     let lo = (y_min_raw / step).floor() * step;
@@ -84,12 +90,10 @@ fn nice_y_axis(y_min_raw: f64, y_max_raw: f64, ticks: usize) -> (f64, f64, Vec<S
     let labels = (0..=n)
         .map(|i| {
             let v = lo + step * i as f64;
-            let s = if v.abs() >= 10_000.0 {
-                format!("{:.0}€", v)
-            } else if v.abs() >= 100.0 {
-                format!("{:.0}€", v)
+            let s = if v.abs() >= 100.0 {
+                cfg.fmt_amount_compact(v, 0)
             } else {
-                format!("{:.1}€", v)
+                cfg.fmt_amount_compact(v, 1)
             };
             Span::styled(s, Style::default().fg(MUTED))
         })
@@ -153,7 +157,19 @@ fn render_title(f: &mut Frame, area: Rect) {
 // ── Tab bar ───────────────────────────────────────────────────────────────────
 
 fn render_tabs(f: &mut Frame, app: &App, area: Rect) {
-    let labels = vec!["  Portfolio  ", "  Accounts  ", "  Monthly  "];
+    let visible = app.visible_tabs();
+    let labels: Vec<String> = visible
+        .iter()
+        .map(|t| match t {
+            Tab::Accounts => "  Accounts  ".to_string(),
+            Tab::Monthly => "  Monthly  ".to_string(),
+            Tab::Portfolio => "  Portfolio  ".to_string(),
+        })
+        .collect();
+    let selected = visible
+        .iter()
+        .position(|&t| t == app.tab)
+        .unwrap_or(0);
     let tabs = Tabs::new(labels)
         .block(
             Block::default()
@@ -161,7 +177,7 @@ fn render_tabs(f: &mut Frame, app: &App, area: Rect) {
                 .border_style(Style::default().fg(MUTED))
                 .border_type(BorderType::Rounded),
         )
-        .select(app.tab.index())
+        .select(selected)
         .style(Style::default().fg(MUTED))
         .highlight_style(
             Style::default()
@@ -298,9 +314,9 @@ fn render_search_overlay(f: &mut Frame, app: &mut App, area: Rect) {
                 Cell::from(t.date.format("%Y-%m-%d").to_string())
                     .style(Style::default().fg(MUTED)),
                 Cell::from(t.description.clone()).style(Style::default().fg(FG)),
-                Cell::from(format!("{:>10.2} €", t.amount))
+                Cell::from(format!("{:>13}", app.config.fmt_amount(t.amount, 2)))
                     .style(Style::default().fg(amt_color)),
-                Cell::from(format!("{:>10.2} €", t.running_total))
+                Cell::from(format!("{:>13}", app.config.fmt_amount(t.running_total, 2)))
                     .style(Style::default().fg(ACCENT)),
             ])
         })
@@ -528,20 +544,20 @@ fn render_holdings_table(f: &mut Frame, app: &App, area: Rect) {
             };
 
             let price_str = if h.price_eur >= 10_000.0 {
-                format!("{:.0} €", h.price_eur)
+                app.config.fmt_amount(h.price_eur, 0)
             } else if h.price_eur >= 100.0 {
-                format!("{:.2} €", h.price_eur)
+                app.config.fmt_amount(h.price_eur, 2)
             } else {
-                format!("{:.3} €", h.price_eur)
+                app.config.fmt_amount(h.price_eur, 3)
             };
 
             let amt_str = if h.amount >= 100.0 {
-                format!("{:.2}", h.amount)
+                app.config.fmt_number(h.amount, 2)
             } else {
-                format!("{:.4}", h.amount)
+                app.config.fmt_number(h.amount, 4)
             };
 
-            let value_str = format!("{:.2} €", h.value_eur);
+            let value_str = app.config.fmt_amount(h.value_eur, 2);
 
             let indicator = if selected { "▶ " } else { "  " };
 
@@ -575,21 +591,21 @@ fn render_holdings_table(f: &mut Frame, app: &App, area: Rect) {
                             (
                                 pct_str,
                                 Style::default().fg(color).bold(),
-                                format!("{abs_prefix}{:.2}€", pl_abs),
+                                format!("{abs_prefix}{}", app.config.fmt_amount_compact(pl_abs, 2)),
                                 Style::default().fg(abs_color).bold(),
                             )
                         } else if basis < 0.0 {
                             (
                                 "—".into(),
                                 Style::default().fg(MUTED),
-                                format!("{:.2}€", pl_abs),
+                                app.config.fmt_amount_compact(pl_abs, 2),
                                 Style::default().fg(MUTED),
                             )
                         } else if h.value_eur > 0.0 {
                             (
                                 "∞".into(),
                                 Style::default().fg(GREEN).bold(),
-                                format!("+{:.2}€", h.value_eur),
+                                format!("+{}", app.config.fmt_amount_compact(h.value_eur, 2)),
                                 Style::default().fg(GREEN).bold(),
                             )
                         } else {
@@ -668,14 +684,14 @@ fn render_holdings_table(f: &mut Frame, app: &App, area: Rect) {
     }
     total_cells.extend([
         Cell::from("Total").style(Style::default().fg(FG).bold()),
-        Cell::from(format!("{:.2} €", total)).style(Style::default().fg(GOLD).bold()),
+        Cell::from(app.config.fmt_amount(total, 2)).style(Style::default().fg(GOLD).bold()),
         Cell::from("100%").style(Style::default().fg(FG).bold()),
         Cell::from(format!("{pl_prefix}{:.1}%", pl_pct))
             .style(Style::default().fg(pl_color).bold()),
     ]);
     if !very_narrow {
         total_cells.push(
-            Cell::from(format!("{pl_prefix}{:.2}€", pl_abs))
+            Cell::from(format!("{pl_prefix}{}", app.config.fmt_amount_compact(pl_abs, 2)))
                 .style(Style::default().fg(pl_color).bold()),
         );
     }
@@ -711,13 +727,19 @@ fn render_holdings_table(f: &mut Frame, app: &App, area: Rect) {
         ]
     };
 
-    let mut header_cells = vec!["Coin"];
+    let pl_header = format!("P/L {}", app.config.currency_symbol);
+    let mut header_cells: Vec<String> = vec!["Coin".into()];
     if !very_narrow {
-        header_cells.push("Amount");
+        header_cells.push("Amount".into());
     }
-    header_cells.extend(["Price", "Value", "Alloc", "P/L %"]);
+    header_cells.extend([
+        "Price".into(),
+        "Value".into(),
+        "Alloc".into(),
+        "P/L %".into(),
+    ]);
     if !very_narrow {
-        header_cells.push("P/L €");
+        header_cells.push(pl_header);
     }
 
     let table = Table::new(rows, widths)
@@ -866,7 +888,7 @@ fn render_price_chart(f: &mut Frame, app: &App, area: Rect) {
         .map(|p| p.1);
     let y_min_raw = all_y.clone().fold(f64::INFINITY, f64::min);
     let y_max_raw = all_y.fold(f64::NEG_INFINITY, f64::max);
-    let (y_min, y_max, y_labels) = nice_y_axis(y_min_raw, y_max_raw, 4);
+    let (y_min, y_max, y_labels) = nice_y_axis(y_min_raw, y_max_raw, 4, &app.config);
 
     let filtered_entries: Vec<_> = coin_entries.iter()
         .filter(|e| {
@@ -952,7 +974,7 @@ fn render_net_worth_chart(f: &mut Frame, app: &App, area: Rect) {
     let x_max = series.points.last().unwrap().0;
     let y_min_raw = series.points.iter().map(|p| p.1).fold(f64::INFINITY, f64::min);
     let y_max_raw = series.points.iter().map(|p| p.1).fold(f64::NEG_INFINITY, f64::max);
-    let (y_min, y_max, y_labels) = nice_y_axis(y_min_raw, y_max_raw, 4);
+    let (y_min, y_max, y_labels) = nice_y_axis(y_min_raw, y_max_raw, 4, &app.config);
 
     let label_count = if area.width < 60 { 3 } else { 5 };
     let n = series.labels.len();
@@ -1001,7 +1023,7 @@ fn render_accounts(f: &mut Frame, app: &mut App, area: Rect) {
     let nw_text = Line::from(vec![
         Span::styled("  Net Worth: ", Style::default().fg(MUTED).bold()),
         Span::styled(
-            format!("{:.2} €", net_worth),
+            app.config.fmt_amount(net_worth, 2),
             Style::default().fg(GOLD).bold(),
         ),
     ]);
@@ -1016,7 +1038,7 @@ fn render_accounts(f: &mut Frame, app: &mut App, area: Rect) {
     if app.account_detail.is_some() {
         let txns = app.account_detail.as_ref().unwrap();
         let name = app.detail_account_name.as_ref().unwrap();
-        render_account_detail(f, txns, name, chunks[2]);
+        render_account_detail(f, txns, name, &app.config, chunks[2]);
     } else if has_goals {
         let goal_h = (app.config.goals.len() as u16 + 2).min(8);
         let bottom = Layout::vertical([
@@ -1049,7 +1071,13 @@ fn render_accounts(f: &mut Frame, app: &mut App, area: Rect) {
     }
 }
 
-fn render_detail_with_title(f: &mut Frame, txns: &[crate::data::Transaction], title: &str, area: Rect) {
+fn render_detail_with_title(
+    f: &mut Frame,
+    txns: &[crate::data::Transaction],
+    title: &str,
+    cfg: &Config,
+    area: Rect,
+) {
     let rows: Vec<Row> = txns
         .iter()
         .map(|t| {
@@ -1057,8 +1085,9 @@ fn render_detail_with_title(f: &mut Frame, txns: &[crate::data::Transaction], ti
             Row::new(vec![
                 Cell::from(t.date.format("%Y-%m-%d").to_string()).style(Style::default().fg(MUTED)),
                 Cell::from(t.description.clone()).style(Style::default().fg(FG)),
-                Cell::from(format!("{:>10.2} €", t.amount)).style(Style::default().fg(amt_color)),
-                Cell::from(format!("{:>10.2} €", t.running_total))
+                Cell::from(format!("{:>13}", cfg.fmt_amount(t.amount, 2)))
+                    .style(Style::default().fg(amt_color)),
+                Cell::from(format!("{:>13}", cfg.fmt_amount(t.running_total, 2)))
                     .style(Style::default().fg(ACCENT)),
             ])
         })
@@ -1088,7 +1117,13 @@ fn render_detail_with_title(f: &mut Frame, txns: &[crate::data::Transaction], ti
     f.render_widget(table, area);
 }
 
-fn render_account_detail(f: &mut Frame, txns: &[crate::data::Transaction], name: &str, area: Rect) {
+fn render_account_detail(
+    f: &mut Frame,
+    txns: &[crate::data::Transaction],
+    name: &str,
+    cfg: &Config,
+    area: Rect,
+) {
     let rows: Vec<Row> = txns
         .iter()
         .map(|t| {
@@ -1096,8 +1131,9 @@ fn render_account_detail(f: &mut Frame, txns: &[crate::data::Transaction], name:
             Row::new(vec![
                 Cell::from(t.date.format("%Y-%m-%d").to_string()).style(Style::default().fg(MUTED)),
                 Cell::from(t.description.clone()).style(Style::default().fg(FG)),
-                Cell::from(format!("{:>10.2} €", t.amount)).style(Style::default().fg(amt_color)),
-                Cell::from(format!("{:>10.2} €", t.running_total))
+                Cell::from(format!("{:>13}", cfg.fmt_amount(t.amount, 2)))
+                    .style(Style::default().fg(amt_color)),
+                Cell::from(format!("{:>13}", cfg.fmt_amount(t.running_total, 2)))
                     .style(Style::default().fg(ACCENT)),
             ])
         })
@@ -1148,7 +1184,7 @@ fn render_accounts_table(f: &mut Frame, app: &mut App, area: Rect) {
                 Style::default().fg(RED)
             };
 
-            let amount_str = format!("{:>12.2} €", b.amount);
+            let amount_str = format!("{:>15}", app.config.fmt_amount(b.amount, 2));
 
             let name = if narrow && b.account.len() > 30 {
                 format!("  {}…", &b.account[..29])
@@ -1181,9 +1217,10 @@ fn render_accounts_table(f: &mut Frame, app: &mut App, area: Rect) {
         vec![Constraint::Min(38), Constraint::Length(16), Constraint::Min(10)]
     };
 
-    let mut header = vec!["Account", "Balance (EUR)"];
+    let bal_header = format!("Balance ({})", app.config.currency_symbol);
+    let mut header: Vec<String> = vec!["Account".into(), bal_header];
     if !narrow {
-        header.push("");
+        header.push(String::new());
     }
 
     let table = Table::new(rows, widths)
@@ -1213,7 +1250,7 @@ fn render_liabilities_table(f: &mut Frame, app: &App, area: Rect) {
         .liabilities
         .iter()
         .map(|b| {
-            let amount_str = format!("{:>12.2} €", b.amount);
+            let amount_str = format!("{:>15}", app.config.fmt_amount(b.amount, 2));
             Row::new(vec![
                 Cell::from(format!("  {}", b.account)).style(Style::default().fg(FG)),
                 Cell::from(amount_str).style(Style::default().fg(RED)),
@@ -1224,11 +1261,14 @@ fn render_liabilities_table(f: &mut Frame, app: &App, area: Rect) {
     let widths = [Constraint::Min(38), Constraint::Length(16)];
 
     let total_liab: f64 = app.liabilities.iter().map(|b| b.amount).sum();
-    let title = format!(" Liabilities  ({:.2} €) ", total_liab);
+    let title = format!(" Liabilities  ({}) ", app.config.fmt_amount(total_liab, 2));
 
     let table = Table::new(rows, widths)
         .header(
-            Row::new(vec!["Account", "Balance (EUR)"])
+            Row::new(vec![
+                "Account".to_string(),
+                format!("Balance ({})", app.config.currency_symbol),
+            ])
                 .style(Style::default().fg(MUTED).bold())
                 .bottom_margin(1),
         )
@@ -1282,7 +1322,12 @@ fn render_goals(f: &mut Frame, app: &App, area: Rect) {
         );
 
         let info = Span::styled(
-            format!(" {:.0}/{:.0}€ {:>3.0}%", g.current, g.target, g.pct),
+            format!(
+                " {}/{} {:>3.0}%",
+                app.config.fmt_amount_compact(g.current, 0),
+                app.config.fmt_amount_compact(g.target, 0),
+                g.pct
+            ),
             Style::default().fg(MUTED),
         );
         f.render_widget(Paragraph::new(Line::from(info)),
@@ -1383,7 +1428,7 @@ fn render_monthly(f: &mut Frame, app: &mut App, area: Rect) {
             .map(|m| m.month_name.as_str())
             .unwrap_or("");
         let title = format!(" {} — {}  [Esc back] ", short, month);
-        render_detail_with_title(f, txns, &title, detail_chunks[1]);
+        render_detail_with_title(f, txns, &title, &app.config, detail_chunks[1]);
     } else {
         render_monthly_expenses(f, app, detail_chunks[1]);
     }
@@ -1429,21 +1474,21 @@ fn render_monthly_summary(f: &mut Frame, app: &App, area: Rect) {
         Line::from(vec![
             Span::styled("  Income    ", Style::default().fg(MUTED)),
             Span::styled(
-                format!("{:.2} €", m.total_income),
+                app.config.fmt_amount(m.total_income, 2),
                 Style::default().fg(GREEN).bold(),
             ),
         ]),
         Line::from(vec![
             Span::styled("  Expenses  ", Style::default().fg(MUTED)),
             Span::styled(
-                format!("{:.2} €", m.total_expenses),
+                app.config.fmt_amount(m.total_expenses, 2),
                 Style::default().fg(RED).bold(),
             ),
         ]),
         Line::from(vec![
             Span::styled("  Net       ", Style::default().fg(MUTED)),
             Span::styled(
-                format!("{net_prefix}{:.2} €", net),
+                format!("{net_prefix}{}", app.config.fmt_amount(net, 2)),
                 Style::default().fg(net_color).bold(),
             ),
         ]),
@@ -1482,7 +1527,11 @@ fn render_monthly_summary(f: &mut Frame, app: &App, area: Rect) {
             text.push(Line::from(vec![
                 Span::styled("  vs ", Style::default().fg(MUTED)),
                 Span::styled(
-                    format!("{short} '{}: {:.0}€", year_ago % 100, ly_net),
+                    format!(
+                        "{short} '{}: {}",
+                        year_ago % 100,
+                        app.config.fmt_amount_compact(ly_net, 0)
+                    ),
                     Style::default().fg(MUTED),
                 ),
                 Span::styled(
@@ -1515,7 +1564,12 @@ fn render_monthly_summary(f: &mut Frame, app: &App, area: Rect) {
                 text.push(Line::from(vec![
                     Span::styled(format!("    {short}: "), Style::default().fg(FG)),
                     Span::styled(
-                        format!("{:.0}/{:.0}€ ({:.0}%)", b.spent, b.limit, b.pct),
+                        format!(
+                            "{}/{} ({:.0}%)",
+                            app.config.fmt_amount_compact(b.spent, 0),
+                            app.config.fmt_amount_compact(b.limit, 0),
+                            b.pct
+                        ),
                         Style::default().fg(RED),
                     ),
                 ]));
@@ -1576,7 +1630,7 @@ fn render_monthly_summary(f: &mut Frame, app: &App, area: Rect) {
         Line::from(vec![
             Span::styled("  Net YTD   ", Style::default().fg(MUTED)),
             Span::styled(
-                format!("{ytd_prefix}{:.0} €", ytd_net),
+                format!("{ytd_prefix}{}", app.config.fmt_amount(ytd_net, 0)),
                 Style::default().fg(ytd_net_color).bold(),
             ),
             Span::styled(
@@ -1587,14 +1641,22 @@ fn render_monthly_summary(f: &mut Frame, app: &App, area: Rect) {
         Line::from(vec![
             Span::styled("  Best      ", Style::default().fg(MUTED)),
             Span::styled(
-                format!("{} (+{:.0} €)", ytd.best_month.get(..3).unwrap_or(&ytd.best_month), ytd.best_net),
+                format!(
+                    "{} (+{})",
+                    ytd.best_month.get(..3).unwrap_or(&ytd.best_month),
+                    app.config.fmt_amount(ytd.best_net, 0)
+                ),
                 Style::default().fg(GREEN),
             ),
         ]),
         Line::from(vec![
             Span::styled("  Worst     ", Style::default().fg(MUTED)),
             Span::styled(
-                format!("{} ({:.0} €)", ytd.worst_month.get(..3).unwrap_or(&ytd.worst_month), ytd.worst_net),
+                format!(
+                    "{} ({})",
+                    ytd.worst_month.get(..3).unwrap_or(&ytd.worst_month),
+                    app.config.fmt_amount(ytd.worst_net, 0)
+                ),
                 Style::default().fg(RED),
             ),
         ]),
@@ -1655,7 +1717,7 @@ fn render_monthly_income(f: &mut Frame, app: &App, area: Rect) {
             let short = name.strip_prefix("income:").unwrap_or(name);
             let mut cells = vec![
                 Cell::from(short.to_string()).style(Style::default().fg(FG)),
-                Cell::from(format!("{:.2} €", amount)).style(Style::default().fg(GREEN)),
+                Cell::from(app.config.fmt_amount(*amount, 2)).style(Style::default().fg(GREEN)),
             ];
             if !narrow {
                 let bar_len = ((amount / max_val) * bar_width as f64) as usize;
@@ -1717,7 +1779,7 @@ fn render_monthly_expenses(f: &mut Frame, app: &mut App, area: Rect) {
             };
             let mut cells = vec![
                 Cell::from(short.to_string()).style(Style::default().fg(color)),
-                Cell::from(format!("{:.2} €", amount)).style(Style::default().fg(RED)),
+                Cell::from(app.config.fmt_amount(*amount, 2)).style(Style::default().fg(RED)),
             ];
             if !narrow {
                 let bar_len = ((amount / max_val) * bar_width as f64) as usize;
@@ -1729,19 +1791,11 @@ fn render_monthly_expenses(f: &mut Frame, app: &mut App, area: Rect) {
                 })));
             }
             if has_budgets {
-                let short_full = format!("expenses:{}", short);
-                if let Some(&limit) = app.config.budgets.get(&short_full)
-                    .or_else(|| app.config.budgets.get(name))
-                    .or_else(|| app.config.budgets.get(short))
-                    .or_else(|| {
-                        app.config.budgets.iter()
-                            .find(|(k, _)| k.eq_ignore_ascii_case(&short_full)
-                                        || k.eq_ignore_ascii_case(name)
-                                        || k.eq_ignore_ascii_case(short))
-                            .map(|(_, v)| v)
-                    })
-                {
-                    let pct = if limit > 0.0 { amount / limit * 100.0 } else { 0.0 };
+                let matched = app.config.budgets.iter()
+                    .find(|(cat, _)| budget_matches(cat, name));
+                if let Some((cat, &limit)) = matched {
+                    let spent = budget_spent(cat, &m.expenses);
+                    let pct = if limit > 0.0 { spent / limit * 100.0 } else { 0.0 };
                     let bar_color = if pct < 80.0 { GREEN }
                                     else if pct <= 100.0 { GOLD }
                                     else { RED };

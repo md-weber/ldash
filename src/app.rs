@@ -34,6 +34,7 @@ fn load_all_data(
     journal_path: &Path,
     journal_dir: &Path,
     nw_period: &str,
+    currency_symbol: &str,
     tabs: [bool; 3],
 ) -> RefreshResult {
     let mut errors = Vec::new();
@@ -53,10 +54,13 @@ fn load_all_data(
                 want_accounts.then(|| s.spawn(|| load_account_balances_eur(journal_path)));
             let t_liabilities =
                 want_accounts.then(|| s.spawn(|| load_liability_balances_eur(journal_path)));
-            let t_nw =
-                want_accounts.then(|| s.spawn(|| load_net_worth_history(journal_path, nw_period)));
-            let t_monthly = want_monthly.then(|| s.spawn(|| load_monthly_data(journal_path)));
-            let t_ly = want_monthly.then(|| s.spawn(|| load_last_year_monthly(journal_path)));
+            let t_nw = want_accounts.then(|| {
+                s.spawn(|| load_net_worth_history(journal_path, nw_period, currency_symbol))
+            });
+            let t_monthly = want_monthly
+                .then(|| s.spawn(|| load_monthly_data(journal_path, currency_symbol)));
+            let t_ly = want_monthly
+                .then(|| s.spawn(|| load_last_year_monthly(journal_path, currency_symbol)));
             (
                 t_crypto.map(|t| t.join().unwrap()),
                 t_accounts.map(|t| t.join().unwrap()),
@@ -77,7 +81,7 @@ fn load_all_data(
 
     let coin_chart_cache = holdings.as_ref().map(|h| {
         let coins: Vec<String> = h.iter().map(|holding| holding.commodity.clone()).collect();
-        load_all_coin_chart_series(journal_path, &price_history, &coins)
+        load_all_coin_chart_series(journal_path, &price_history, &coins, currency_symbol)
     });
 
     let account_balances = accounts_res.map(|res| {
@@ -151,9 +155,6 @@ pub enum Tab {
 }
 
 impl Tab {
-    pub fn all() -> &'static [Tab] {
-        &[Tab::Portfolio, Tab::Accounts, Tab::Monthly]
-    }
     pub fn index(self) -> usize {
         match self {
             Tab::Portfolio => 0,
@@ -299,6 +300,7 @@ pub struct App {
     pub journal_dir: PathBuf,
     pub config: Config,
     pub tab: Tab,
+    pub has_crypto: bool,
     pub price_history: Vec<PriceEntry>,
     pub latest_prices: HashMap<String, f64>,
     pub holdings: Vec<CryptoHolding>,
@@ -351,10 +353,10 @@ impl App {
             eprintln!("Warning: file watcher unavailable, falling back to polling");
         }
 
-        let default_tab = match config.default_tab_index() {
-            1 => Tab::Accounts,
-            2 => Tab::Monthly,
-            _ => Tab::Portfolio,
+        let default_tab = match config.default_tab.as_str() {
+            "portfolio" => Tab::Portfolio,
+            "monthly" => Tab::Monthly,
+            _ => Tab::Accounts,
         };
         let chart_stacked = config.chart_mode != "unstacked";
 
@@ -363,6 +365,7 @@ impl App {
             journal_dir,
             config,
             tab: default_tab,
+            has_crypto: true,
             price_history: Vec::new(),
             latest_prices: HashMap::new(),
             holdings: Vec::new(),
@@ -404,6 +407,26 @@ impl App {
         })
     }
 
+    pub fn visible_tabs(&self) -> Vec<Tab> {
+        let mut v = vec![Tab::Accounts, Tab::Monthly];
+        if self.crypto_enabled() {
+            v.push(Tab::Portfolio);
+        }
+        v
+    }
+
+    pub fn crypto_enabled(&self) -> bool {
+        self.config.show_portfolio.unwrap_or(self.has_crypto)
+    }
+
+    fn fix_tab_after_visibility_change(&mut self) {
+        let visible = self.visible_tabs();
+        if !visible.contains(&self.tab) {
+            self.tab = visible[0];
+            self.tabs_loaded[Tab::Portfolio.index()] = false;
+        }
+    }
+
     pub fn start_refresh(&mut self) {
         self.tabs_loaded = [false; 3];
         self.start_refresh_tabs([true; 3]);
@@ -418,7 +441,10 @@ impl App {
         self.start_refresh_tabs(tabs);
     }
 
-    fn start_refresh_tabs(&mut self, tabs: [bool; 3]) {
+    fn start_refresh_tabs(&mut self, mut tabs: [bool; 3]) {
+        if !self.crypto_enabled() {
+            tabs[Tab::Portfolio.index()] = false;
+        }
         if self.refresh_rx.is_some() {
             return;
         }
@@ -428,12 +454,13 @@ impl App {
         let jp = self.journal_path.clone();
         let jd = self.journal_dir.clone();
         let nw_period = self.nw_range.period_arg().to_string();
+        let currency = self.config.currency_symbol.clone();
 
         let (tx, rx) = mpsc::channel();
         self.refresh_rx = Some(rx);
 
         std::thread::spawn(move || {
-            let result = load_all_data(&jp, &jd, &nw_period, tabs);
+            let result = load_all_data(&jp, &jd, &nw_period, &currency, tabs);
             let _ = tx.send(result);
         });
     }
@@ -453,7 +480,12 @@ impl App {
         self.latest_prices = r.latest_prices;
 
         if let Some(h) = r.holdings {
+            let detected = !h.is_empty();
             self.holdings = h;
+            if detected != self.has_crypto {
+                self.has_crypto = detected;
+                self.fix_tab_after_visibility_change();
+            }
         }
         if let Some(c) = r.coin_chart_cache {
             self.coin_chart_cache = c;
@@ -544,21 +576,21 @@ impl App {
     }
 
     pub fn next_tab(&mut self) {
-        let tabs = Tab::all();
-        let idx = (self.tab.index() + 1) % tabs.len();
-        self.tab = tabs[idx];
+        let tabs = self.visible_tabs();
+        let pos = tabs.iter().position(|&t| t == self.tab).unwrap_or(0);
+        self.tab = tabs[(pos + 1) % tabs.len()];
         self.ensure_tab_loaded(self.tab);
     }
 
     pub fn prev_tab(&mut self) {
-        let tabs = Tab::all();
-        let idx = (self.tab.index() + tabs.len() - 1) % tabs.len();
-        self.tab = tabs[idx];
+        let tabs = self.visible_tabs();
+        let pos = tabs.iter().position(|&t| t == self.tab).unwrap_or(0);
+        self.tab = tabs[(pos + tabs.len() - 1) % tabs.len()];
         self.ensure_tab_loaded(self.tab);
     }
 
     pub fn select_tab(&mut self, idx: usize) {
-        if let Some(&t) = Tab::all().get(idx) {
+        if let Some(&t) = self.visible_tabs().get(idx) {
             self.tab = t;
             self.ensure_tab_loaded(t);
         }
@@ -676,19 +708,7 @@ impl App {
             None => return Vec::new(),
         };
         self.config.budgets.iter().filter_map(|(category, &limit)| {
-            let spent = m.expenses.iter()
-                .find(|(name, _)| {
-                    let short = name.strip_prefix("expenses:").unwrap_or(name);
-                    let full = format!("expenses:{}", short);
-                    category == name
-                        || category == short
-                        || category == &full
-                        || category.eq_ignore_ascii_case(name)
-                        || category.eq_ignore_ascii_case(short)
-                        || category.eq_ignore_ascii_case(&full)
-                })
-                .map(|(_, amount)| *amount)
-                .unwrap_or(0.0);
+            let spent = budget_spent(category, &m.expenses);
             Some(BudgetItem {
                 category: category.clone(),
                 limit,
@@ -731,7 +751,7 @@ impl App {
     fn reload_monthly_year(&mut self) {
         let year = Local::now().date_naive().year() + self.monthly_year_offset;
         let period = format!("monthly in {year}");
-        match data::load_monthly_for_period(&self.journal_path, &period) {
+        match data::load_monthly_for_period(&self.journal_path, &period, &self.config.currency_symbol) {
             Ok(m) => self.monthly = m,
             Err(e) => self.status_msg = format!("Error loading {year} data: {e}"),
         }
@@ -742,7 +762,7 @@ impl App {
     }
 
     fn compute_price_alerts(&mut self) {
-        if self.alert_dismissed || self.price_history.len() < 2 {
+        if self.alert_dismissed || !self.crypto_enabled() || self.price_history.len() < 2 {
             return;
         }
 
@@ -792,9 +812,13 @@ impl App {
     }
 
     pub fn export_current_view(&self) -> String {
+        let sym = &self.config.currency_symbol;
         match self.tab {
             Tab::Portfolio => {
-                let mut csv = String::from("Coin,Amount,Price EUR,Value EUR,Allocation %\n");
+                let header = format!(
+                    "Coin,Amount,Price {sym},Value {sym},Allocation %\n"
+                );
+                let mut csv = header;
                 let total = self.total_portfolio_value();
                 for h in &self.holdings {
                     let alloc = if total > 0.0 { h.value_eur / total * 100.0 } else { 0.0 };
@@ -808,10 +832,10 @@ impl App {
             Tab::Accounts => {
                 if let Some(sel) = self.account_state.selected() {
                     if let Some(b) = self.account_balances.get(sel) {
-                        return format!("{}\t{:.2} €", b.account, b.amount);
+                        return format!("{}\t{}", b.account, self.config.fmt_amount(b.amount, 2));
                     }
                 }
-                let mut csv = String::from("Account,Balance EUR\n");
+                let mut csv = format!("Account,Balance {sym}\n");
                 for b in &self.account_balances {
                     csv.push_str(&format!("{},{:.2}\n", b.account, b.amount));
                 }
@@ -885,7 +909,7 @@ impl App {
 
     fn reload_net_worth(&mut self) {
         let period = self.nw_range.period_arg();
-        match load_net_worth_history(&self.journal_path, &period) {
+        match load_net_worth_history(&self.journal_path, &period, &self.config.currency_symbol) {
             Ok(series) => self.net_worth_history = series,
             Err(e) => self.status_msg = format!("Error loading net worth: {e}"),
         }
@@ -985,6 +1009,35 @@ impl App {
             self.search_state.select(Some(i + 1));
         }
     }
+}
+
+/// Returns true if expense `name` (e.g. "expenses:abos:youtube premium")
+/// falls under budget `category` (e.g. "expenses:abos" or "abos").
+pub fn budget_matches(category: &str, name: &str) -> bool {
+    let cat_full = if category.starts_with("expenses:") {
+        category.to_lowercase()
+    } else {
+        format!("expenses:{}", category.to_lowercase())
+    };
+    let name_lower = name.to_lowercase();
+    name_lower == cat_full || name_lower.starts_with(&format!("{}:", cat_full))
+}
+
+/// Sum of all leaf expenses matching `category`. Leaf = no child entry present
+/// in `expenses`. Prevents double-counting when hledger emits both a parent
+/// account and its sub-accounts (both carry the same aggregated amount).
+pub fn budget_spent(category: &str, expenses: &[(String, f64)]) -> f64 {
+    expenses
+        .iter()
+        .filter(|(name, _)| budget_matches(category, name))
+        .filter(|(name, _)| {
+            let name_lower = name.to_lowercase();
+            !expenses
+                .iter()
+                .any(|(other, _)| other.to_lowercase().starts_with(&format!("{}:", name_lower)))
+        })
+        .map(|(_, amount)| *amount)
+        .sum()
 }
 
 fn month_name_to_period(month_name: &str, year: i32) -> String {
