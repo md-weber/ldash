@@ -1,7 +1,7 @@
 use chrono::Datelike;
 use ratatui::{prelude::*, widgets::*};
 
-use crate::app::{budget_matches, budget_spent, App};
+use crate::app::{budget_matches, budget_spent, App, MonthlyFocus};
 use super::{ACCENT, GREEN, RED, GOLD, MUTED, FG, expense_color, render_detail_with_title};
 
 pub(super) fn render_monthly(f: &mut Frame, app: &mut App, area: Rect) {
@@ -26,9 +26,16 @@ pub(super) fn render_monthly(f: &mut Frame, app: &mut App, area: Rect) {
             .split(chunks[2])
     };
 
-    render_monthly_income(f, app, detail_chunks[0]);
+    if let (Some(txns), Some(name)) = (&app.income_detail.clone(), &app.detail_income_name.clone()) {
+        let short = name.strip_prefix("income:").unwrap_or(name);
+        let month = app.current_month().map(|m| m.month_name.as_str()).unwrap_or("");
+        let title = format!(" {} — {}  [Esc back] ", short, month);
+        render_detail_with_title(f, txns, &title, &app.config, detail_chunks[0]);
+    } else {
+        render_monthly_income(f, app, detail_chunks[0]);
+    }
 
-    if let (Some(txns), Some(name)) = (&app.expense_detail, &app.detail_expense_name) {
+    if let (Some(txns), Some(name)) = (&app.expense_detail.clone(), &app.detail_expense_name.clone()) {
         let short = name.strip_prefix("expenses:").unwrap_or(name);
         let month = app
             .current_month()
@@ -370,8 +377,9 @@ fn render_monthly_summary(f: &mut Frame, app: &App, area: Rect) {
     f.render_widget(spark_net, spark_rows[2]);
 }
 
-fn render_monthly_income(f: &mut Frame, app: &App, area: Rect) {
+fn render_monthly_income(f: &mut Frame, app: &mut App, area: Rect) {
     let narrow = area.width < 100;
+    let focused = app.monthly_focus == MonthlyFocus::Income;
     let empty = crate::data::SingleMonth::default();
     let m = app.current_month().unwrap_or(&empty);
     let max_val = m.income.first().map(|i| i.1).unwrap_or(1.0);
@@ -406,28 +414,36 @@ fn render_monthly_income(f: &mut Frame, app: &App, area: Rect) {
         header.push("");
     }
 
+    let title = if app.income_detail.is_none() {
+        " Income  [i] focus  [Enter] detail ".to_string()
+    } else {
+        " Income ".to_string()
+    };
+
+    let border_color = if focused { ACCENT } else { MUTED };
+
     let table = Table::new(rows, widths)
         .header(
             Row::new(header)
                 .style(Style::default().fg(MUTED).bold())
                 .bottom_margin(1),
         )
+        .row_highlight_style(Style::default().bg(Color::Rgb(40, 40, 60)).bold())
+        .highlight_symbol("▶ ")
         .block(
             Block::default()
-                .title(Span::styled(
-                    " Income ",
-                    Style::default().fg(GREEN).bold(),
-                ))
+                .title(Span::styled(title, Style::default().fg(GREEN).bold()))
                 .borders(Borders::ALL)
                 .border_type(BorderType::Rounded)
-                .border_style(Style::default().fg(MUTED)),
+                .border_style(Style::default().fg(border_color)),
         );
 
-    f.render_widget(table, area);
+    f.render_stateful_widget(table, area, &mut app.income_state);
 }
 
 fn render_monthly_expenses(f: &mut Frame, app: &mut App, area: Rect) {
     let narrow = area.width < 100;
+    let focused = app.monthly_focus == MonthlyFocus::Expenses;
     let has_budgets = !app.config.budgets.is_empty();
     let empty = crate::data::SingleMonth::default();
     let m = app.current_month().unwrap_or(&empty);
@@ -517,7 +533,7 @@ fn render_monthly_expenses(f: &mut Frame, app: &mut App, area: Rect) {
                 ))
                 .borders(Borders::ALL)
                 .border_type(BorderType::Rounded)
-                .border_style(Style::default().fg(MUTED)),
+                .border_style(Style::default().fg(if focused { ACCENT } else { MUTED })),
         );
 
     f.render_stateful_widget(table, area, &mut app.expense_state);

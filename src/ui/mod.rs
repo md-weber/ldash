@@ -290,8 +290,8 @@ fn render_loading_overlay(f: &mut Frame, area: Rect) {
 }
 
 fn render_help_popup(f: &mut Frame, area: Rect) {
-    let w = 44u16.min(area.width.saturating_sub(4));
-    let h = 18u16.min(area.height.saturating_sub(4));
+    let w = 66u16.min(area.width.saturating_sub(4));
+    let h = 20u16.min(area.height.saturating_sub(4));
     let popup = Rect {
         x: area.x + (area.width.saturating_sub(w)) / 2,
         y: area.y + (area.height.saturating_sub(h)) / 2,
@@ -306,22 +306,22 @@ fn render_help_popup(f: &mut Frame, area: Rect) {
         ("Tab / Shift-Tab", "Next / prev tab"),
         ("↑ k / ↓ j", "Scroll / select"),
         ("← h / → l", "Month nav / NW range"),
-        ("Enter", "Drill into detail"),
+        ("Enter", "Drill into category detail"),
+        ("i", "Toggle income/expense focus (Monthly)"),
         ("/", "Search transactions"),
-        ("y / Y", "Year back/fwd (Monthly)"),
-        ("Y", "Copy view to clipboard"),
-        ("s", "Toggle chart stacked/unstacked"),
+        ("y / Y", "Year back / forward (Monthly)"),
+        ("Y", "Copy view to clipboard (non-Monthly)"),
+        ("s", "Toggle chart stacked / unstacked"),
         ("c", "Toggle expense colors"),
-        ("Esc", "Back / quit"),
         ("r", "Refresh data"),
-        ("?", "Toggle this help"),
-        ("q", "Quit"),
+        ("Esc", "Close detail / back / quit"),
+        ("? / q", "Toggle help / quit"),
     ];
 
     let mut lines = vec![Line::from("")];
     for (key, desc) in bindings {
         lines.push(Line::from(vec![
-            Span::styled(format!("  {:<18}", key), Style::default().fg(ACCENT).bold()),
+            Span::styled(format!("  {:<20}", key), Style::default().fg(ACCENT).bold()),
             Span::styled(*desc, Style::default().fg(FG)),
         ]));
     }

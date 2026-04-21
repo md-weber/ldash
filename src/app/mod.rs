@@ -146,12 +146,16 @@ pub struct App {
     pub last_year: MonthlyData,
     pub monthly_year_offset: i32,
     pub selected_holding: usize,
+    pub monthly_focus: MonthlyFocus,
     pub account_state: TableState,
     pub expense_state: TableState,
+    pub income_state: TableState,
     pub account_detail: Option<Vec<Transaction>>,
     pub detail_account_name: Option<String>,
     pub expense_detail: Option<Vec<Transaction>>,
     pub detail_expense_name: Option<String>,
+    pub income_detail: Option<Vec<Transaction>>,
+    pub detail_income_name: Option<String>,
     pub portfolio_range: PortfolioRange,
     pub chart_stacked: bool,
     pub expense_colors: bool,
@@ -211,12 +215,16 @@ impl App {
             last_year: MonthlyData::default(),
             monthly_year_offset: 0,
             selected_holding: 0,
+            monthly_focus: MonthlyFocus::default(),
             account_state: TableState::default().with_selected(0),
             expense_state: TableState::default().with_selected(0),
+            income_state: TableState::default().with_selected(0),
             account_detail: None,
             detail_account_name: None,
             expense_detail: None,
             detail_expense_name: None,
+            income_detail: None,
+            detail_income_name: None,
             portfolio_range: PortfolioRange::All,
             chart_stacked,
             expense_colors: true,
@@ -470,10 +478,16 @@ impl App {
                 let i = self.account_state.selected().unwrap_or(0);
                 self.account_state.select(Some(i.saturating_sub(1)));
             }
-            Tab::Monthly => {
-                let i = self.expense_state.selected().unwrap_or(0);
-                self.expense_state.select(Some(i.saturating_sub(1)));
-            }
+            Tab::Monthly => match self.monthly_focus {
+                MonthlyFocus::Income => {
+                    let i = self.income_state.selected().unwrap_or(0);
+                    self.income_state.select(Some(i.saturating_sub(1)));
+                }
+                MonthlyFocus::Expenses => {
+                    let i = self.expense_state.selected().unwrap_or(0);
+                    self.expense_state.select(Some(i.saturating_sub(1)));
+                }
+            },
         }
     }
 
@@ -490,13 +504,22 @@ impl App {
                     self.account_state.select(Some(i + 1));
                 }
             }
-            Tab::Monthly => {
-                let i = self.expense_state.selected().unwrap_or(0);
-                let len = self.current_month().map(|m| m.expenses.len()).unwrap_or(0);
-                if i + 1 < len {
-                    self.expense_state.select(Some(i + 1));
+            Tab::Monthly => match self.monthly_focus {
+                MonthlyFocus::Income => {
+                    let i = self.income_state.selected().unwrap_or(0);
+                    let len = self.current_month().map(|m| m.income.len()).unwrap_or(0);
+                    if i + 1 < len {
+                        self.income_state.select(Some(i + 1));
+                    }
                 }
-            }
+                MonthlyFocus::Expenses => {
+                    let i = self.expense_state.selected().unwrap_or(0);
+                    let len = self.current_month().map(|m| m.expenses.len()).unwrap_or(0);
+                    if i + 1 < len {
+                        self.expense_state.select(Some(i + 1));
+                    }
+                }
+            },
         }
     }
 
@@ -832,6 +855,37 @@ impl App {
         self.detail_expense_name = None;
     }
 
+    pub fn open_income_detail(&mut self) {
+        if self.tab != Tab::Monthly || self.income_detail.is_some() { return; }
+        let sel = self.income_state.selected().unwrap_or(0);
+        let (category, period) = match self.current_month() {
+            Some(m) => match m.income.get(sel) {
+                Some((cat, _)) => (cat.clone(), month_name_to_period(&m.month_name, self.displayed_year())),
+                None => return,
+            },
+            None => return,
+        };
+        match load_recent_transactions(&self.journal_path, &category, 50, Some(&period)) {
+            Ok(txns) => {
+                self.detail_income_name = Some(category);
+                self.income_detail = Some(txns);
+            }
+            Err(e) => self.status_msg = format!("Error loading transactions: {e}"),
+        }
+    }
+
+    pub fn close_income_detail(&mut self) {
+        self.income_detail = None;
+        self.detail_income_name = None;
+    }
+
+    pub fn toggle_monthly_focus(&mut self) {
+        self.monthly_focus = match self.monthly_focus {
+            MonthlyFocus::Income   => MonthlyFocus::Expenses,
+            MonthlyFocus::Expenses => MonthlyFocus::Income,
+        };
+    }
+
     pub fn open_search(&mut self) {
         self.search_active = true;
         self.search_query.clear();
@@ -897,12 +951,16 @@ impl App {
             last_year: crate::data::MonthlyData::default(),
             monthly_year_offset: 0,
             selected_holding: 0,
+            monthly_focus: MonthlyFocus::default(),
             account_state: ratatui::widgets::TableState::default().with_selected(0),
             expense_state: ratatui::widgets::TableState::default().with_selected(0),
+            income_state: ratatui::widgets::TableState::default().with_selected(0),
             account_detail: None,
             detail_account_name: None,
             expense_detail: None,
             detail_expense_name: None,
+            income_detail: None,
+            detail_income_name: None,
             portfolio_range: PortfolioRange::All,
             chart_stacked: true,
             expense_colors: false,

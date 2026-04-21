@@ -1,6 +1,5 @@
 ---
 source: src/ui/mod.rs
-assertion_line: 529
 expression: render_to_string(&mut app)
 ---
   ⬡ Ledger Dashboard v0.1.0
@@ -33,10 +32,10 @@ expression: render_to_string(&mut app)
 │                                  ││███████████████                   ││▇█                                            │
 │                                  ││███████████████                   ││██                                            │
 ╰──────────────────────────────────╯╰──────────────────────────────────╯╰──────────────────────────────────────────────╯
-╭ Income ──────────────────────────────────────────────────╮╭ Expenses ────────────────────────────────────────────────╮
-│Source                                        Amount      ││  Category                                    Amount      │
+╭ Income  [i] focus  [Enter] detail ───────────────────────╮╭ Expenses ────────────────────────────────────────────────╮
+│  Source                                      Amount      ││  Category                                    Amount      │
 │                                                          ││                                                          │
-│salary                                        3.000,00 €  ││▶ housing                                     1.200,00 €  │
+│▶ salary                                      3.000,00 €  ││▶ housing                                     1.200,00 €  │
 │                                                          ││  food                                        500,00 €    │
 │                                                          ││                                                          │
 │                                                          ││                                                          │

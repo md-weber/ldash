@@ -26,6 +26,13 @@ pub struct RefreshResult {
     pub last_year: TabData<MonthlyData>,
 }
 
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
+pub enum MonthlyFocus {
+    Income,
+    #[default]
+    Expenses,
+}
+
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum Tab {
     Portfolio,

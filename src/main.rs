@@ -302,6 +302,8 @@ fn run(terminal: &mut Terminal<CrosstermBackend<io::Stdout>>, journal_path: Path
                             KeyCode::Esc => {
                                 if app.account_detail.is_some() {
                                     app.close_account_detail();
+                                } else if app.income_detail.is_some() {
+                                    app.close_income_detail();
                                 } else if app.expense_detail.is_some() {
                                     app.close_expense_detail();
                                 } else {
@@ -310,9 +312,13 @@ fn run(terminal: &mut Terminal<CrosstermBackend<io::Stdout>>, journal_path: Path
                             }
                             KeyCode::Enter => match app.tab {
                                 app::Tab::Accounts => app.open_account_detail(),
-                                app::Tab::Monthly => app.open_expense_detail(),
+                                app::Tab::Monthly => match app.monthly_focus {
+                                    app::MonthlyFocus::Income   => app.open_income_detail(),
+                                    app::MonthlyFocus::Expenses => app.open_expense_detail(),
+                                },
                                 _ => {}
                             },
+                            KeyCode::Char('i') if app.tab == app::Tab::Monthly => app.toggle_monthly_focus(),
                             KeyCode::Char('/') => app.open_search(),
                             KeyCode::Char('?') => app.show_help = true,
                             KeyCode::Tab => app.next_tab(),
