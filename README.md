@@ -66,6 +66,8 @@ cd ~/Finance && ldash
 | `1` / `2` / `3` | Switch tab |
 | `Tab` / `Shift-Tab` | Next / previous tab |
 | `↑` `k` / `↓` `j` | Scroll / select |
+| `PgUp` / `PgDn` | Page up / down |
+| `Home` / `End` | Jump to first / last row |
 | `←` `h` / `→` `l` | Month navigation / net worth range |
 | `Enter` | Drill into account / expense category |
 | `s` | Toggle chart mode (stacked / unstacked) |
@@ -123,6 +125,41 @@ On first launch, ldash creates a config file at `~/.config/ldash/config.toml` wi
 ```
 
 Missing or partially filled config is fine — defaults fill any gaps.
+
+### Theming
+
+ldash ships three built-in presets. Set one in your config:
+
+```toml
+[theme]
+preset = "dark"        # default — dark background, cyan accent
+# preset = "light"    # light background, blue accent (self-contained: works on any terminal)
+# preset = "solarized" # Solarized Dark palette
+```
+
+Every color can also be overridden individually, with or without a preset:
+
+```toml
+[theme]
+preset  = "solarized"
+accent  = "#ff8800"   # override just the accent color
+```
+
+Available color fields and their defaults (dark preset):
+
+| Field | Default | Role |
+|-------|---------|------|
+| `accent` | `cyan` | Borders, highlights, selected tab |
+| `positive` | `green` | Income, gains, positive amounts |
+| `negative` | `red` | Expenses, losses, negative amounts |
+| `muted` | `darkgray` | Secondary text, axis labels |
+| `gold` | `yellow` | Net worth line, titles, P/L totals |
+| `fg` | `white` | Primary text |
+| `background` | `#14141e` | Title bar, popup backgrounds |
+
+Color values accept named colors (`red`, `green`, `blue`, `yellow`, `cyan`, `magenta`, `white`, `gray`, `darkgray`) or hex codes (`#RRGGBB`).
+
+Theme changes take effect immediately when the config file is saved (hot-reload — no restart needed).
 
 ## Journal Structure
 

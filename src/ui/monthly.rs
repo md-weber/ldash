@@ -2,9 +2,9 @@ use chrono::Datelike;
 use ratatui::{prelude::*, widgets::*};
 
 use crate::app::{budget_matches, budget_spent, App, MonthlyFocus};
-use super::{ACCENT, GREEN, RED, GOLD, MUTED, FG, expense_color, render_detail_with_title};
+use super::{Theme, expense_color, render_detail_with_title};
 
-pub(super) fn render_monthly(f: &mut Frame, app: &mut App, area: Rect) {
+pub(super) fn render_monthly(f: &mut Frame, app: &mut App, area: Rect, theme: &Theme) {
     let narrow = area.width < 100;
     let very_narrow = area.width < 80;
 
@@ -16,8 +16,8 @@ pub(super) fn render_monthly(f: &mut Frame, app: &mut App, area: Rect) {
     .split(area);
 
     app.monthly_chart_area = chunks[0];
-    render_monthly_chart(f, app, chunks[0]);
-    render_monthly_summary(f, app, chunks[1]);
+    render_monthly_chart(f, app, chunks[0], theme);
+    render_monthly_summary(f, app, chunks[1], theme);
 
     let detail_chunks = if very_narrow {
         Layout::vertical([Constraint::Percentage(50), Constraint::Percentage(50)])
@@ -31,9 +31,9 @@ pub(super) fn render_monthly(f: &mut Frame, app: &mut App, area: Rect) {
         let short = name.strip_prefix("income:").unwrap_or(name);
         let month = app.current_month().map(|m| m.month_name.as_str()).unwrap_or("");
         let title = format!(" {} — {}  [Esc back] ", short, month);
-        render_detail_with_title(f, txns, &title, &app.config, detail_chunks[0]);
+        render_detail_with_title(f, txns, &title, &app.config, detail_chunks[0], theme);
     } else {
-        render_monthly_income(f, app, detail_chunks[0]);
+        render_monthly_income(f, app, detail_chunks[0], theme);
     }
 
     if let (Some(txns), Some(name)) = (&app.expense_detail.clone(), &app.detail_expense_name.clone()) {
@@ -43,13 +43,13 @@ pub(super) fn render_monthly(f: &mut Frame, app: &mut App, area: Rect) {
             .map(|m| m.month_name.as_str())
             .unwrap_or("");
         let title = format!(" {} — {}  [Esc back] ", short, month);
-        render_detail_with_title(f, txns, &title, &app.config, detail_chunks[1]);
+        render_detail_with_title(f, txns, &title, &app.config, detail_chunks[1], theme);
     } else {
-        render_monthly_expenses(f, app, detail_chunks[1]);
+        render_monthly_expenses(f, app, detail_chunks[1], theme);
     }
 }
 
-fn render_monthly_chart(f: &mut Frame, app: &App, area: Rect) {
+fn render_monthly_chart(f: &mut Frame, app: &App, area: Rect, theme: &Theme) {
     use ratatui::widgets::{Bar, BarChart, BarGroup};
 
     let groups: Vec<BarGroup> = app
@@ -62,12 +62,12 @@ fn render_monthly_chart(f: &mut Frame, app: &App, area: Rect) {
             let (inc_color, exp_color) = if selected {
                 (Color::LightGreen, Color::LightRed)
             } else {
-                (GREEN, RED)
+                (theme.positive, theme.negative)
             };
 
             let label = &m.month_name[..3];
             BarGroup::default()
-                .label(Line::from(label.to_string()).style(Style::default().fg(if selected { ACCENT } else { MUTED })))
+                .label(Line::from(label.to_string()).style(Style::default().fg(if selected { theme.accent } else { theme.muted })))
                 .bars(&[
                     Bar::default()
                         .value(m.total_income as u64)
@@ -86,21 +86,22 @@ fn render_monthly_chart(f: &mut Frame, app: &App, area: Rect) {
     };
 
     let mut chart = BarChart::default()
+        .style(Style::default().bg(theme.background))
         .block(
             Block::default()
                 .title(Span::styled(
                     chart_title,
-                    Style::default().fg(ACCENT).bold(),
+                    Style::default().fg(theme.accent).bold(),
                 ))
                 .borders(Borders::ALL)
                 .border_type(BorderType::Rounded)
-                .border_style(Style::default().fg(MUTED))
+                .border_style(Style::default().fg(theme.muted))
                 .padding(Padding::new(1, 1, 1, 0)),
         )
         .bar_width(3)
         .bar_gap(0)
         .group_gap(2)
-        .bar_style(Style::default().fg(GREEN));
+        .bar_style(Style::default().fg(theme.positive));
 
     for g in groups {
         chart = chart.data(g);
@@ -109,11 +110,11 @@ fn render_monthly_chart(f: &mut Frame, app: &App, area: Rect) {
     f.render_widget(chart, area);
 }
 
-fn render_monthly_summary(f: &mut Frame, app: &App, area: Rect) {
+fn render_monthly_summary(f: &mut Frame, app: &App, area: Rect, theme: &Theme) {
     let empty = crate::data::SingleMonth::default();
     let m = app.current_month().unwrap_or(&empty);
     let net = m.total_income - m.total_expenses;
-    let net_color = if net >= 0.0 { GREEN } else { RED };
+    let net_color = if net >= 0.0 { theme.positive } else { theme.negative };
     let net_prefix = if net >= 0.0 { "+" } else { "" };
 
     let savings_rate = if m.total_income > 0.0 {
@@ -147,21 +148,21 @@ fn render_monthly_summary(f: &mut Frame, app: &App, area: Rect) {
 
     let mut text = vec![
         Line::from(vec![
-            Span::styled("  Income    ", Style::default().fg(MUTED)),
+            Span::styled("  Income    ", Style::default().fg(theme.muted)),
             Span::styled(
                 app.config.fmt_amount(m.total_income, 2),
-                Style::default().fg(GREEN).bold(),
+                Style::default().fg(theme.positive).bold(),
             ),
         ]),
         Line::from(vec![
-            Span::styled("  Expenses  ", Style::default().fg(MUTED)),
+            Span::styled("  Expenses  ", Style::default().fg(theme.muted)),
             Span::styled(
                 app.config.fmt_amount(m.total_expenses, 2),
-                Style::default().fg(RED).bold(),
+                Style::default().fg(theme.negative).bold(),
             ),
         ]),
         Line::from(vec![
-            Span::styled("  Net       ", Style::default().fg(MUTED)),
+            Span::styled("  Net       ", Style::default().fg(theme.muted)),
             Span::styled(
                 format!("{net_prefix}{}", app.config.fmt_amount(net, 2)),
                 Style::default().fg(net_color).bold(),
@@ -179,12 +180,12 @@ fn render_monthly_summary(f: &mut Frame, app: &App, area: Rect) {
 
         if incomplete {
             text.push(Line::from(vec![
-                Span::styled("  vs ", Style::default().fg(MUTED)),
+                Span::styled("  vs ", Style::default().fg(theme.muted)),
                 Span::styled(
                     format!("{short} '{}", year_ago % 100),
-                    Style::default().fg(MUTED),
+                    Style::default().fg(theme.muted),
                 ),
-                Span::styled("  (partial data)", Style::default().fg(MUTED)),
+                Span::styled("  (partial data)", Style::default().fg(theme.muted)),
             ]));
         } else {
             let ly_net = ly.total_income - ly.total_expenses;
@@ -195,19 +196,19 @@ fn render_monthly_summary(f: &mut Frame, app: &App, area: Rect) {
                 0.0
             };
             let (arrow, color) = if diff <= 0.0 {
-                ("↓", GREEN)
+                ("↓", theme.positive)
             } else {
-                ("↑", RED)
+                ("↑", theme.negative)
             };
             text.push(Line::from(vec![
-                Span::styled("  vs ", Style::default().fg(MUTED)),
+                Span::styled("  vs ", Style::default().fg(theme.muted)),
                 Span::styled(
                     format!(
                         "{short} '{}: {}",
                         year_ago % 100,
                         app.config.fmt_amount_compact(ly_net, 0)
                     ),
-                    Style::default().fg(MUTED),
+                    Style::default().fg(theme.muted),
                 ),
                 Span::styled(
                     format!("  {arrow}{:.0}%", pct.abs()),
@@ -223,21 +224,21 @@ fn render_monthly_summary(f: &mut Frame, app: &App, area: Rect) {
         text.push(Line::from(""));
         if over.is_empty() {
             text.push(Line::from(vec![
-                Span::styled("  ✓ ", Style::default().fg(GREEN)),
-                Span::styled("All budgets on track", Style::default().fg(GREEN)),
+                Span::styled("  ✓ ", Style::default().fg(theme.positive)),
+                Span::styled("All budgets on track", Style::default().fg(theme.positive)),
             ]));
         } else {
             text.push(Line::from(vec![
-                Span::styled("  ⚠ ", Style::default().fg(RED)),
+                Span::styled("  ⚠ ", Style::default().fg(theme.negative)),
                 Span::styled(
                     format!("{} over budget:", over.len()),
-                    Style::default().fg(RED).bold(),
+                    Style::default().fg(theme.negative).bold(),
                 ),
             ]));
             for b in &over {
                 let short = b.category.strip_prefix("expenses:").unwrap_or(&b.category);
                 text.push(Line::from(vec![
-                    Span::styled(format!("    {short}: "), Style::default().fg(FG)),
+                    Span::styled(format!("    {short}: "), Style::default().fg(theme.fg)),
                     Span::styled(
                         format!(
                             "{}/{} ({:.0}%)",
@@ -245,7 +246,7 @@ fn render_monthly_summary(f: &mut Frame, app: &App, area: Rect) {
                             app.config.fmt_amount_compact(b.limit, 0),
                             b.pct
                         ),
-                        Style::default().fg(RED),
+                        Style::default().fg(theme.negative),
                     ),
                 ]));
             }
@@ -253,10 +254,10 @@ fn render_monthly_summary(f: &mut Frame, app: &App, area: Rect) {
     }
 
     let left_block = Block::default()
-        .title(Span::styled(nav_title, Style::default().fg(ACCENT).bold()))
+        .title(Span::styled(nav_title, Style::default().fg(theme.accent).bold()))
         .borders(Borders::ALL)
         .border_type(BorderType::Rounded)
-        .border_style(Style::default().fg(MUTED));
+        .border_style(Style::default().fg(theme.muted));
 
     f.render_widget(Paragraph::new(text).block(left_block), chunks[0]);
 
@@ -265,34 +266,34 @@ fn render_monthly_summary(f: &mut Frame, app: &App, area: Rect) {
             Block::default()
                 .title(Span::styled(
                     " Savings Rate ",
-                    Style::default().fg(ACCENT).bold(),
+                    Style::default().fg(theme.accent).bold(),
                 ))
                 .borders(Borders::ALL)
                 .border_type(BorderType::Rounded)
-                .border_style(Style::default().fg(MUTED)),
+                .border_style(Style::default().fg(theme.muted)),
         )
-        .gauge_style(Style::default().fg(net_color).bg(Color::Rgb(30, 30, 30)))
+        .gauge_style(Style::default().fg(net_color).bg(theme.background))
         .percent(savings_rate)
         .label(Span::styled(
             format!("{savings_rate}% saved"),
-            Style::default().fg(FG).bold(),
+            Style::default().fg(theme.fg).bold(),
         ));
 
     f.render_widget(gauge, chunks[1]);
 
     let ytd = app.ytd_stats();
     let ytd_net = ytd.total_income - ytd.total_expenses;
-    let ytd_net_color = if ytd_net >= 0.0 { GREEN } else { RED };
+    let ytd_net_color = if ytd_net >= 0.0 { theme.positive } else { theme.negative };
     let ytd_prefix = if ytd_net >= 0.0 { "+" } else { "" };
 
     let ytd_block = Block::default()
         .title(Span::styled(
             " Year to Date ",
-            Style::default().fg(GOLD).bold(),
+            Style::default().fg(theme.gold).bold(),
         ))
         .borders(Borders::ALL)
         .border_type(BorderType::Rounded)
-        .border_style(Style::default().fg(MUTED));
+        .border_style(Style::default().fg(theme.muted));
     let ytd_area = ytd_block.inner(chunks[2]);
     f.render_widget(ytd_block, chunks[2]);
 
@@ -303,36 +304,36 @@ fn render_monthly_summary(f: &mut Frame, app: &App, area: Rect) {
 
     let ytd_text = vec![
         Line::from(vec![
-            Span::styled("  Net YTD   ", Style::default().fg(MUTED)),
+            Span::styled("  Net YTD   ", Style::default().fg(theme.muted)),
             Span::styled(
                 format!("{ytd_prefix}{}", app.config.fmt_amount(ytd_net, 0)),
                 Style::default().fg(ytd_net_color).bold(),
             ),
             Span::styled(
                 format!("  ({:.0}% saved)", ytd.avg_savings_rate),
-                Style::default().fg(MUTED),
+                Style::default().fg(theme.muted),
             ),
         ]),
         Line::from(vec![
-            Span::styled("  Best      ", Style::default().fg(MUTED)),
+            Span::styled("  Best      ", Style::default().fg(theme.muted)),
             Span::styled(
                 format!(
                     "{} (+{})",
                     ytd.best_month.get(..3).unwrap_or(&ytd.best_month),
                     app.config.fmt_amount(ytd.best_net, 0)
                 ),
-                Style::default().fg(GREEN),
+                Style::default().fg(theme.positive),
             ),
         ]),
         Line::from(vec![
-            Span::styled("  Worst     ", Style::default().fg(MUTED)),
+            Span::styled("  Worst     ", Style::default().fg(theme.muted)),
             Span::styled(
                 format!(
                     "{} ({})",
                     ytd.worst_month.get(..3).unwrap_or(&ytd.worst_month),
                     app.config.fmt_amount(ytd.worst_net, 0)
                 ),
-                Style::default().fg(RED),
+                Style::default().fg(theme.negative),
             ),
         ]),
     ];
@@ -352,33 +353,33 @@ fn render_monthly_summary(f: &mut Frame, app: &App, area: Rect) {
 
     let spark_inc = Sparkline::default()
         .block(Block::default()
-            .title(Span::styled(" Income ▁▃▅ ", Style::default().fg(GREEN)))
+            .title(Span::styled(" Income ▁▃▅ ", Style::default().fg(theme.positive)))
             .borders(Borders::TOP)
-            .border_style(Style::default().fg(MUTED)))
+            .border_style(Style::default().fg(theme.muted)))
         .data(&inc_data)
-        .style(Style::default().fg(GREEN));
+        .style(Style::default().fg(theme.positive).bg(theme.background));
     f.render_widget(spark_inc, spark_rows[0]);
 
     let spark_exp = Sparkline::default()
         .block(Block::default()
-            .title(Span::styled(" Expenses ▁▃▅ ", Style::default().fg(RED)))
+            .title(Span::styled(" Expenses ▁▃▅ ", Style::default().fg(theme.negative)))
             .borders(Borders::TOP)
-            .border_style(Style::default().fg(MUTED)))
+            .border_style(Style::default().fg(theme.muted)))
         .data(&exp_data)
-        .style(Style::default().fg(RED));
+        .style(Style::default().fg(theme.negative).bg(theme.background));
     f.render_widget(spark_exp, spark_rows[1]);
 
     let spark_net = Sparkline::default()
         .block(Block::default()
-            .title(Span::styled(" Net ▁▃▅ ", Style::default().fg(GOLD)))
+            .title(Span::styled(" Net ▁▃▅ ", Style::default().fg(theme.gold)))
             .borders(Borders::TOP)
-            .border_style(Style::default().fg(MUTED)))
+            .border_style(Style::default().fg(theme.muted)))
         .data(&net_data)
-        .style(Style::default().fg(GOLD));
+        .style(Style::default().fg(theme.gold).bg(theme.background));
     f.render_widget(spark_net, spark_rows[2]);
 }
 
-fn render_monthly_income(f: &mut Frame, app: &mut App, area: Rect) {
+fn render_monthly_income(f: &mut Frame, app: &mut App, area: Rect, theme: &Theme) {
     let narrow = area.width < 100;
     let focused = app.monthly_focus == MonthlyFocus::Income;
     let empty = crate::data::SingleMonth::default();
@@ -392,13 +393,13 @@ fn render_monthly_income(f: &mut Frame, app: &mut App, area: Rect) {
         .map(|(name, amount)| {
             let short = name.strip_prefix("income:").unwrap_or(name);
             let mut cells = vec![
-                Cell::from(short.to_string()).style(Style::default().fg(FG)),
-                Cell::from(app.config.fmt_amount(*amount, 2)).style(Style::default().fg(GREEN)),
+                Cell::from(short.to_string()).style(Style::default().fg(theme.fg)),
+                Cell::from(app.config.fmt_amount(*amount, 2)).style(Style::default().fg(theme.positive)),
             ];
             if !narrow {
                 let bar_len = ((amount / max_val) * bar_width as f64) as usize;
                 let bar = "█".repeat(bar_len.min(bar_width));
-                cells.push(Cell::from(bar).style(Style::default().fg(Color::Rgb(0, 160, 80))));
+                cells.push(Cell::from(bar).style(Style::default().fg(theme.positive)));
             }
             Row::new(cells)
         })
@@ -421,19 +422,19 @@ fn render_monthly_income(f: &mut Frame, app: &mut App, area: Rect) {
         " Income ".to_string()
     };
 
-    let border_color = if focused { ACCENT } else { MUTED };
+    let border_color = if focused { theme.accent } else { theme.muted };
 
     let table = Table::new(rows, widths)
         .header(
             Row::new(header)
-                .style(Style::default().fg(MUTED).bold())
+                .style(Style::default().fg(theme.muted).bold())
                 .bottom_margin(1),
         )
-        .row_highlight_style(Style::default().bg(Color::Rgb(40, 40, 60)).bold())
+        .row_highlight_style(Style::default().bg(theme.highlight_bg).bold())
         .highlight_symbol("▶ ")
         .block(
             Block::default()
-                .title(Span::styled(title, Style::default().fg(GREEN).bold()))
+                .title(Span::styled(title, Style::default().fg(theme.positive).bold()))
                 .borders(Borders::ALL)
                 .border_type(BorderType::Rounded)
                 .border_style(Style::default().fg(border_color)),
@@ -443,7 +444,7 @@ fn render_monthly_income(f: &mut Frame, app: &mut App, area: Rect) {
     f.render_stateful_widget(table, area, &mut app.income_state);
 }
 
-fn render_monthly_expenses(f: &mut Frame, app: &mut App, area: Rect) {
+fn render_monthly_expenses(f: &mut Frame, app: &mut App, area: Rect, theme: &Theme) {
     let narrow = area.width < 100;
     let focused = app.monthly_focus == MonthlyFocus::Expenses;
     let has_budgets = !app.config.budgets.is_empty();
@@ -458,13 +459,13 @@ fn render_monthly_expenses(f: &mut Frame, app: &mut App, area: Rect) {
         .map(|(name, amount)| {
             let short = name.strip_prefix("expenses:").unwrap_or(name);
             let color = if app.expense_colors {
-                expense_color(short, app)
+                expense_color(short, app, theme)
             } else {
-                FG
+                theme.fg
             };
             let mut cells = vec![
                 Cell::from(short.to_string()).style(Style::default().fg(color)),
-                Cell::from(app.config.fmt_amount(*amount, 2)).style(Style::default().fg(RED)),
+                Cell::from(app.config.fmt_amount(*amount, 2)).style(Style::default().fg(theme.negative)),
             ];
             if !narrow {
                 let bar_len = ((amount / max_val) * bar_width as f64) as usize;
@@ -472,7 +473,7 @@ fn render_monthly_expenses(f: &mut Frame, app: &mut App, area: Rect) {
                 cells.push(Cell::from(bar).style(Style::default().fg(if app.expense_colors {
                     color
                 } else {
-                    Color::Rgb(180, 50, 50)
+                    theme.negative
                 })));
             }
             if has_budgets {
@@ -481,9 +482,9 @@ fn render_monthly_expenses(f: &mut Frame, app: &mut App, area: Rect) {
                 if let Some((cat, &limit)) = matched {
                     let spent = budget_spent(cat, &m.expenses);
                     let pct = if limit > 0.0 { spent / limit * 100.0 } else { 0.0 };
-                    let bar_color = if pct < 80.0 { GREEN }
-                                    else if pct <= 100.0 { GOLD }
-                                    else { RED };
+                    let bar_color = if pct < 80.0 { theme.positive }
+                                    else if pct <= 100.0 { theme.gold }
+                                    else { theme.negative };
                     let filled = ((pct / 100.0).min(1.0) * 8.0) as usize;
                     let empty_b = 8 - filled;
                     let bar = format!("[{}{}] {:>3.0}%",
@@ -518,10 +519,10 @@ fn render_monthly_expenses(f: &mut Frame, app: &mut App, area: Rect) {
     let table = Table::new(rows, widths)
         .header(
             Row::new(header)
-                .style(Style::default().fg(MUTED).bold())
+                .style(Style::default().fg(theme.muted).bold())
                 .bottom_margin(1),
         )
-        .row_highlight_style(Style::default().bg(Color::Rgb(40, 40, 60)).bold())
+        .row_highlight_style(Style::default().bg(theme.highlight_bg).bold())
         .highlight_symbol("▶ ")
         .block(
             Block::default()
@@ -531,11 +532,11 @@ fn render_monthly_expenses(f: &mut Frame, app: &mut App, area: Rect) {
                     } else {
                         " Expenses ".to_string()
                     },
-                    Style::default().fg(RED).bold(),
+                    Style::default().fg(theme.negative).bold(),
                 ))
                 .borders(Borders::ALL)
                 .border_type(BorderType::Rounded)
-                .border_style(Style::default().fg(if focused { ACCENT } else { MUTED })),
+                .border_style(Style::default().fg(if focused { theme.accent } else { theme.muted })),
         );
 
     app.expense_table_area = area;

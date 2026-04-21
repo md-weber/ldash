@@ -13,17 +13,6 @@ Solid foundation. Below = what's missing before shipping 1.0.
 
 ## Should Have (P1)
 
-### Page-level scrolling
-
-- `PgUp` / `PgDn` / `Home` / `End` for long account/expense lists
-- Currently only single-row j/k scrolling
-
-### Theming
-
-- Colors hardcoded across `ui.rs` (ACCENT, GREEN, RED, etc.)
-- Move to a `[theme]` config section: accent, positive, negative, muted, background
-- Ship 2-3 presets: dark (current), light, solarized
-
 ### File export
 
 - `Y` copies to clipboard — add `e` to export current view as CSV/JSON file

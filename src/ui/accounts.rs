@@ -2,9 +2,9 @@ use ratatui::{prelude::*, widgets::*};
 
 use crate::app::App;
 use crate::config::Config;
-use super::{ACCENT, GREEN, RED, GOLD, MUTED, FG, nice_y_axis, render_detail_with_title};
+use super::{Theme, nice_y_axis, render_detail_with_title};
 
-pub(super) fn render_accounts(f: &mut Frame, app: &mut App, area: Rect) {
+pub(super) fn render_accounts(f: &mut Frame, app: &mut App, area: Rect, theme: &Theme) {
     let chunks = Layout::vertical([
         Constraint::Percentage(40), // net worth chart
         Constraint::Length(3),      // net worth number
@@ -12,27 +12,27 @@ pub(super) fn render_accounts(f: &mut Frame, app: &mut App, area: Rect) {
     ])
     .split(area);
 
-    render_net_worth_chart(f, app, chunks[0]);
+    render_net_worth_chart(f, app, chunks[0], theme);
 
     let net_worth = app.total_net_worth();
     let nw_text = Line::from(vec![
-        Span::styled("  Net Worth: ", Style::default().fg(MUTED).bold()),
+        Span::styled("  Net Worth: ", Style::default().fg(theme.muted).bold()),
         Span::styled(
             app.config.fmt_amount(net_worth, 2),
-            Style::default().fg(GOLD).bold(),
+            Style::default().fg(theme.gold).bold(),
         ),
     ]);
     let nw_block = Block::default()
         .borders(Borders::ALL)
         .border_type(BorderType::Rounded)
-        .border_style(Style::default().fg(MUTED));
+        .border_style(Style::default().fg(theme.muted));
     f.render_widget(Paragraph::new(nw_text).block(nw_block), chunks[1]);
 
     let has_goals = !app.config.goals.is_empty();
 
     if let Some(txns) = app.account_detail.as_ref() {
         let name = app.detail_account_name.as_ref().unwrap();
-        render_account_detail(f, txns, name, &app.config, chunks[2]);
+        render_account_detail(f, txns, name, &app.config, chunks[2], theme);
     } else if has_goals {
         let goal_h = (app.config.goals.len() as u16 + 2).min(8);
         let bottom = Layout::vertical([
@@ -45,41 +45,41 @@ pub(super) fn render_accounts(f: &mut Frame, app: &mut App, area: Rect) {
                 Constraint::Percentage(70),
                 Constraint::Percentage(30),
             ]).split(bottom[0]);
-            render_accounts_table(f, app, split[0]);
-            render_liabilities_table(f, app, split[1]);
+            render_accounts_table(f, app, split[0], theme);
+            render_liabilities_table(f, app, split[1], theme);
         } else {
-            render_accounts_table(f, app, bottom[0]);
+            render_accounts_table(f, app, bottom[0], theme);
         }
 
-        render_goals(f, app, bottom[1]);
+        render_goals(f, app, bottom[1], theme);
     } else if !app.liabilities.is_empty() {
         let split = Layout::vertical([
             Constraint::Percentage(70),
             Constraint::Percentage(30),
         ])
         .split(chunks[2]);
-        render_accounts_table(f, app, split[0]);
-        render_liabilities_table(f, app, split[1]);
+        render_accounts_table(f, app, split[0], theme);
+        render_liabilities_table(f, app, split[1], theme);
     } else {
-        render_accounts_table(f, app, chunks[2]);
+        render_accounts_table(f, app, chunks[2], theme);
     }
 }
 
-fn render_net_worth_chart(f: &mut Frame, app: &App, area: Rect) {
+fn render_net_worth_chart(f: &mut Frame, app: &App, area: Rect, theme: &Theme) {
     let range_label = app.nw_range.label();
     let block = Block::default()
         .title(Span::styled(
             format!(" Net Worth History [{range_label}]  ◀ ▶ "),
-            Style::default().fg(GOLD).bold(),
+            Style::default().fg(theme.gold).bold(),
         ))
         .borders(Borders::ALL)
         .border_type(BorderType::Rounded)
-        .border_style(Style::default().fg(MUTED));
+        .border_style(Style::default().fg(theme.muted));
 
     let series = &app.net_worth_history;
     if series.points.len() < 2 {
         f.render_widget(
-            Paragraph::new(Span::styled("Not enough data", Style::default().fg(MUTED)))
+            Paragraph::new(Span::styled("Not enough data", Style::default().fg(theme.muted)))
                 .block(block)
                 .alignment(Alignment::Center),
             area,
@@ -91,34 +91,35 @@ fn render_net_worth_chart(f: &mut Frame, app: &App, area: Rect) {
     let x_max = series.points.last().unwrap().0;
     let y_min_raw = series.points.iter().map(|p| p.1).fold(f64::INFINITY, f64::min);
     let y_max_raw = series.points.iter().map(|p| p.1).fold(f64::NEG_INFINITY, f64::max);
-    let (y_min, y_max, y_labels) = nice_y_axis(y_min_raw, y_max_raw, 4, &app.config);
+    let (y_min, y_max, y_labels) = nice_y_axis(y_min_raw, y_max_raw, 4, &app.config, theme.muted);
 
     let label_count = if area.width < 60 { 3 } else { 5 };
     let n = series.labels.len();
     let x_labels: Vec<Span> = (0..label_count)
         .map(|i| i * n.saturating_sub(1) / (label_count - 1).max(1))
         .filter_map(|i| series.labels.get(i))
-        .map(|(d, _)| Span::styled(d.format("%b %y").to_string(), Style::default().fg(MUTED)))
+        .map(|(d, _)| Span::styled(d.format("%b %y").to_string(), Style::default().fg(theme.muted)))
         .collect();
 
     let dataset = Dataset::default()
         .name("Net Worth")
         .marker(symbols::Marker::Braille)
         .graph_type(GraphType::Line)
-        .style(Style::default().fg(GOLD))
+        .style(Style::default().fg(theme.gold))
         .data(&series.points);
 
     let chart = Chart::new(vec![dataset])
+        .style(Style::default().bg(theme.background))
         .block(block)
         .x_axis(
             Axis::default()
-                .style(Style::default().fg(MUTED))
+                .style(Style::default().fg(theme.muted))
                 .bounds([x_min, x_max])
                 .labels(x_labels),
         )
         .y_axis(
             Axis::default()
-                .style(Style::default().fg(MUTED))
+                .style(Style::default().fg(theme.muted))
                 .bounds([y_min, y_max])
                 .labels(y_labels),
         );
@@ -132,12 +133,13 @@ fn render_account_detail(
     name: &str,
     cfg: &Config,
     area: Rect,
+    theme: &Theme,
 ) {
     let title = format!(" {} — Recent Transactions  [Esc back] ", name);
-    render_detail_with_title(f, txns, &title, cfg, area);
+    render_detail_with_title(f, txns, &title, cfg, area, theme);
 }
 
-fn render_accounts_table(f: &mut Frame, app: &mut App, area: Rect) {
+fn render_accounts_table(f: &mut Frame, app: &mut App, area: Rect, theme: &Theme) {
     let narrow = area.width < 100;
     let max_amount = app
         .account_balances
@@ -152,9 +154,9 @@ fn render_accounts_table(f: &mut Frame, app: &mut App, area: Rect) {
         .iter()
         .map(|b| {
             let amount_style = if b.amount >= 0.0 {
-                Style::default().fg(GREEN)
+                Style::default().fg(theme.positive)
             } else {
-                Style::default().fg(RED)
+                Style::default().fg(theme.negative)
             };
 
             let amount_str = format!("{:>15}", app.config.fmt_amount(b.amount, 2));
@@ -166,7 +168,7 @@ fn render_accounts_table(f: &mut Frame, app: &mut App, area: Rect) {
             };
 
             let mut cells = vec![
-                Cell::from(name).style(Style::default().fg(FG)),
+                Cell::from(name).style(Style::default().fg(theme.fg)),
                 Cell::from(amount_str).style(amount_style),
             ];
 
@@ -177,7 +179,7 @@ fn render_accounts_table(f: &mut Frame, app: &mut App, area: Rect) {
                     0
                 };
                 let bar = "█".repeat(bar_len);
-                cells.push(Cell::from(bar).style(Style::default().fg(Color::Rgb(0, 130, 130))));
+                cells.push(Cell::from(bar).style(Style::default().fg(theme.accent)));
             }
 
             Row::new(cells)
@@ -199,35 +201,35 @@ fn render_accounts_table(f: &mut Frame, app: &mut App, area: Rect) {
     let table = Table::new(rows, widths)
         .header(
             Row::new(header)
-                .style(Style::default().fg(MUTED).bold())
+                .style(Style::default().fg(theme.muted).bold())
                 .bottom_margin(1),
         )
-        .row_highlight_style(Style::default().bg(Color::Rgb(40, 40, 60)).bold())
+        .row_highlight_style(Style::default().bg(theme.highlight_bg).bold())
         .highlight_symbol("▶ ")
         .block(
             Block::default()
                 .title(Span::styled(
                     " Asset Balances  [Enter drill-down] ",
-                    Style::default().fg(ACCENT).bold(),
+                    Style::default().fg(theme.accent).bold(),
                 ))
                 .borders(Borders::ALL)
                 .border_type(BorderType::Rounded)
-                .border_style(Style::default().fg(MUTED)),
+                .border_style(Style::default().fg(theme.muted)),
         );
 
     app.table_area = area;
     f.render_stateful_widget(table, area, &mut app.account_state);
 }
 
-fn render_liabilities_table(f: &mut Frame, app: &App, area: Rect) {
+fn render_liabilities_table(f: &mut Frame, app: &App, area: Rect, theme: &Theme) {
     let rows: Vec<Row> = app
         .liabilities
         .iter()
         .map(|b| {
             let amount_str = format!("{:>15}", app.config.fmt_amount(b.amount, 2));
             Row::new(vec![
-                Cell::from(format!("  {}", b.account)).style(Style::default().fg(FG)),
-                Cell::from(amount_str).style(Style::default().fg(RED)),
+                Cell::from(format!("  {}", b.account)).style(Style::default().fg(theme.fg)),
+                Cell::from(amount_str).style(Style::default().fg(theme.negative)),
             ])
         })
         .collect();
@@ -243,26 +245,26 @@ fn render_liabilities_table(f: &mut Frame, app: &App, area: Rect) {
                 "Account".to_string(),
                 format!("Balance ({})", app.config.currency_symbol),
             ])
-                .style(Style::default().fg(MUTED).bold())
+                .style(Style::default().fg(theme.muted).bold())
                 .bottom_margin(1),
         )
         .block(
             Block::default()
-                .title(Span::styled(title, Style::default().fg(RED).bold()))
+                .title(Span::styled(title, Style::default().fg(theme.negative).bold()))
                 .borders(Borders::ALL)
                 .border_type(BorderType::Rounded)
-                .border_style(Style::default().fg(MUTED)),
+                .border_style(Style::default().fg(theme.muted)),
         );
 
     f.render_widget(table, area);
 }
 
-fn render_goals(f: &mut Frame, app: &App, area: Rect) {
+fn render_goals(f: &mut Frame, app: &App, area: Rect, theme: &Theme) {
     let block = Block::default()
-        .title(Span::styled(" Savings Goals ", Style::default().fg(GOLD).bold()))
+        .title(Span::styled(" Savings Goals ", Style::default().fg(theme.gold).bold()))
         .borders(Borders::ALL)
         .border_type(BorderType::Rounded)
-        .border_style(Style::default().fg(MUTED));
+        .border_style(Style::default().fg(theme.muted));
     let inner = block.inner(area);
     f.render_widget(block, area);
 
@@ -272,9 +274,9 @@ fn render_goals(f: &mut Frame, app: &App, area: Rect) {
             break;
         }
         let y = inner.y + i as u16;
-        let color = if g.pct >= 100.0 { GREEN }
-                   else if g.pct >= 60.0 { GOLD }
-                   else { ACCENT };
+        let color = if g.pct >= 100.0 { theme.positive }
+                   else if g.pct >= 60.0 { theme.gold }
+                   else { theme.accent };
 
         let label_w = 18u16.min(inner.width / 3);
         let pct_w = 22u16;
@@ -282,7 +284,7 @@ fn render_goals(f: &mut Frame, app: &App, area: Rect) {
 
         let label = Span::styled(
             format!(" {:<w$}", g.name, w = (label_w - 1) as usize),
-            Style::default().fg(FG),
+            Style::default().fg(theme.fg),
         );
         f.render_widget(Paragraph::new(Line::from(label)),
             Rect { x: inner.x, y, width: label_w, height: 1 });
@@ -302,7 +304,7 @@ fn render_goals(f: &mut Frame, app: &App, area: Rect) {
                 app.config.fmt_amount_compact(g.target, 0),
                 g.pct
             ),
-            Style::default().fg(MUTED),
+            Style::default().fg(theme.muted),
         );
         f.render_widget(Paragraph::new(Line::from(info)),
             Rect { x: inner.x + label_w + bar_w, y, width: pct_w, height: 1 });

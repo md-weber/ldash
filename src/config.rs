@@ -20,6 +20,7 @@ pub struct Config {
     pub chart_mode: String,
     pub show_portfolio: Option<bool>,
     pub colors: ColorConfig,
+    pub theme: ThemeConfig,
     pub budgets: HashMap<String, f64>,
     pub goals: Vec<SavingsGoal>,
 }
@@ -37,6 +38,20 @@ pub struct ColorConfig {
     pub expenses: HashMap<String, String>,
 }
 
+#[derive(Debug, Deserialize, Default)]
+#[serde(default)]
+pub struct ThemeConfig {
+    /// Built-in preset: "dark" (default), "light", "solarized"
+    pub preset:     Option<String>,
+    pub accent:     Option<String>,
+    pub positive:   Option<String>,
+    pub negative:   Option<String>,
+    pub muted:      Option<String>,
+    pub gold:       Option<String>,
+    pub fg:         Option<String>,
+    pub background: Option<String>,
+}
+
 impl Default for Config {
     fn default() -> Self {
         Self {
@@ -48,6 +63,7 @@ impl Default for Config {
             chart_mode: "stacked".to_string(),
             show_portfolio: None,
             colors: ColorConfig::default(),
+            theme: ThemeConfig::default(),
             budgets: HashMap::new(),
             goals: Vec::new(),
         }
@@ -98,6 +114,20 @@ const DEFAULT_CONFIG: &str = r##"# ldash configuration
 # "expenses:Essen" = 400.0
 # "expenses:Freizeit" = 200.0
 # "expenses:Transport" = 150.0
+
+# Theme — color preset and per-color overrides
+# preset: "dark" (default), "light", "solarized"
+# Individual colors: named (red, green, blue, yellow, cyan, magenta,
+#   white, gray, darkgray) or hex (#RRGGBB)
+# [theme]
+# preset = "dark"
+# accent = "cyan"
+# positive = "green"
+# negative = "red"
+# muted = "darkgray"
+# gold = "yellow"
+# fg = "white"
+# background = "#14141e"
 
 # Savings goals — track progress toward financial targets
 # Each goal maps a target amount to an account prefix.
@@ -157,6 +187,7 @@ impl Config {
         self.chart_mode = fresh.chart_mode;
         self.show_portfolio = fresh.show_portfolio;
         self.colors = fresh.colors;
+        self.theme = fresh.theme;
         self.budgets = fresh.budgets;
         self.goals = fresh.goals;
         None

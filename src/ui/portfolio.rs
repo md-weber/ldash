@@ -1,7 +1,7 @@
 use ratatui::{prelude::*, widgets::*};
 
 use crate::app::App;
-use super::{ACCENT, GREEN, RED, GOLD, MUTED, FG, coin_color, nice_y_axis};
+use super::{Theme, coin_color, nice_y_axis};
 
 fn series_interp(series: &[(f64, f64)], day: f64) -> f64 {
     match series.iter().rposition(|p| p.0 <= day) {
@@ -58,15 +58,15 @@ fn holding_pl(
     }
 }
 
-pub(super) fn render_portfolio(f: &mut Frame, app: &mut App, area: Rect) {
+pub(super) fn render_portfolio(f: &mut Frame, app: &mut App, area: Rect, theme: &Theme) {
     if area.width < 100 {
         let chunks = Layout::vertical([
             Constraint::Percentage(45),
             Constraint::Percentage(55),
         ])
         .split(area);
-        render_holdings_table(f, app, chunks[0]);
-        render_price_chart(f, app, chunks[1]);
+        render_holdings_table(f, app, chunks[0], theme);
+        render_price_chart(f, app, chunks[1], theme);
     } else {
         let chunks =
             Layout::horizontal([Constraint::Percentage(38), Constraint::Percentage(62)])
@@ -78,13 +78,13 @@ pub(super) fn render_portfolio(f: &mut Frame, app: &mut App, area: Rect) {
         ])
         .split(chunks[0]);
 
-        render_holdings_table(f, app, left[0]);
-        render_allocation_chart(f, app, left[1]);
-        render_price_chart(f, app, chunks[1]);
+        render_holdings_table(f, app, left[0], theme);
+        render_allocation_chart(f, app, left[1], theme);
+        render_price_chart(f, app, chunks[1], theme);
     }
 }
 
-fn render_holdings_table(f: &mut Frame, app: &mut App, area: Rect) {
+fn render_holdings_table(f: &mut Frame, app: &mut App, area: Rect, theme: &Theme) {
     let total = app.total_portfolio_value();
     let narrow = area.width < 100;
     let very_narrow = area.width < 80;
@@ -103,9 +103,9 @@ fn render_holdings_table(f: &mut Frame, app: &mut App, area: Rect) {
             let selected = i == app.selected_holding;
 
             let coin_style = if selected {
-                Style::default().fg(GOLD).bold()
+                Style::default().fg(theme.gold).bold()
             } else {
-                Style::default().fg(FG)
+                Style::default().fg(theme.fg)
             };
 
             let price_str = if h.price_eur >= 10_000.0 {
@@ -142,12 +142,12 @@ fn render_holdings_table(f: &mut Frame, app: &mut App, area: Rect) {
                         let (pl_abs, basis) = holding_pl(app, h, series, first_date);
 
                         if basis > 0.0 {
-                            let abs_color = if pl_abs >= 0.0 { GREEN } else { RED };
+                            let abs_color = if pl_abs >= 0.0 { theme.positive } else { theme.negative };
                             let abs_prefix = if pl_abs >= 0.0 { "+" } else { "" };
                             let pct = pl_abs / basis * 100.0;
                             let pct_clamped = pct.clamp(-9999.0, 9999.0);
                             let (prefix, color) =
-                                if pct >= 0.0 { ("+", GREEN) } else { ("", RED) };
+                                if pct >= 0.0 { ("+", theme.positive) } else { ("", theme.negative) };
                             let pct_str = if pct.abs() > 9999.0 {
                                 format!("{prefix}{:.0}%", pct_clamped)
                             } else {
@@ -162,31 +162,31 @@ fn render_holdings_table(f: &mut Frame, app: &mut App, area: Rect) {
                         } else if basis < 0.0 {
                             (
                                 "—".into(),
-                                Style::default().fg(MUTED),
+                                Style::default().fg(theme.muted),
                                 app.config.fmt_amount_compact(pl_abs, 2),
-                                Style::default().fg(MUTED),
+                                Style::default().fg(theme.muted),
                             )
                         } else if h.value_eur > 0.0 {
                             (
                                 "∞".into(),
-                                Style::default().fg(GREEN).bold(),
+                                Style::default().fg(theme.positive).bold(),
                                 format!("+{}", app.config.fmt_amount_compact(h.value_eur, 2)),
-                                Style::default().fg(GREEN).bold(),
+                                Style::default().fg(theme.positive).bold(),
                             )
                         } else {
                             (
                                 "—".into(),
-                                Style::default().fg(MUTED),
+                                Style::default().fg(theme.muted),
                                 "—".into(),
-                                Style::default().fg(MUTED),
+                                Style::default().fg(theme.muted),
                             )
                         }
                     }
                     _ => (
                         "—".into(),
-                        Style::default().fg(MUTED),
+                        Style::default().fg(theme.muted),
                         "—".into(),
-                        Style::default().fg(MUTED),
+                        Style::default().fg(theme.muted),
                     ),
                 };
 
@@ -196,13 +196,13 @@ fn render_holdings_table(f: &mut Frame, app: &mut App, area: Rect) {
             if !very_narrow {
                 cells.push(
                     Cell::from(amt_str)
-                        .style(Style::default().fg(if selected { GOLD } else { MUTED })),
+                        .style(Style::default().fg(if selected { theme.gold } else { theme.muted })),
                 );
             }
             cells.extend([
-                Cell::from(price_str).style(Style::default().fg(ACCENT)),
-                Cell::from(value_str).style(Style::default().fg(GREEN)),
-                Cell::from(pct).style(Style::default().fg(FG)),
+                Cell::from(price_str).style(Style::default().fg(theme.accent)),
+                Cell::from(value_str).style(Style::default().fg(theme.positive)),
+                Cell::from(pct).style(Style::default().fg(theme.fg)),
                 Cell::from(pl_pct_str).style(pl_pct_style),
             ]);
             if !very_narrow {
@@ -238,19 +238,19 @@ fn render_holdings_table(f: &mut Frame, app: &mut App, area: Rect) {
         };
         (total_pl, pct)
     };
-    let pl_color = if pl_abs >= 0.0 { GREEN } else { RED };
+    let pl_color = if pl_abs >= 0.0 { theme.positive } else { theme.negative };
     let pl_prefix = if pl_abs >= 0.0 { "+" } else { "" };
 
     let mut total_cells = vec![
-        Cell::from("──────").style(Style::default().fg(MUTED)),
+        Cell::from("──────").style(Style::default().fg(theme.muted)),
     ];
     if !very_narrow {
         total_cells.push(Cell::from(""));
     }
     total_cells.extend([
-        Cell::from("Total").style(Style::default().fg(FG).bold()),
-        Cell::from(app.config.fmt_amount(total, 2)).style(Style::default().fg(GOLD).bold()),
-        Cell::from("100%").style(Style::default().fg(FG).bold()),
+        Cell::from("Total").style(Style::default().fg(theme.fg).bold()),
+        Cell::from(app.config.fmt_amount(total, 2)).style(Style::default().fg(theme.gold).bold()),
+        Cell::from("100%").style(Style::default().fg(theme.fg).bold()),
         Cell::from(format!("{pl_prefix}{:.1}%", pl_pct))
             .style(Style::default().fg(pl_color).bold()),
     ]);
@@ -310,18 +310,18 @@ fn render_holdings_table(f: &mut Frame, app: &mut App, area: Rect) {
     let table = Table::new(rows, widths)
         .header(
             Row::new(header_cells)
-                .style(Style::default().fg(MUTED).bold())
+                .style(Style::default().fg(theme.muted).bold())
                 .bottom_margin(1),
         )
         .block(
             Block::default()
                 .title(Span::styled(
                     " Crypto Portfolio ",
-                    Style::default().fg(ACCENT).bold(),
+                    Style::default().fg(theme.accent).bold(),
                 ))
                 .borders(Borders::ALL)
                 .border_type(BorderType::Rounded)
-                .border_style(Style::default().fg(MUTED)),
+                .border_style(Style::default().fg(theme.muted)),
         );
 
     app.table_area = area;
@@ -334,17 +334,17 @@ fn render_holdings_table(f: &mut Frame, app: &mut App, area: Rect) {
         height: 1,
     };
     f.render_widget(
-        Paragraph::new("  ↑↓ select coin for chart  │  P/L is unrealized only. Sells reflected in Accounts tab.").style(Style::default().fg(MUTED)),
+        Paragraph::new("  ↑↓ select coin for chart  │  P/L is unrealized only. Sells reflected in Accounts tab.").style(Style::default().fg(theme.muted)),
         hint_area,
     );
 }
 
-fn render_allocation_chart(f: &mut Frame, app: &App, area: Rect) {
+fn render_allocation_chart(f: &mut Frame, app: &App, area: Rect, theme: &Theme) {
     let block = Block::default()
-        .title(Span::styled(" Allocation ", Style::default().fg(ACCENT).bold()))
+        .title(Span::styled(" Allocation ", Style::default().fg(theme.accent).bold()))
         .borders(Borders::ALL)
         .border_type(BorderType::Rounded)
-        .border_style(Style::default().fg(MUTED));
+        .border_style(Style::default().fg(theme.muted));
     let inner = block.inner(area);
     f.render_widget(block, area);
 
@@ -360,7 +360,7 @@ fn render_allocation_chart(f: &mut Frame, app: &App, area: Rect) {
         let y = inner.y + i as u16;
         let pct = if total > 0.0 { h.value_eur / total * 100.0 } else { 0.0 };
         let bar_len = ((pct / 100.0) * bar_area_w as f64) as usize;
-        let color = coin_color(&h.commodity);
+        let color = coin_color(&h.commodity, theme);
 
         let label = Span::styled(
             format!(" {:<w$}", h.commodity, w = (label_w - 1) as usize),
@@ -371,7 +371,7 @@ fn render_allocation_chart(f: &mut Frame, app: &App, area: Rect) {
 
         let pct_str = Span::styled(
             format!("{:>4.1}% ", pct),
-            Style::default().fg(MUTED),
+            Style::default().fg(theme.muted),
         );
         f.render_widget(Paragraph::new(Line::from(pct_str)),
             Rect { x: inner.x + label_w, y, width: pct_w, height: 1 });
@@ -384,7 +384,7 @@ fn render_allocation_chart(f: &mut Frame, app: &App, area: Rect) {
     }
 }
 
-fn render_price_chart(f: &mut Frame, app: &App, area: Rect) {
+fn render_price_chart(f: &mut Frame, app: &App, area: Rect, theme: &Theme) {
     let selected_coin = app.selected_coin().unwrap_or("SOL");
     let range_label = app.portfolio_range.label();
 
@@ -392,11 +392,11 @@ fn render_price_chart(f: &mut Frame, app: &App, area: Rect) {
     let block = Block::default()
         .title(Span::styled(
             format!(" {} Portfolio Analysis [{range_label}] [{mode_label}]  ◀ ▶ ", selected_coin),
-            Style::default().fg(ACCENT).bold(),
+            Style::default().fg(theme.accent).bold(),
         ))
         .borders(Borders::ALL)
         .border_type(BorderType::Rounded)
-        .border_style(Style::default().fg(MUTED));
+        .border_style(Style::default().fg(theme.muted));
 
     let series = match app.coin_chart_cache.get(selected_coin) {
         Some(s) if !s.investment.is_empty() => s,
@@ -404,7 +404,7 @@ fn render_price_chart(f: &mut Frame, app: &App, area: Rect) {
             f.render_widget(
                 Paragraph::new(Line::from(Span::styled(
                     "No portfolio data available",
-                    Style::default().fg(MUTED),
+                    Style::default().fg(theme.muted),
                 )))
                 .block(block)
                 .alignment(Alignment::Center),
@@ -455,7 +455,7 @@ fn render_price_chart(f: &mut Frame, app: &App, area: Rect) {
         .map(|p| p.1);
     let y_min_raw = all_y.clone().fold(f64::INFINITY, f64::min);
     let y_max_raw = all_y.fold(f64::NEG_INFINITY, f64::max);
-    let (y_min, y_max, y_labels) = nice_y_axis(y_min_raw, y_max_raw, 4, &app.config);
+    let (y_min, y_max, y_labels) = nice_y_axis(y_min_raw, y_max_raw, 4, &app.config, theme.muted);
 
     let filtered_entries: Vec<_> = coin_entries.iter()
         .filter(|e| {
@@ -470,7 +470,7 @@ fn render_price_chart(f: &mut Frame, app: &App, area: Rect) {
         indices
             .iter()
             .filter_map(|&i| filtered_entries.get(i))
-            .map(|e| Span::styled(e.date.format("%b %y").to_string(), Style::default().fg(MUTED)))
+            .map(|e| Span::styled(e.date.format("%b %y").to_string(), Style::default().fg(theme.muted)))
             .collect()
     };
 
@@ -478,34 +478,35 @@ fn render_price_chart(f: &mut Frame, app: &App, area: Rect) {
         .name("Invested")
         .marker(symbols::Marker::Braille)
         .graph_type(GraphType::Line)
-        .style(Style::default().fg(GOLD))
+        .style(Style::default().fg(theme.gold))
         .data(&filtered_inv);
 
     let ds_line2 = Dataset::default()
         .name(line2_name)
         .marker(symbols::Marker::Braille)
         .graph_type(GraphType::Line)
-        .style(Style::default().fg(ACCENT))
+        .style(Style::default().fg(theme.accent))
         .data(&line2_data);
 
     let ds_line3 = Dataset::default()
         .name(line3_name)
         .marker(symbols::Marker::Braille)
         .graph_type(GraphType::Line)
-        .style(Style::default().fg(GREEN))
+        .style(Style::default().fg(theme.positive))
         .data(&line3_data);
 
     let chart = Chart::new(vec![ds_investment, ds_line2, ds_line3])
+        .style(Style::default().bg(theme.background))
         .block(block)
         .x_axis(
             Axis::default()
-                .style(Style::default().fg(MUTED))
+                .style(Style::default().fg(theme.muted))
                 .bounds([x_min, x_max])
                 .labels(x_labels),
         )
         .y_axis(
             Axis::default()
-                .style(Style::default().fg(MUTED))
+                .style(Style::default().fg(theme.muted))
                 .bounds([y_min, y_max])
                 .labels(y_labels),
         );

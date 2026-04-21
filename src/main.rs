@@ -337,6 +337,10 @@ fn run(terminal: &mut Terminal<CrosstermBackend<io::Stdout>>, journal_path: Path
                             KeyCode::Char('3') => app.select_tab(2),
                             KeyCode::Up | KeyCode::Char('k') => app.scroll_up(),
                             KeyCode::Down | KeyCode::Char('j') => app.scroll_down(),
+                            KeyCode::PageUp => app.scroll_page_up(),
+                            KeyCode::PageDown => app.scroll_page_down(),
+                            KeyCode::Home => app.scroll_home(),
+                            KeyCode::End => app.scroll_end(),
                             KeyCode::Left | KeyCode::Char('h') => match app.tab {
                                 app::Tab::Portfolio => app.portfolio_range_left(),
                                 app::Tab::Accounts => app.nw_range_left(),
