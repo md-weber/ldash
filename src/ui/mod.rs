@@ -188,6 +188,7 @@ pub(super) fn render_detail_with_title(
     cfg: &Config,
     area: Rect,
     theme: &Theme,
+    state: &mut ratatui::widgets::TableState,
 ) {
     let rows: Vec<Row> = txns
         .iter()
@@ -218,6 +219,8 @@ pub(super) fn render_detail_with_title(
                 .style(Style::default().fg(theme.muted).bold())
                 .bottom_margin(1),
         )
+        .row_highlight_style(Style::default().bg(theme.highlight_bg).bold())
+        .highlight_symbol("▶ ")
         .block(
             Block::default()
                 .title(Span::styled(title, Style::default().fg(theme.gold).bold()))
@@ -226,7 +229,7 @@ pub(super) fn render_detail_with_title(
                 .border_style(Style::default().fg(theme.accent)),
         );
 
-    f.render_widget(table, area);
+    f.render_stateful_widget(table, area, state);
 }
 
 // ── Entry point ───────────────────────────────────────────────────────────────
@@ -389,6 +392,8 @@ fn render_help_popup(f: &mut Frame, area: Rect, theme: &Theme) {
         ("Home / End",       "Jump to first / last row"),
         ("← h / → l",        "Month nav / NW range"),
         ("Enter",            "Drill into category detail"),
+        ("a-z … (Accounts)", "Type to filter accounts"),
+        ("Backspace",        "Delete filter char"),
         ("i",                "Toggle income/expense focus (Monthly)"),
         ("/",                "Search transactions"),
         ("y / Y",            "Year back / forward (Monthly)"),

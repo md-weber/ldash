@@ -305,6 +305,26 @@ fn run(terminal: &mut Terminal<CrosstermBackend<io::Stdout>>, journal_path: Path
                             }
                             _ => {}
                         }
+                    } else if app.account_filter_active {
+                        match key.code {
+                            KeyCode::Esc => {
+                                if app.account_detail.is_some() {
+                                    app.close_account_detail();
+                                } else {
+                                    app.close_account_filter();
+                                }
+                            }
+                            KeyCode::Backspace => app.account_filter_backspace(),
+                            KeyCode::Up | KeyCode::Char('k') => {
+                                if app.has_open_detail() { app.detail_scroll_up(); } else { app.scroll_up(); }
+                            }
+                            KeyCode::Down | KeyCode::Char('j') => {
+                                if app.has_open_detail() { app.detail_scroll_down(); } else { app.scroll_down(); }
+                            }
+                            KeyCode::Enter => app.open_account_detail(),
+                            KeyCode::Char(c) => app.account_filter_push(c),
+                            _ => {}
+                        }
                     } else {
                         match key.code {
                             KeyCode::Char('q') => break,
@@ -315,6 +335,8 @@ fn run(terminal: &mut Terminal<CrosstermBackend<io::Stdout>>, journal_path: Path
                                     app.close_income_detail();
                                 } else if app.expense_detail.is_some() {
                                     app.close_expense_detail();
+                                } else if !app.account_filter.is_empty() {
+                                    app.close_account_filter();
                                 } else {
                                     break;
                                 }
@@ -335,8 +357,12 @@ fn run(terminal: &mut Terminal<CrosstermBackend<io::Stdout>>, journal_path: Path
                             KeyCode::Char('1') => app.select_tab(0),
                             KeyCode::Char('2') => app.select_tab(1),
                             KeyCode::Char('3') => app.select_tab(2),
-                            KeyCode::Up | KeyCode::Char('k') => app.scroll_up(),
-                            KeyCode::Down | KeyCode::Char('j') => app.scroll_down(),
+                            KeyCode::Up | KeyCode::Char('k') => {
+                                if app.has_open_detail() { app.detail_scroll_up(); } else { app.scroll_up(); }
+                            }
+                            KeyCode::Down | KeyCode::Char('j') => {
+                                if app.has_open_detail() { app.detail_scroll_down(); } else { app.scroll_down(); }
+                            }
                             KeyCode::PageUp => app.scroll_page_up(),
                             KeyCode::PageDown => app.scroll_page_down(),
                             KeyCode::Home => app.scroll_home(),
@@ -370,6 +396,13 @@ fn run(terminal: &mut Terminal<CrosstermBackend<io::Stdout>>, journal_path: Path
                             KeyCode::Char('s') => app.chart_stacked = !app.chart_stacked,
                             KeyCode::Char('c') => app.expense_colors = !app.expense_colors,
                             KeyCode::Char('r') => app.start_refresh(),
+                            KeyCode::Char(c) if app.tab == app::Tab::Accounts
+                                && !matches!(c, 'q'|'/'|'?'|'r'|'s'|'c'|'y'|'Y'|'e'|'1'|'2'|'3') =>
+                            {
+                                app.account_filter_active = true;
+                                app.account_filter.push(c);
+                                app.account_state.select(Some(0));
+                            }
                             _ => {}
                         }
                     }

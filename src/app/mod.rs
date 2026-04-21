@@ -158,12 +158,15 @@ pub struct App {
     pub detail_expense_name: Option<String>,
     pub income_detail: Option<Vec<Transaction>>,
     pub detail_income_name: Option<String>,
+    pub detail_state: TableState,
     pub portfolio_range: PortfolioRange,
     pub chart_stacked: bool,
     pub expense_colors: bool,
     pub status_msg: String,
     pub loading: bool,
     pub show_help: bool,
+    pub account_filter: String,
+    pub account_filter_active: bool,
     pub search_active: bool,
     pub search_query: String,
     pub search_results: Vec<Transaction>,
@@ -236,12 +239,15 @@ impl App {
             detail_expense_name: None,
             income_detail: None,
             detail_income_name: None,
+            detail_state: TableState::default(),
             portfolio_range: PortfolioRange::All,
             chart_stacked,
             expense_colors: true,
             status_msg: "Loading data…".to_string(),
             loading: true,
             show_help: false,
+            account_filter: String::new(),
+            account_filter_active: false,
             search_active: false,
             search_query: String::new(),
             search_results: Vec::new(),
@@ -468,6 +474,9 @@ impl App {
     }
 
     pub fn next_tab(&mut self) {
+        if self.tab == Tab::Accounts {
+            self.close_account_filter();
+        }
         let tabs = self.visible_tabs();
         let pos = tabs.iter().position(|&t| t == self.tab).unwrap_or(0);
         self.tab = tabs[(pos + 1) % tabs.len()];
@@ -475,6 +484,9 @@ impl App {
     }
 
     pub fn prev_tab(&mut self) {
+        if self.tab == Tab::Accounts {
+            self.close_account_filter();
+        }
         let tabs = self.visible_tabs();
         let pos = tabs.iter().position(|&t| t == self.tab).unwrap_or(0);
         self.tab = tabs[(pos + tabs.len() - 1) % tabs.len()];
@@ -482,6 +494,9 @@ impl App {
     }
 
     pub fn select_tab(&mut self, idx: usize) {
+        if self.tab == Tab::Accounts {
+            self.close_account_filter();
+        }
         if let Some(&t) = self.visible_tabs().get(idx) {
             self.tab = t;
             self.ensure_tab_loaded(t);
@@ -519,7 +534,8 @@ impl App {
             }
             Tab::Accounts => {
                 let i = self.account_state.selected().unwrap_or(0);
-                if i + 1 < self.account_balances.len() {
+                let len = self.filtered_accounts().len();
+                if i + 1 < len {
                     self.account_state.select(Some(i + 1));
                 }
             }
@@ -583,7 +599,7 @@ impl App {
             Tab::Accounts => {
                 let n = self.page_size_for(self.table_area).max(1);
                 let i = self.account_state.selected().unwrap_or(0);
-                let new = (i + n).min(self.account_balances.len().saturating_sub(1));
+                let new = (i + n).min(self.filtered_accounts().len().saturating_sub(1));
                 self.account_state.select(Some(new));
             }
             Tab::Monthly => match self.monthly_focus {
@@ -621,7 +637,7 @@ impl App {
             }
             Tab::Accounts => {
                 self.account_state
-                    .select(Some(self.account_balances.len().saturating_sub(1)));
+                    .select(Some(self.filtered_accounts().len().saturating_sub(1)));
             }
             Tab::Monthly => match self.monthly_focus {
                 MonthlyFocus::Income => {
@@ -916,17 +932,41 @@ impl App {
         }
     }
 
+    pub fn has_open_detail(&self) -> bool {
+        self.account_detail.is_some()
+            || self.expense_detail.is_some()
+            || self.income_detail.is_some()
+    }
+
+    pub fn detail_scroll_up(&mut self) {
+        let i = self.detail_state.selected().unwrap_or(0);
+        self.detail_state.select(Some(i.saturating_sub(1)));
+    }
+
+    pub fn detail_scroll_down(&mut self) {
+        let i = self.detail_state.selected().unwrap_or(0);
+        let len = self.account_detail.as_ref()
+            .or(self.expense_detail.as_ref())
+            .or(self.income_detail.as_ref())
+            .map(|d| d.len())
+            .unwrap_or(0);
+        if i + 1 < len {
+            self.detail_state.select(Some(i + 1));
+        }
+    }
+
     pub fn open_account_detail(&mut self) {
         if self.tab != Tab::Accounts || self.account_detail.is_some() {
             return;
         }
         let sel = self.account_state.selected().unwrap_or(0);
-        if let Some(b) = self.account_balances.get(sel) {
-            let account = b.account.clone();
+        let account = self.filtered_accounts().get(sel).map(|b| b.account.clone());
+        if let Some(account) = account {
             match load_recent_transactions(&self.journal_path, &account, 30, None) {
                 Ok(txns) => {
                     self.detail_account_name = Some(account);
                     self.account_detail = Some(txns);
+                    self.detail_state = TableState::default().with_selected(0);
                 }
                 Err(e) => {
                     self.status_msg = format!("Error loading transactions: {e}");
@@ -956,6 +996,7 @@ impl App {
             Ok(txns) => {
                 self.detail_expense_name = Some(category);
                 self.expense_detail = Some(txns);
+                self.detail_state = TableState::default().with_selected(0);
             }
             Err(e) => {
                 self.status_msg = format!("Error loading transactions: {e}");
@@ -982,6 +1023,7 @@ impl App {
             Ok(txns) => {
                 self.detail_income_name = Some(category);
                 self.income_detail = Some(txns);
+                self.detail_state = TableState::default().with_selected(0);
             }
             Err(e) => self.status_msg = format!("Error loading transactions: {e}"),
         }
@@ -997,6 +1039,33 @@ impl App {
             MonthlyFocus::Income   => MonthlyFocus::Expenses,
             MonthlyFocus::Expenses => MonthlyFocus::Income,
         };
+    }
+
+    pub fn filtered_accounts(&self) -> Vec<&AccountBalance> {
+        if self.account_filter.is_empty() {
+            return self.account_balances.iter().collect();
+        }
+        let q = self.account_filter.to_lowercase();
+        self.account_balances
+            .iter()
+            .filter(|b| b.account.to_lowercase().contains(&q))
+            .collect()
+    }
+
+    pub fn account_filter_push(&mut self, c: char) {
+        self.account_filter.push(c);
+        self.account_state.select(Some(0));
+    }
+
+    pub fn account_filter_backspace(&mut self) {
+        self.account_filter.pop();
+        self.account_state.select(Some(0));
+    }
+
+    pub fn close_account_filter(&mut self) {
+        self.account_filter.clear();
+        self.account_filter_active = false;
+        self.account_state.select(Some(0));
     }
 
     pub fn open_search(&mut self) {
@@ -1136,7 +1205,8 @@ impl App {
             Tab::Accounts => {
                 let offset = self.account_state.offset();
                 let abs = clicked_idx + offset;
-                if abs < self.account_balances.len() {
+                let filtered_len = self.filtered_accounts().len();
+                if abs < filtered_len {
                     self.account_state.select(Some(abs));
                 }
             }
@@ -1249,12 +1319,15 @@ impl App {
             detail_expense_name: None,
             income_detail: None,
             detail_income_name: None,
+            detail_state: ratatui::widgets::TableState::default(),
             portfolio_range: PortfolioRange::All,
             chart_stacked: true,
             expense_colors: false,
             status_msg: "Test mode".to_string(),
             loading: false,
             show_help: false,
+            account_filter: String::new(),
+            account_filter_active: false,
             search_active: false,
             search_query: String::new(),
             search_results: Vec::new(),

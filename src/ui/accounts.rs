@@ -32,7 +32,7 @@ pub(super) fn render_accounts(f: &mut Frame, app: &mut App, area: Rect, theme: &
 
     if let Some(txns) = app.account_detail.as_ref() {
         let name = app.detail_account_name.as_ref().unwrap();
-        render_account_detail(f, txns, name, &app.config, chunks[2], theme);
+        render_account_detail(f, txns, name, &app.config, chunks[2], theme, &mut app.detail_state);
     } else if has_goals {
         let goal_h = (app.config.goals.len() as u16 + 2).min(8);
         let bottom = Layout::vertical([
@@ -134,57 +134,91 @@ fn render_account_detail(
     cfg: &Config,
     area: Rect,
     theme: &Theme,
+    state: &mut ratatui::widgets::TableState,
 ) {
     let title = format!(" {} — Recent Transactions  [Esc back] ", name);
-    render_detail_with_title(f, txns, &title, cfg, area, theme);
+    render_detail_with_title(f, txns, &title, cfg, area, theme, state);
 }
 
 fn render_accounts_table(f: &mut Frame, app: &mut App, area: Rect, theme: &Theme) {
-    let narrow = area.width < 100;
-    let max_amount = app
-        .account_balances
-        .iter()
-        .map(|b| b.amount.abs())
-        .fold(0.0_f64, f64::max);
+    let show_filter = app.account_filter_active || !app.account_filter.is_empty();
 
-    let bar_width = if narrow { 0 } else { (area.width as f64 * 0.2) as usize };
+    let (filter_area, table_area) = if show_filter {
+        let chunks = Layout::vertical([Constraint::Length(3), Constraint::Min(0)]).split(area);
+        (Some(chunks[0]), chunks[1])
+    } else {
+        (None, area)
+    };
 
-    let rows: Vec<Row> = app
-        .account_balances
-        .iter()
-        .map(|b| {
-            let amount_style = if b.amount >= 0.0 {
-                Style::default().fg(theme.positive)
-            } else {
-                Style::default().fg(theme.negative)
-            };
+    if let Some(fa) = filter_area {
+        let text = format!("{}_", app.account_filter);
+        let para = Paragraph::new(text).block(
+            Block::default()
+                .title(Span::styled(" Filter ", Style::default().fg(theme.accent).bold()))
+                .borders(Borders::ALL)
+                .border_type(BorderType::Rounded)
+                .border_style(Style::default().fg(theme.accent)),
+        );
+        f.render_widget(para, fa);
+    }
 
-            let amount_str = format!("{:>15}", app.config.fmt_amount(b.amount, 2));
+    let narrow = table_area.width < 100;
+    let bar_width = if narrow { 0 } else { (table_area.width as f64 * 0.2) as usize };
 
-            let name = if narrow && b.account.len() > 30 {
-                format!("  {}…", &b.account[..29])
-            } else {
-                format!("  {}", b.account)
-            };
-
-            let mut cells = vec![
-                Cell::from(name).style(Style::default().fg(theme.fg)),
-                Cell::from(amount_str).style(amount_style),
-            ];
-
-            if !narrow {
-                let bar_len = if max_amount > 0.0 {
-                    ((b.amount.abs() / max_amount) * bar_width as f64) as usize
-                } else {
-                    0
-                };
-                let bar = "█".repeat(bar_len);
-                cells.push(Cell::from(bar).style(Style::default().fg(theme.accent)));
-            }
-
-            Row::new(cells)
-        })
+    // Collect filtered accounts into owned data to avoid borrow conflicts.
+    let accounts: Vec<(String, f64)> = app
+        .filtered_accounts()
+        .into_iter()
+        .map(|b| (b.account.clone(), b.amount))
         .collect();
+
+    let max_amount = accounts.iter().map(|(_, a)| a.abs()).fold(0.0_f64, f64::max);
+
+    let rows: Vec<Row> = if accounts.is_empty() && show_filter {
+        vec![Row::new(vec![Cell::from(Span::styled(
+            "  No accounts match",
+            Style::default().fg(theme.muted),
+        ))])]
+    } else {
+        accounts
+            .iter()
+            .map(|(account, amount)| {
+                let amount_style = if *amount >= 0.0 {
+                    Style::default().fg(theme.positive)
+                } else {
+                    Style::default().fg(theme.negative)
+                };
+
+                let amount_str = format!("{:>15}", app.config.fmt_amount(*amount, 2));
+
+                let short = account
+                    .strip_prefix("assets:")
+                    .unwrap_or(account);
+                let name = if narrow && short.len() > 30 {
+                    format!("  {}…", &short[..29])
+                } else {
+                    format!("  {}", short)
+                };
+
+                let mut cells = vec![
+                    Cell::from(name).style(Style::default().fg(theme.fg)),
+                    Cell::from(amount_str).style(amount_style),
+                ];
+
+                if !narrow {
+                    let bar_len = if max_amount > 0.0 {
+                        ((amount.abs() / max_amount) * bar_width as f64) as usize
+                    } else {
+                        0
+                    };
+                    let bar = "█".repeat(bar_len);
+                    cells.push(Cell::from(bar).style(Style::default().fg(theme.accent)));
+                }
+
+                Row::new(cells)
+            })
+            .collect()
+    };
 
     let widths: Vec<Constraint> = if narrow {
         vec![Constraint::Min(30), Constraint::Length(16)]
@@ -209,7 +243,7 @@ fn render_accounts_table(f: &mut Frame, app: &mut App, area: Rect, theme: &Theme
         .block(
             Block::default()
                 .title(Span::styled(
-                    " Asset Balances  [Enter drill-down] ",
+                    " Asset Balances  [Enter drill-down]  [type to filter] ",
                     Style::default().fg(theme.accent).bold(),
                 ))
                 .borders(Borders::ALL)
@@ -217,8 +251,8 @@ fn render_accounts_table(f: &mut Frame, app: &mut App, area: Rect, theme: &Theme
                 .border_style(Style::default().fg(theme.muted)),
         );
 
-    app.table_area = area;
-    f.render_stateful_widget(table, area, &mut app.account_state);
+    app.table_area = table_area;
+    f.render_stateful_widget(table, table_area, &mut app.account_state);
 }
 
 fn render_liabilities_table(f: &mut Frame, app: &App, area: Rect, theme: &Theme) {
@@ -227,8 +261,9 @@ fn render_liabilities_table(f: &mut Frame, app: &App, area: Rect, theme: &Theme)
         .iter()
         .map(|b| {
             let amount_str = format!("{:>15}", app.config.fmt_amount(b.amount, 2));
+            let short = b.account.strip_prefix("liabilities:").unwrap_or(&b.account);
             Row::new(vec![
-                Cell::from(format!("  {}", b.account)).style(Style::default().fg(theme.fg)),
+                Cell::from(format!("  {}", short)).style(Style::default().fg(theme.fg)),
                 Cell::from(amount_str).style(Style::default().fg(theme.negative)),
             ])
         })

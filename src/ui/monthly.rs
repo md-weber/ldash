@@ -31,7 +31,7 @@ pub(super) fn render_monthly(f: &mut Frame, app: &mut App, area: Rect, theme: &T
         let short = name.strip_prefix("income:").unwrap_or(name);
         let month = app.current_month().map(|m| m.month_name.as_str()).unwrap_or("");
         let title = format!(" {} — {}  [Esc back] ", short, month);
-        render_detail_with_title(f, txns, &title, &app.config, detail_chunks[0], theme);
+        render_detail_with_title(f, txns, &title, &app.config, detail_chunks[0], theme, &mut app.detail_state);
     } else {
         render_monthly_income(f, app, detail_chunks[0], theme);
     }
@@ -43,7 +43,7 @@ pub(super) fn render_monthly(f: &mut Frame, app: &mut App, area: Rect, theme: &T
             .map(|m| m.month_name.as_str())
             .unwrap_or("");
         let title = format!(" {} — {}  [Esc back] ", short, month);
-        render_detail_with_title(f, txns, &title, &app.config, detail_chunks[1], theme);
+        render_detail_with_title(f, txns, &title, &app.config, detail_chunks[1], theme, &mut app.detail_state);
     } else {
         render_monthly_expenses(f, app, detail_chunks[1], theme);
     }
