@@ -6,17 +6,72 @@ mod watcher;
 
 use anyhow::{Context, Result};
 use app::App;
+use clap::Parser;
 use crossterm::{
     event::{self, Event, KeyCode, KeyEventKind},
-    terminal::{disable_raw_mode, enable_raw_mode, EnterAlternateScreen, LeaveAlternateScreen},
+    terminal::{
+        disable_raw_mode, enable_raw_mode, EnterAlternateScreen, LeaveAlternateScreen, SetTitle,
+    },
     ExecutableCommand,
 };
 use ratatui::prelude::*;
 use std::{
     io,
     path::PathBuf,
+    process::ExitCode,
     time::{Duration, Instant},
 };
+
+const VERSION: &str = env!("CARGO_PKG_VERSION");
+
+/// Terminal dashboard for hledger journals.
+#[derive(Parser, Debug)]
+#[command(
+    name = "ldash",
+    version = VERSION,
+    about = "Terminal dashboard for hledger journals",
+    long_about = None,
+    disable_help_subcommand = true,
+    disable_version_flag = true,
+)]
+struct Cli {
+    /// Print version and exit.
+    #[arg(short = 'v', long = "version", action = clap::ArgAction::Version)]
+    version: (),
+
+    /// Path to hledger journal file (overrides config and $LEDGER_FILE).
+    #[arg(value_name = "FILE")]
+    file_pos: Option<PathBuf>,
+
+    /// Same as positional FILE (matches hledger's -f convention).
+    #[arg(short = 'f', long = "file", value_name = "FILE")]
+    file: Option<PathBuf>,
+
+    /// Path to config file (default: ~/.config/ldash/config.toml).
+    #[arg(short = 'c', long = "config", value_name = "PATH")]
+    config: Option<PathBuf>,
+
+    /// Start on tab: portfolio, accounts, monthly (overrides config).
+    #[arg(long = "tab", value_name = "TAB", value_parser = parse_tab)]
+    tab: Option<String>,
+
+    /// Validate journal + config and exit (no TUI).
+    #[arg(long = "check")]
+    check: bool,
+}
+
+fn parse_tab(s: &str) -> Result<String, String> {
+    match s {
+        "portfolio" | "accounts" | "monthly" => Ok(s.to_string()),
+        _ => Err(format!(
+            "invalid tab '{s}' (expected: portfolio, accounts, monthly)"
+        )),
+    }
+}
+
+const EXIT_OK: u8 = 0;
+const EXIT_CONFIG: u8 = 1;
+const EXIT_NO_HLEDGER: u8 = 2;
 
 fn copy_to_clipboard(text: &str) -> Result<()> {
     #[cfg(target_os = "macos")]
@@ -37,14 +92,13 @@ fn copy_to_clipboard(text: &str) -> Result<()> {
     Ok(())
 }
 
-fn find_journal(config: &config::Config) -> Result<PathBuf> {
-    let args: Vec<String> = std::env::args().collect();
-    if args.len() > 1 {
-        let path = PathBuf::from(&args[1]);
-        if path.exists() {
-            return Ok(path);
+fn find_journal(cli: &Cli, config: &config::Config) -> Result<PathBuf> {
+    let cli_file = cli.file.as_ref().or(cli.file_pos.as_ref());
+    if let Some(p) = cli_file {
+        if p.exists() {
+            return Ok(p.clone());
         }
-        anyhow::bail!("Journal file not found: {}", args[1]);
+        anyhow::bail!("Journal file not found: {}", p.display());
     }
 
     if let Some(ref cfg_path) = config.journal {
@@ -52,7 +106,7 @@ fn find_journal(config: &config::Config) -> Result<PathBuf> {
         if path.exists() {
             return Ok(path);
         }
-        anyhow::bail!("Journal file from config not found: {}", cfg_path);
+        anyhow::bail!("Journal file from config not found: {cfg_path}");
     }
 
     if let Ok(env_path) = std::env::var("LEDGER_FILE") {
@@ -60,7 +114,7 @@ fn find_journal(config: &config::Config) -> Result<PathBuf> {
         if path.exists() {
             return Ok(path);
         }
-        anyhow::bail!("Journal file from $LEDGER_FILE not found: {}", env_path);
+        anyhow::bail!("Journal file from $LEDGER_FILE not found: {env_path}");
     }
 
     let candidates = [
@@ -77,8 +131,9 @@ fn find_journal(config: &config::Config) -> Result<PathBuf> {
     }
 
     anyhow::bail!(
-        "Could not find journal file.\nUsage: ldash /path/to/all.journal\n\
-         Or set $LEDGER_FILE, or run from a directory containing all.journal"
+        "Could not find journal file.\n\
+         Pass one with `ldash -f /path/to/all.journal`,\n\
+         set $LEDGER_FILE, or run from a directory containing all.journal."
     )
 }
 
@@ -90,11 +145,86 @@ fn check_hledger() -> Result<()> {
     Ok(())
 }
 
-fn main() -> Result<()> {
-    let (config, config_warnings) = config::Config::load();
-    let journal_path = find_journal(&config).context("Journal file lookup failed")?;
-    check_hledger()?;
+fn run_check(cli: &Cli) -> Result<()> {
+    let config = if cli.config.is_some() {
+        config::Config::load_strict().context("config validation failed")?
+    } else {
+        let (cfg, warnings) = config::Config::load();
+        for w in &warnings {
+            eprintln!("warning: {w}");
+        }
+        if !warnings.is_empty() {
+            anyhow::bail!("config validation failed");
+        }
+        cfg
+    };
 
+    let journal = find_journal(cli, &config)?;
+    println!("ok: config loaded");
+    println!("ok: journal found at {}", journal.display());
+    println!("ok: hledger present");
+    Ok(())
+}
+
+fn print_err(err: &anyhow::Error) {
+    eprintln!("ldash: {err}");
+    let mut src = err.source();
+    while let Some(s) = src {
+        eprintln!("  caused by: {s}");
+        src = s.source();
+    }
+}
+
+fn main() -> ExitCode {
+    let cli = Cli::parse();
+
+    if let Some(ref p) = cli.config {
+        config::set_config_path_override(p.clone());
+    }
+
+    if let Err(e) = check_hledger() {
+        print_err(&e);
+        return ExitCode::from(EXIT_NO_HLEDGER);
+    }
+
+    if cli.check {
+        return match run_check(&cli) {
+            Ok(()) => ExitCode::from(EXIT_OK),
+            Err(e) => {
+                print_err(&e);
+                ExitCode::from(EXIT_CONFIG)
+            }
+        };
+    }
+
+    let (mut config, config_warnings) = config::Config::load();
+
+    if let Some(ref tab) = cli.tab {
+        config.default_tab = tab.clone();
+    }
+
+    let journal_path = match find_journal(&cli, &config) {
+        Ok(p) => p,
+        Err(e) => {
+            print_err(&e);
+            return ExitCode::from(EXIT_CONFIG);
+        }
+    };
+
+    match run_tui(journal_path, config, config_warnings) {
+        Ok(()) => ExitCode::from(EXIT_OK),
+        Err(e) => {
+            print_err(&e);
+            ExitCode::from(EXIT_CONFIG)
+        }
+    }
+}
+
+fn run_tui(
+    journal_path: PathBuf,
+    config: config::Config,
+    config_warnings: Vec<String>,
+) -> Result<()> {
     enable_raw_mode()?;
 
     let original_hook = std::panic::take_hook();
@@ -106,14 +236,15 @@ fn main() -> Result<()> {
 
     let mut stdout = io::stdout();
     stdout.execute(EnterAlternateScreen)?;
+    stdout.execute(SetTitle("Ledger Dashboard"))?;
 
     let backend = CrosstermBackend::new(stdout);
     let mut terminal = Terminal::new(backend)?;
 
     let result = run(&mut terminal, journal_path, config, config_warnings);
 
-    disable_raw_mode()?;
-    io::stdout().execute(LeaveAlternateScreen)?;
+    let _ = disable_raw_mode();
+    let _ = io::stdout().execute(LeaveAlternateScreen);
 
     result
 }

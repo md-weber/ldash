@@ -1,6 +1,13 @@
 use serde::Deserialize;
 use std::collections::HashMap;
 use std::path::PathBuf;
+use std::sync::OnceLock;
+
+static CONFIG_PATH_OVERRIDE: OnceLock<PathBuf> = OnceLock::new();
+
+pub fn set_config_path_override(path: PathBuf) {
+    let _ = CONFIG_PATH_OVERRIDE.set(path);
+}
 
 #[derive(Debug, Deserialize)]
 #[serde(default)]
@@ -98,6 +105,7 @@ const DEFAULT_CONFIG: &str = r##"# ldash configuration
 impl Config {
     pub fn load() -> (Self, Vec<String>) {
         let path = config_path();
+        let explicit = CONFIG_PATH_OVERRIDE.get().is_some();
         let mut warnings = Vec::new();
         let config = match std::fs::read_to_string(&path) {
             Ok(content) => toml::from_str(&content).unwrap_or_else(|e| {
@@ -105,11 +113,27 @@ impl Config {
                 Config::default()
             }),
             Err(_) => {
-                Self::init_default_config(&path);
+                if explicit {
+                    warnings.push(format!(
+                        "Config file not found: {}",
+                        path.display()
+                    ));
+                } else {
+                    Self::init_default_config(&path);
+                }
                 Config::default()
             }
         };
         (config, warnings)
+    }
+
+    pub fn load_strict() -> anyhow::Result<Self> {
+        let path = config_path();
+        let content = std::fs::read_to_string(&path).map_err(|e| {
+            anyhow::anyhow!("Cannot read config {}: {}", path.display(), e)
+        })?;
+        toml::from_str(&content)
+            .map_err(|e| anyhow::anyhow!("Config parse error in {}: {}", path.display(), e))
     }
 
     /// Hot-reload safe fields from disk. Skips startup-only settings
@@ -162,6 +186,9 @@ impl Config {
 }
 
 fn config_path() -> PathBuf {
+    if let Some(p) = CONFIG_PATH_OVERRIDE.get() {
+        return p.clone();
+    }
     if let Ok(home) = std::env::var("HOME") {
         PathBuf::from(home).join(".config/ldash/config.toml")
     } else {

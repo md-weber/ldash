@@ -140,6 +140,10 @@ fn render_title(f: &mut Frame, area: Rect) {
         Span::raw("  "),
         Span::styled("⬡", Style::default().fg(GOLD)),
         Span::styled(" Ledger Dashboard", Style::default().fg(Color::White).bold()),
+        Span::styled(
+            format!(" v{}", env!("CARGO_PKG_VERSION")),
+            Style::default().fg(MUTED),
+        ),
         Span::raw("  "),
     ]))
     .style(Style::default().bg(Color::Rgb(20, 20, 30)));
@@ -620,7 +624,7 @@ fn render_holdings_table(f: &mut Frame, app: &App, area: Rect) {
                 Cell::from(pct).style(Style::default().fg(FG)),
                 Cell::from(pl_pct_str).style(pl_pct_style),
             ]);
-            if !narrow {
+            if !very_narrow {
                 cells.push(Cell::from(pl_eur_str).style(pl_eur_style));
             }
 
@@ -669,7 +673,7 @@ fn render_holdings_table(f: &mut Frame, app: &App, area: Rect) {
         Cell::from(format!("{pl_prefix}{:.1}%", pl_pct))
             .style(Style::default().fg(pl_color).bold()),
     ]);
-    if !narrow {
+    if !very_narrow {
         total_cells.push(
             Cell::from(format!("{pl_prefix}{:.2}€", pl_abs))
                 .style(Style::default().fg(pl_color).bold()),
@@ -688,11 +692,12 @@ fn render_holdings_table(f: &mut Frame, app: &App, area: Rect) {
     } else if narrow {
         vec![
             Constraint::Length(6),
+            Constraint::Length(8),
             Constraint::Length(9),
             Constraint::Length(10),
-            Constraint::Length(11),
             Constraint::Length(6),
-            Constraint::Length(8),
+            Constraint::Length(7),
+            Constraint::Length(11),
         ]
     } else {
         vec![
@@ -711,7 +716,7 @@ fn render_holdings_table(f: &mut Frame, app: &App, area: Rect) {
         header_cells.push("Amount");
     }
     header_cells.extend(["Price", "Value", "Alloc", "P/L %"]);
-    if !narrow {
+    if !very_narrow {
         header_cells.push("P/L €");
     }
 
