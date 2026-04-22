@@ -1,6 +1,6 @@
 [package]
 name = "ldash"
-version = "0.1.0"
+version = "1.0.0"
 edition = "2021"
 description = "Terminal dashboard TUI for hledger — crypto portfolio, net worth, and monthly income/expenses"
 license = "GPL-3.0-or-later"

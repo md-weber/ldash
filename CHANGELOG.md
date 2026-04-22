@@ -7,6 +7,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [1.0.0] - 2026-04-22
+
 ### Added
 
 - Crypto portfolio tab with holdings table, allocation %, and P/L tracking
@@ -29,4 +31,5 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Forgejo CI workflow (lint, build, test)
 - Forgejo release workflow with cross-compilation via `cargo-zigbuild`
 
-[Unreleased]: https://codeberg.org/md-weber/ldash/compare/v0.1.0...HEAD
+[Unreleased]: https://codeberg.org/md-weber/ldash/compare/v1.0.0...HEAD
+[1.0.0]: https://codeberg.org/md-weber/ldash/compare/v0.1.0...v1.0.0

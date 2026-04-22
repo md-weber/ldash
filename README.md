@@ -40,10 +40,12 @@ Built with [Ratatui](https://ratatui.rs) and Rust.
 ## Installation
 
 ```bash
-git clone https://github.com/yourusername/ledger_dashboard.git
-cd ledger_dashboard
+git clone https://codeberg.org/md-weber/ldash.git
+cd ldash
 cargo install --path .
 ```
+
+Homebrew tap support is planned for a `1.0.x` patch release. For now, install from source (above), AUR, or Nix.
 
 ## Usage
 

@@ -13,7 +13,7 @@
 
         ldash = pkgs.rustPlatform.buildRustPackage {
           pname = "ldash";
-          version = "0.1.0";
+          version = "1.0.0";
           src = ./.;
           cargoLock.lockFile = ./Cargo.lock;
 
@@ -31,7 +31,7 @@
 
         checkSrc = pkgs.rustPlatform.buildRustPackage {
           pname = "ldash-clippy";
-          version = "0.1.0";
+          version = "1.0.0";
           src = ./.;
           cargoLock.lockFile = ./Cargo.lock;
           buildPhase = ''
@@ -62,7 +62,7 @@
 
           clippy = pkgs.rustPlatform.buildRustPackage {
             pname = "ldash-clippy";
-            version = "0.1.0";
+            version = "1.0.0";
             src = ./.;
             cargoLock.lockFile = ./Cargo.lock;
             buildPhase = "cargo clippy -- -D warnings";
@@ -72,7 +72,7 @@
 
           test = pkgs.rustPlatform.buildRustPackage {
             pname = "ldash-test";
-            version = "0.1.0";
+            version = "1.0.0";
             src = ./.;
             cargoLock.lockFile = ./Cargo.lock;
             buildPhase = "cargo test";

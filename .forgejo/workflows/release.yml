@@ -52,6 +52,19 @@ jobs:
           echo "/usr/local/zig-linux-x86_64-${ZIG_VERSION}" >> "$GITHUB_PATH"
           cargo install cargo-zigbuild --locked
 
+      - name: Install macOS SDK (Apple targets)
+        if: contains(matrix.target, 'apple-darwin')
+        run: |
+          SDK_VER="11.3"
+          SDK_DIR="/opt/MacOSX${SDK_VER}.sdk"
+          if [ ! -d "$SDK_DIR" ]; then
+            sudo mkdir -p /opt
+            curl -fsSL "https://github.com/phracker/MacOSX-SDKs/releases/download/${SDK_VER}/MacOSX${SDK_VER}.sdk.tar.xz" \
+              | sudo tar -xJ -C /opt
+          fi
+          echo "SDKROOT=${SDK_DIR}" >> "$GITHUB_ENV"
+          echo "MACOSX_DEPLOYMENT_TARGET=11.0" >> "$GITHUB_ENV"
+
       - name: Build (native)
         if: "!matrix.zigbuild"
         run: cargo build --release --target ${{ matrix.target }}
@@ -65,10 +78,12 @@ jobs:
           BIN="target/${{ matrix.target }}/release/ldash"
           # strip only works on native target; skip silently for cross-compiled
           strip "$BIN" 2>/dev/null || true
-          tar -czf "${{ matrix.artifact }}.tar.gz" \
-            -C "target/${{ matrix.target }}/release" ldash
+          mkdir -p stage
+          cp "$BIN" stage/ldash
+          cp man/ldash.1 stage/
+          tar -czf "${{ matrix.artifact }}.tar.gz" -C stage .
 
-      - uses: actions/upload-artifact@v4
+      - uses: actions/upload-artifact@v3
         with:
           name: ${{ matrix.artifact }}
           path: ${{ matrix.artifact }}.tar.gz
@@ -79,34 +94,61 @@ jobs:
     needs: build
     runs-on: codeberg-small
     steps:
-      - uses: actions/download-artifact@v4
+      - uses: actions/download-artifact@v3
         with:
           path: artifacts
-          merge-multiple: true
 
       - name: Checksums
         run: |
           cd artifacts
+          find . -type f -name "*.tar.gz" -exec cp {} . \;
           sha256sum *.tar.gz > SHA256SUMS
           cat SHA256SUMS
 
       - name: Publish release
         env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          GITHUB_TOKEN: ${{ github.token }}
         run: |
+          set -euo pipefail
           TAG="${GITHUB_REF#refs/tags/}"
-          API="${GITHUB_API_URL}/repos/${GITHUB_REPOSITORY}/releases"
+          API_BASE="${GITHUB_API_URL:-${FORGEJO_API_URL:-}}"
+          REPO="${GITHUB_REPOSITORY:-${FORGEJO_REPOSITORY:-}}"
+          TOKEN="${GITHUB_TOKEN:-${FORGEJO_TOKEN:-}}"
+          API="${API_BASE}/repos/${REPO}/releases"
 
-          RELEASE_ID=$(curl -sf -X POST "$API" \
-            -H "Authorization: token ${GITHUB_TOKEN}" \
+          if [ -z "${API_BASE}" ] || [ -z "${REPO}" ] || [ -z "${TOKEN}" ]; then
+            echo "Missing API context or token."
+            echo "GITHUB_API_URL='${GITHUB_API_URL:-}'"
+            echo "GITHUB_REPOSITORY='${GITHUB_REPOSITORY:-}'"
+            echo "FORGEJO_API_URL='${FORGEJO_API_URL:-}'"
+            echo "FORGEJO_REPOSITORY='${FORGEJO_REPOSITORY:-}'"
+            exit 1
+          fi
+
+          CREATE_PAYLOAD="{\"tag_name\":\"${TAG}\",\"name\":\"${TAG}\",\"draft\":false,\"prerelease\":false}"
+          CREATE_RESP="$(mktemp)"
+          CREATE_CODE="$(curl -sS -o "${CREATE_RESP}" -w "%{http_code}" -X POST "${API}" \
+            -H "Authorization: token ${TOKEN}" \
             -H "Content-Type: application/json" \
-            -d "{\"tag_name\":\"${TAG}\",\"name\":\"${TAG}\",\"draft\":false,\"prerelease\":false}" \
-            | python3 -c "import sys,json; print(json.load(sys.stdin)['id'])")
+            -d "${CREATE_PAYLOAD}")"
+
+          if [ "${CREATE_CODE}" -ge 300 ]; then
+            echo "Release creation failed (HTTP ${CREATE_CODE})"
+            cat "${CREATE_RESP}"
+            exit 1
+          fi
+
+          RELEASE_ID="$(python3 -c 'import json,sys; d=json.load(open(sys.argv[1])); rid=d.get("id"); print(rid if rid is not None else "");' "${CREATE_RESP}")"
+          if [ -z "${RELEASE_ID}" ]; then
+            echo "Release creation response missing id:"
+            cat "${CREATE_RESP}"
+            exit 1
+          fi
 
           for file in artifacts/*.tar.gz artifacts/SHA256SUMS; do
-            curl -sf -X POST \
+            curl -sS -f -X POST \
               "${API}/${RELEASE_ID}/assets?name=$(basename "$file")" \
-              -H "Authorization: token ${GITHUB_TOKEN}" \
+              -H "Authorization: token ${TOKEN}" \
               -H "Content-Type: application/octet-stream" \
               --data-binary @"$file"
             echo "Uploaded $(basename "$file")"
