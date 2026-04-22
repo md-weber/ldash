@@ -29,4 +29,4 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Forgejo CI workflow (lint, build, test)
 - Forgejo release workflow with cross-compilation via `cargo-zigbuild`
 
-[Unreleased]: https://codeberg.org/md-weber/hledger_dashboard/compare/v0.1.0...HEAD
+[Unreleased]: https://codeberg.org/md-weber/ldash/compare/v0.1.0...HEAD
