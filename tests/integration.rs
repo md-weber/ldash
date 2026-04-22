@@ -17,7 +17,7 @@ fn hledger_available() -> bool {
 
 #[test]
 fn integration_parse_eu_number_roundtrip() {
-    use ledger_dashboard::data::parse_eu_number;
+    use ldash::data::parse_eu_number;
     assert!((parse_eu_number("1.234,56").unwrap() - 1234.56).abs() < 1e-10);
     assert!((parse_eu_number("-99,99").unwrap() - (-99.99)).abs() < 1e-10);
     assert_eq!(parse_eu_number("garbage"), None);
@@ -35,7 +35,7 @@ fn integration_load_monthly_data_two_months() {
         return;
     }
     let path = fixture("simple.journal");
-    let data = ledger_dashboard::data::load_monthly_data(&path, "EUR").unwrap();
+    let data = ldash::data::load_monthly_data(&path, "EUR").unwrap();
 
     assert_eq!(data.months.len(), 2, "expected Jan + Feb");
 
@@ -79,7 +79,7 @@ fn integration_load_account_balances_checking() {
         return;
     }
     let path = fixture("simple.journal");
-    let balances = ledger_dashboard::data::load_account_balances_eur(&path).unwrap();
+    let balances = ldash::data::load_account_balances_eur(&path).unwrap();
 
     let checking = balances
         .iter()

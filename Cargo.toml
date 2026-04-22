@@ -1,14 +1,28 @@
 [package]
-name = "ledger_dashboard"
+name = "ldash"
 version = "0.1.0"
 edition = "2021"
+description = "Terminal dashboard TUI for hledger — crypto portfolio, net worth, and monthly income/expenses"
+license = "GPL-3.0-or-later"
+repository = "https://codeberg.org/md-weber/hledger_dashboard"
+readme = "README.md"
+keywords = ["hledger", "finance", "tui", "ledger", "dashboard"]
+categories = ["command-line-utilities", "visualization"]
+exclude = [
+    "plans/",
+    "docs/",
+    ".forgejo/",
+    ".cursor/",
+    "target/",
+    "strategy.md",
+]
 
 [[bin]]
 name = "ldash"
 path = "src/main.rs"
 
 [lib]
-name = "ledger_dashboard"
+name = "ldash"
 path = "src/lib.rs"
 
 [dependencies]

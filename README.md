@@ -182,4 +182,4 @@ P 2026-04-14 SOL 123,45 €
 
 ## License
 
-MIT
+GPL-3.0-or-later — see [LICENSE](LICENSE) for the full text.
