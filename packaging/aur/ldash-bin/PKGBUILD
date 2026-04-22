@@ -1,0 +1,19 @@
+pkgname=ldash-bin
+pkgver=0.1.0
+pkgrel=1
+pkgdesc="Terminal dashboard TUI for hledger — crypto portfolio, net worth, monthly income/expenses"
+arch=('x86_64' 'aarch64')
+url="https://codeberg.org/md-weber/ldash"
+license=('GPL-3.0-or-later')
+provides=('ldash')
+conflicts=('ldash')
+
+source_x86_64=("$pkgname-$pkgver-x86_64.tar.gz::https://codeberg.org/md-weber/ldash/releases/download/v$pkgver/ldash-x86_64-unknown-linux-gnu.tar.gz")
+source_aarch64=("$pkgname-$pkgver-aarch64.tar.gz::https://codeberg.org/md-weber/ldash/releases/download/v$pkgver/ldash-aarch64-unknown-linux-gnu.tar.gz")
+
+sha256sums_x86_64=('PLACEHOLDER_x86_64_SHA256')
+sha256sums_aarch64=('PLACEHOLDER_aarch64_SHA256')
+
+package() {
+  install -Dm755 ldash "$pkgdir/usr/bin/ldash"
+}

@@ -1,0 +1,16 @@
+pkgbase = ldash
+	pkgdesc = Terminal dashboard TUI for hledger — crypto portfolio, net worth, monthly income/expenses
+	pkgver = 0.1.0
+	pkgrel = 1
+	url = https://codeberg.org/md-weber/ldash
+	arch = x86_64
+	arch = aarch64
+	license = GPL-3.0-or-later
+	makedepends = rust
+	makedepends = cargo
+	provides = ldash
+	conflicts = ldash-bin
+	source = ldash-0.1.0.tar.gz::https://codeberg.org/md-weber/ldash/archive/v0.1.0.tar.gz
+	sha256sums = PLACEHOLDER_SOURCE_SHA256
+
+pkgname = ldash
