@@ -1213,7 +1213,7 @@ impl App {
         let sel = self.account_state.selected().unwrap_or(0);
         let account = self.filtered_accounts().get(sel).map(|b| b.account.clone());
         if let Some(account) = account {
-            match load_recent_transactions(&self.journal_path, &account, 30, None) {
+            match load_recent_transactions(&self.journal_path, &account, 30, None, &self.config.currency_symbol) {
                 Ok(txns) => {
                     self.detail_account_name = Some(account);
                     self.account_detail = Some(txns);
@@ -1246,7 +1246,7 @@ impl App {
             },
             None => return,
         };
-        match load_recent_transactions(&self.journal_path, &category, 50, Some(&period)) {
+        match load_recent_transactions(&self.journal_path, &category, 50, Some(&period), &self.config.currency_symbol) {
             Ok(txns) => {
                 self.detail_expense_name = Some(category);
                 self.expense_detail = Some(txns);
@@ -1278,7 +1278,7 @@ impl App {
             },
             None => return,
         };
-        match load_recent_transactions(&self.journal_path, &category, 50, Some(&period)) {
+        match load_recent_transactions(&self.journal_path, &category, 50, Some(&period), &self.config.currency_symbol) {
             Ok(txns) => {
                 self.detail_income_name = Some(category);
                 self.income_detail = Some(txns);

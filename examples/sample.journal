@@ -1,0 +1,638 @@
+; ldash sample journal
+; Run: ldash --file examples/sample.journal
+; Prices companion: examples/prices.journal
+
+include prices.journal
+
+; ── Opening balances (2025-01-01) ────────────────────────────────────────────
+
+2025-01-01 Opening balances
+    assets:bank:checking          4 200,00 €
+    assets:bank:savings          18 000,00 €
+    assets:crypto:BTC              0.25 BTC
+    assets:crypto:ETH              2.00 ETH
+    assets:crypto:SOL             10.00 SOL
+    equity:opening-balances
+
+; ── 2025-01 ──────────────────────────────────────────────────────────────────
+
+2025-01-31 Salary
+    assets:bank:checking          3 800,00 €
+    income:salary                -3 800,00 €
+
+2025-01-05 Rent
+    expenses:Wohnen                 950,00 €
+    assets:bank:checking
+
+2025-01-06 Groceries
+    expenses:Essen                  210,00 €
+    assets:bank:checking
+
+2025-01-10 Public transport pass
+    expenses:Transport               98,00 €
+    assets:bank:checking
+
+2025-01-14 Gym membership
+    expenses:Freizeit                45,00 €
+    assets:bank:checking
+
+2025-01-18 Streaming services
+    expenses:Unterhaltung            28,00 €
+    assets:bank:checking
+
+2025-01-22 Pharmacy
+    expenses:Gesundheit              34,00 €
+    assets:bank:checking
+
+2025-01-28 Savings transfer
+    assets:bank:savings             500,00 €
+    assets:bank:checking
+
+; ── 2025-02 ──────────────────────────────────────────────────────────────────
+
+2025-02-28 Salary
+    assets:bank:checking          3 800,00 €
+    income:salary                -3 800,00 €
+
+2025-02-05 Rent
+    expenses:Wohnen                 950,00 €
+    assets:bank:checking
+
+2025-02-07 Groceries
+    expenses:Essen                  195,00 €
+    assets:bank:checking
+
+2025-02-11 Transport
+    expenses:Transport               98,00 €
+    assets:bank:checking
+
+2025-02-14 Valentine dinner
+    expenses:Essen                   72,00 €
+    assets:bank:checking
+
+2025-02-17 Concert tickets
+    expenses:Freizeit               110,00 €
+    assets:bank:checking
+
+2025-02-20 Streaming services
+    expenses:Unterhaltung            28,00 €
+    assets:bank:checking
+
+2025-02-24 Freelance income
+    assets:bank:checking            650,00 €
+    income:freelance               -650,00 €
+
+2025-02-26 Savings transfer
+    assets:bank:savings             400,00 €
+    assets:bank:checking
+
+; ── 2025-03 ──────────────────────────────────────────────────────────────────
+
+2025-03-31 Salary
+    assets:bank:checking          3 800,00 €
+    income:salary                -3 800,00 €
+
+2025-03-05 Rent
+    expenses:Wohnen                 950,00 €
+    assets:bank:checking
+
+2025-03-08 Groceries
+    expenses:Essen                  220,00 €
+    assets:bank:checking
+
+2025-03-12 Transport
+    expenses:Transport               98,00 €
+    assets:bank:checking
+
+2025-03-15 Gym membership
+    expenses:Freizeit                45,00 €
+    assets:bank:checking
+
+2025-03-18 Streaming services
+    expenses:Unterhaltung            28,00 €
+    assets:bank:checking
+
+2025-03-20 Doctor visit
+    expenses:Gesundheit              60,00 €
+    assets:bank:checking
+
+2025-03-22 Buy 0.05 BTC
+    assets:crypto:BTC              0.05 BTC @ 55 000,00 €
+    assets:bank:checking         -2 750,00 €
+
+2025-03-28 Savings transfer
+    assets:bank:savings             500,00 €
+    assets:bank:checking
+
+; ── 2025-04 ──────────────────────────────────────────────────────────────────
+
+2025-04-30 Salary
+    assets:bank:checking          3 800,00 €
+    income:salary                -3 800,00 €
+
+2025-04-04 Rent
+    expenses:Wohnen                 950,00 €
+    assets:bank:checking
+
+2025-04-07 Groceries
+    expenses:Essen                  205,00 €
+    assets:bank:checking
+
+2025-04-10 Transport
+    expenses:Transport               98,00 €
+    assets:bank:checking
+
+2025-04-13 Gym membership
+    expenses:Freizeit                45,00 €
+    assets:bank:checking
+
+2025-04-16 Easter weekend trip
+    expenses:Freizeit               280,00 €
+    assets:bank:checking
+
+2025-04-20 Streaming services
+    expenses:Unterhaltung            28,00 €
+    assets:bank:checking
+
+2025-04-25 Buy 5 SOL
+    assets:crypto:SOL              5.00 SOL @ 145,00 €
+    assets:bank:checking           -725,00 €
+
+2025-04-28 Savings transfer
+    assets:bank:savings             400,00 €
+    assets:bank:checking
+
+; ── 2025-05 ──────────────────────────────────────────────────────────────────
+
+2025-05-31 Salary
+    assets:bank:checking          3 800,00 €
+    income:salary                -3 800,00 €
+
+2025-05-05 Rent
+    expenses:Wohnen                 950,00 €
+    assets:bank:checking
+
+2025-05-08 Groceries
+    expenses:Essen                  230,00 €
+    assets:bank:checking
+
+2025-05-12 Transport
+    expenses:Transport               98,00 €
+    assets:bank:checking
+
+2025-05-15 Gym membership
+    expenses:Freizeit                45,00 €
+    assets:bank:checking
+
+2025-05-18 Streaming services
+    expenses:Unterhaltung            28,00 €
+    assets:bank:checking
+
+2025-05-21 Clothing
+    expenses:Kleidung               135,00 €
+    assets:bank:checking
+
+2025-05-25 Freelance income
+    assets:bank:checking            800,00 €
+    income:freelance               -800,00 €
+
+2025-05-28 Savings transfer
+    assets:bank:savings             600,00 €
+    assets:bank:checking
+
+; ETH staking reward
+2025-05-31 ETH staking reward
+    assets:crypto:ETH              0.04 ETH
+    income:staking                  -0.04 ETH
+
+; ── 2025-06 ──────────────────────────────────────────────────────────────────
+
+2025-06-30 Salary
+    assets:bank:checking          3 800,00 €
+    income:salary                -3 800,00 €
+
+2025-06-04 Rent
+    expenses:Wohnen                 950,00 €
+    assets:bank:checking
+
+2025-06-07 Groceries
+    expenses:Essen                  215,00 €
+    assets:bank:checking
+
+2025-06-11 Transport
+    expenses:Transport               98,00 €
+    assets:bank:checking
+
+2025-06-14 Gym membership
+    expenses:Freizeit                45,00 €
+    assets:bank:checking
+
+2025-06-18 Streaming services
+    expenses:Unterhaltung            28,00 €
+    assets:bank:checking
+
+2025-06-20 Summer festival tickets
+    expenses:Freizeit               180,00 €
+    assets:bank:checking
+
+2025-06-25 Books and courses
+    expenses:Bildung                 95,00 €
+    assets:bank:checking
+
+2025-06-28 Savings transfer
+    assets:bank:savings             500,00 €
+    assets:bank:checking
+
+; ── 2025-07 ──────────────────────────────────────────────────────────────────
+
+2025-07-31 Salary
+    assets:bank:checking          3 800,00 €
+    income:salary                -3 800,00 €
+
+2025-07-04 Rent
+    expenses:Wohnen                 950,00 €
+    assets:bank:checking
+
+2025-07-07 Groceries
+    expenses:Essen                  200,00 €
+    assets:bank:checking
+
+2025-07-11 Transport
+    expenses:Transport               98,00 €
+    assets:bank:checking
+
+2025-07-14 Gym membership
+    expenses:Freizeit                45,00 €
+    assets:bank:checking
+
+2025-07-18 Streaming services
+    expenses:Unterhaltung            28,00 €
+    assets:bank:checking
+
+2025-07-20 Holiday — flights + hotel
+    expenses:Reisen               1 250,00 €
+    assets:bank:checking
+
+2025-07-28 Savings transfer
+    assets:bank:savings             300,00 €
+    assets:bank:checking
+
+; SOL staking reward
+2025-07-31 SOL staking reward
+    assets:crypto:SOL              0.80 SOL
+    income:staking                  -0.80 SOL
+
+; ── 2025-08 ──────────────────────────────────────────────────────────────────
+
+2025-08-31 Salary
+    assets:bank:checking          3 800,00 €
+    income:salary                -3 800,00 €
+
+2025-08-05 Rent
+    expenses:Wohnen                 950,00 €
+    assets:bank:checking
+
+2025-08-08 Groceries
+    expenses:Essen                  225,00 €
+    assets:bank:checking
+
+2025-08-12 Transport
+    expenses:Transport               98,00 €
+    assets:bank:checking
+
+2025-08-15 Gym membership
+    expenses:Freizeit                45,00 €
+    assets:bank:checking
+
+2025-08-18 Streaming services
+    expenses:Unterhaltung            28,00 €
+    assets:bank:checking
+
+2025-08-22 Buy 1 ETH
+    assets:crypto:ETH              1.00 ETH @ 2 600,00 €
+    assets:bank:checking         -2 600,00 €
+
+2025-08-28 Savings transfer
+    assets:bank:savings             400,00 €
+    assets:bank:checking
+
+; ── 2025-09 ──────────────────────────────────────────────────────────────────
+
+2025-09-30 Salary
+    assets:bank:checking          3 800,00 €
+    income:salary                -3 800,00 €
+
+2025-09-04 Rent
+    expenses:Wohnen                 950,00 €
+    assets:bank:checking
+
+2025-09-08 Groceries
+    expenses:Essen                  210,00 €
+    assets:bank:checking
+
+2025-09-11 Transport
+    expenses:Transport               98,00 €
+    assets:bank:checking
+
+2025-09-15 Gym membership
+    expenses:Freizeit                45,00 €
+    assets:bank:checking
+
+2025-09-18 Streaming services
+    expenses:Unterhaltung            28,00 €
+    assets:bank:checking
+
+2025-09-22 Freelance income
+    assets:bank:checking            950,00 €
+    income:freelance               -950,00 €
+
+2025-09-25 Online course
+    expenses:Bildung                149,00 €
+    assets:bank:checking
+
+2025-09-28 Savings transfer
+    assets:bank:savings             550,00 €
+    assets:bank:checking
+
+; ETH staking reward
+2025-09-30 ETH staking reward
+    assets:crypto:ETH              0.05 ETH
+    income:staking                  -0.05 ETH
+
+; ── 2025-10 ──────────────────────────────────────────────────────────────────
+
+2025-10-31 Salary
+    assets:bank:checking          3 800,00 €
+    income:salary                -3 800,00 €
+
+2025-10-05 Rent
+    expenses:Wohnen                 950,00 €
+    assets:bank:checking
+
+2025-10-08 Groceries
+    expenses:Essen                  215,00 €
+    assets:bank:checking
+
+2025-10-11 Transport
+    expenses:Transport               98,00 €
+    assets:bank:checking
+
+2025-10-14 Gym membership
+    expenses:Freizeit                45,00 €
+    assets:bank:checking
+
+2025-10-18 Streaming services
+    expenses:Unterhaltung            28,00 €
+    assets:bank:checking
+
+2025-10-22 Winter coat
+    expenses:Kleidung               195,00 €
+    assets:bank:checking
+
+2025-10-28 Savings transfer
+    assets:bank:savings             450,00 €
+    assets:bank:checking
+
+; ── 2025-11 ──────────────────────────────────────────────────────────────────
+
+2025-11-30 Salary
+    assets:bank:checking          3 800,00 €
+    income:salary                -3 800,00 €
+
+2025-11-04 Rent
+    expenses:Wohnen                 950,00 €
+    assets:bank:checking
+
+2025-11-07 Groceries
+    expenses:Essen                  220,00 €
+    assets:bank:checking
+
+2025-11-11 Transport
+    expenses:Transport               98,00 €
+    assets:bank:checking
+
+2025-11-15 Gym membership
+    expenses:Freizeit                45,00 €
+    assets:bank:checking
+
+2025-11-18 Streaming services
+    expenses:Unterhaltung            28,00 €
+    assets:bank:checking
+
+2025-11-22 Buy 0.03 BTC
+    assets:crypto:BTC              0.03 BTC @ 78 000,00 €
+    assets:bank:checking         -2 340,00 €
+
+2025-11-25 Christmas gifts
+    expenses:Geschenke             320,00 €
+    assets:bank:checking
+
+2025-11-28 Savings transfer
+    assets:bank:savings             350,00 €
+    assets:bank:checking
+
+; SOL staking reward
+2025-11-30 SOL staking reward
+    assets:crypto:SOL              1.00 SOL
+    income:staking                  -1.00 SOL
+
+; ── 2025-12 ──────────────────────────────────────────────────────────────────
+
+2025-12-31 Salary
+    assets:bank:checking          3 800,00 €
+    income:salary                -3 800,00 €
+
+2025-12-31 Year-end bonus
+    assets:bank:checking          1 500,00 €
+    income:bonus                 -1 500,00 €
+
+2025-12-04 Rent
+    expenses:Wohnen                 950,00 €
+    assets:bank:checking
+
+2025-12-08 Groceries
+    expenses:Essen                  240,00 €
+    assets:bank:checking
+
+2025-12-11 Transport
+    expenses:Transport               98,00 €
+    assets:bank:checking
+
+2025-12-15 Gym membership
+    expenses:Freizeit                45,00 €
+    assets:bank:checking
+
+2025-12-18 Streaming services
+    expenses:Unterhaltung            28,00 €
+    assets:bank:checking
+
+2025-12-20 Christmas dinner out
+    expenses:Essen                  135,00 €
+    assets:bank:checking
+
+2025-12-22 Christmas gifts
+    expenses:Geschenke             480,00 €
+    assets:bank:checking
+
+2025-12-26 Pharmacy
+    expenses:Gesundheit              22,00 €
+    assets:bank:checking
+
+2025-12-28 Savings transfer
+    assets:bank:savings             800,00 €
+    assets:bank:checking
+
+; ETH staking reward
+2025-12-31 ETH staking reward
+    assets:crypto:ETH              0.05 ETH
+    income:staking                  -0.05 ETH
+
+; ── 2026-01 ──────────────────────────────────────────────────────────────────
+
+2026-01-31 Salary
+    assets:bank:checking          3 800,00 €
+    income:salary                -3 800,00 €
+
+2026-01-05 Rent
+    expenses:Wohnen                 950,00 €
+    assets:bank:checking
+
+2026-01-08 Groceries
+    expenses:Essen                  205,00 €
+    assets:bank:checking
+
+2026-01-12 Transport
+    expenses:Transport               98,00 €
+    assets:bank:checking
+
+2026-01-15 Gym membership
+    expenses:Freizeit                45,00 €
+    assets:bank:checking
+
+2026-01-18 Streaming services
+    expenses:Unterhaltung            28,00 €
+    assets:bank:checking
+
+2026-01-22 Buy 8 SOL
+    assets:crypto:SOL              8.00 SOL @ 182,00 €
+    assets:bank:checking         -1 456,00 €
+
+2026-01-28 Savings transfer
+    assets:bank:savings             500,00 €
+    assets:bank:checking
+
+; ── 2026-02 ──────────────────────────────────────────────────────────────────
+
+2026-02-28 Salary
+    assets:bank:checking          3 800,00 €
+    income:salary                -3 800,00 €
+
+2026-02-04 Rent
+    expenses:Wohnen                 950,00 €
+    assets:bank:checking
+
+2026-02-07 Groceries
+    expenses:Essen                  215,00 €
+    assets:bank:checking
+
+2026-02-11 Transport
+    expenses:Transport               98,00 €
+    assets:bank:checking
+
+2026-02-14 Gym membership
+    expenses:Freizeit                45,00 €
+    assets:bank:checking
+
+2026-02-18 Streaming services
+    expenses:Unterhaltung            28,00 €
+    assets:bank:checking
+
+2026-02-22 Freelance income
+    assets:bank:checking          1 100,00 €
+    income:freelance             -1 100,00 €
+
+2026-02-25 Books
+    expenses:Bildung                 55,00 €
+    assets:bank:checking
+
+2026-02-28 Savings transfer
+    assets:bank:savings             600,00 €
+    assets:bank:checking
+
+; SOL staking reward
+2026-02-28 SOL staking reward
+    assets:crypto:SOL              1.50 SOL
+    income:staking                  -1.50 SOL
+
+; ── 2026-03 ──────────────────────────────────────────────────────────────────
+
+2026-03-31 Salary
+    assets:bank:checking          3 800,00 €
+    income:salary                -3 800,00 €
+
+2026-03-05 Rent
+    expenses:Wohnen                 950,00 €
+    assets:bank:checking
+
+2026-03-08 Groceries
+    expenses:Essen                  210,00 €
+    assets:bank:checking
+
+2026-03-12 Transport
+    expenses:Transport               98,00 €
+    assets:bank:checking
+
+2026-03-15 Gym membership
+    expenses:Freizeit                45,00 €
+    assets:bank:checking
+
+2026-03-18 Streaming services
+    expenses:Unterhaltung            28,00 €
+    assets:bank:checking
+
+2026-03-22 Buy 0.02 BTC
+    assets:crypto:BTC              0.02 BTC @ 82 000,00 €
+    assets:bank:checking         -1 640,00 €
+
+2026-03-26 Dentist
+    expenses:Gesundheit             180,00 €
+    assets:bank:checking
+
+2026-03-28 Savings transfer
+    assets:bank:savings             500,00 €
+    assets:bank:checking
+
+; ETH staking reward
+2026-03-31 ETH staking reward
+    assets:crypto:ETH              0.06 ETH
+    income:staking                  -0.06 ETH
+
+; ── 2026-04 (partial) ────────────────────────────────────────────────────────
+
+2026-04-30 Salary
+    assets:bank:checking          3 800,00 €
+    income:salary                -3 800,00 €
+
+2026-04-04 Rent
+    expenses:Wohnen                 950,00 €
+    assets:bank:checking
+
+2026-04-08 Groceries
+    expenses:Essen                  195,00 €
+    assets:bank:checking
+
+2026-04-11 Transport
+    expenses:Transport               98,00 €
+    assets:bank:checking
+
+2026-04-15 Gym membership
+    expenses:Freizeit                45,00 €
+    assets:bank:checking
+
+2026-04-18 Streaming services
+    expenses:Unterhaltung            28,00 €
+    assets:bank:checking
+
+2026-04-20 Savings transfer
+    assets:bank:savings             400,00 €
+    assets:bank:checking

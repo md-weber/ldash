@@ -497,9 +497,10 @@ pub fn load_recent_transactions(
     account: &str,
     n: usize,
     period: Option<&str>,
+    currency_symbol: &str,
 ) -> Result<Vec<Transaction>> {
     let jp = journal_path.to_str().unwrap_or("all.journal");
-    let mut args = vec!["-f", jp, "register", account, "-O", "csv"];
+    let mut args = vec!["-f", jp, "register", account, "-X", currency_symbol, "-O", "csv"];
     if let Some(p) = period {
         args.push("-p");
         args.push(p);

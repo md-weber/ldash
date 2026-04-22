@@ -1,0 +1,274 @@
+.TH LDASH 1 "April 2026" "ldash 1.0.0" "User Commands"
+.SH NAME
+ldash \- terminal dashboard for hledger journals
+.SH SYNOPSIS
+.B ldash
+[\fIOPTIONS\fR]
+[\fIFILE\fR]
+.SH DESCRIPTION
+.B ldash
+is a real-time terminal dashboard (TUI) for
+.BR hledger (1)
+journals.
+It renders three interactive tabs:
+.TP
+.B Portfolio
+Crypto holdings table with price, value, allocation percentage, and P/L
+tracking (invested vs price gain vs staking rewards).
+Includes a net worth history chart with selectable time ranges
+(YTD / 1Y / 2Y / 5Y / All) and a per-coin portfolio bar chart with
+stacked and unstacked modes.
+.TP
+.B Accounts
+All asset accounts with EUR valuations and visual bar indicators.
+Select any account to drill into its recent transactions.
+Savings goals are shown as progress bars.
+.TP
+.B Monthly
+Month-by-month income and expenses bar chart with per-category breakdown,
+savings rate gauge, and year-over-year comparison.
+Budget limits per expense category are shown as progress bars with
+warnings when over budget.
+.PP
+Data is loaded from
+.BR hledger (1)
+in the background.
+The journal file is watched for changes and the dashboard reloads
+automatically when it is saved.
+.SH OPTIONS
+.TP
+.BR \fIFILE\fR
+Path to the hledger journal file.
+Overrides \fB\-\-file\fR, the config file setting, and
+.BR $LEDGER_FILE .
+.TP
+.BR \-f ", " \-\-file " \fIFILE\fR"
+Path to the hledger journal file.
+Equivalent to the positional argument; matches hledger's
+.B \-f
+convention.
+.TP
+.BR \-c ", " \-\-config " \fIPATH\fR"
+Path to the configuration file.
+Default:
+.IR ~/.config/ldash/config.toml .
+.TP
+.B \-\-tab " \fITAB\fR"
+Start on the specified tab.
+Valid values:
+.BR portfolio ,
+.BR accounts ,
+.BR monthly .
+Overrides the
+.I default_tab
+setting in the config file.
+.TP
+.B \-\-check
+Validate the journal file and configuration, then exit without launching
+the TUI.
+Exits 0 on success, 1 on config/journal error, 2 if
+.BR hledger (1)
+is not found.
+.TP
+.BR \-v ", " \-\-version
+Print version and exit.
+.TP
+.BR \-h ", " \-\-help
+Print a short usage summary and exit.
+.SH CONFIGURATION
+On first launch,
+.B ldash
+writes a commented-out default config to
+.IR ~/.config/ldash/config.toml .
+The file uses TOML syntax.
+Changes to most settings take effect immediately on save (hot-reload);
+.I journal
+and
+.I default_tab
+require a restart.
+.SS "Top-level keys"
+.TP
+.B journal
+Path to the hledger journal file.
+Overridden by
+.BR $LEDGER_FILE
+and CLI flags.
+.TP
+.B refresh_interval
+Auto-refresh interval in seconds (default:
+.BR 300 ).
+Ignored when the file watcher detects a change.
+.TP
+.B default_tab
+Tab shown on startup:
+.BR portfolio ,
+.BR accounts
+(default), or
+.BR monthly .
+.TP
+.B number_format
+Number formatting:
+.B eu
+(1.000,00) or
+.B us
+(1,000.00).
+Default:
+.BR eu .
+.TP
+.B currency_symbol
+Currency symbol displayed in the UI (default:
+.BR \(lq\(euro\(rq ).
+.TP
+.B chart_mode
+Default portfolio chart mode:
+.B stacked
+(default) or
+.BR unstacked .
+Toggle at runtime with
+.BR s .
+.TP
+.B show_portfolio
+Boolean.
+Force the Portfolio tab on or off.
+Default: auto-detected from the presence of
+.I assets:crypto
+accounts.
+.TP
+.B export_format
+Format for data exports:
+.BR html
+(default),
+.BR json ,
+or
+.BR both .
+.TP
+.B export_dir
+Default directory shown in the export prompt.
+Default:
+.IR ~/Downloads .
+.SS "[colors.expenses]"
+Per-category color overrides for the monthly expense table.
+Keys are expense category names (case-insensitive);
+values are named colors
+.RB ( red ,
+.BR green ,
+.BR blue ,
+.BR yellow ,
+.BR cyan ,
+.BR magenta ,
+.BR white ,
+.BR darkgray )
+or RGB hex codes
+.RI ( #RRGGBB ).
+.SS "[budgets]"
+Monthly budget limits per expense account (case-insensitive match).
+Values are floating-point amounts in the configured currency.
+.nf
+
+    [budgets]
+    "expenses:Essen" = 400.0
+    "expenses:Transport" = 150.0
+.fi
+.SS "[theme]"
+Color theme settings.
+.TP
+.B preset
+Built-in palette:
+.B dark
+(default),
+.BR light ,
+or
+.BR solarized .
+.TP
+.BR accent ", " positive ", " negative ", " muted ", " gold ", " fg ", " background
+Per-field color overrides.
+Accept named colors or
+.IR #RRGGBB
+hex codes.
+Theme changes are hot-reloaded on config save.
+.SS "[[goals]]"
+Savings goal entries shown as progress bars on the Accounts tab.
+Each entry requires:
+.TP
+.B name
+Display label.
+.TP
+.B target
+Target amount (float).
+.TP
+.B account
+Account prefix matched against your hledger accounts.
+.SH FILES
+.TP
+.I ~/.config/ldash/config.toml
+User configuration file.
+Created with defaults on first launch.
+.TP
+.I /usr/local/share/man/man1/ldash.1
+This man page.
+.SH KEYBINDINGS
+.TS
+l l.
+\fBKey\fR	\fBAction\fR
+1 / 2 / 3	Switch to Portfolio / Accounts / Monthly tab
+Tab / Shift-Tab	Next / previous tab
+\(ua k / \(da j	Scroll up / down; select row
+PgUp / PgDn	Page up / down
+Home / End	Jump to first / last row
+\(<- h / \(-> l	Month navigation (Monthly); net worth range (Accounts / Portfolio)
+Enter	Drill into account or expense category
+Esc	Back / close detail or filter
+s	Toggle chart mode (stacked / unstacked)
+c	Toggle expense category colors
+r	Force data refresh
+/	Open account search filter
+i	Toggle income / expense focus (Monthly tab)
+y / Y	Cycle year backward / forward (Monthly tab)
+Y	Copy current view to clipboard (Portfolio / Accounts)
+e	Open export prompt
+?	Toggle help overlay
+q	Quit
+.TE
+.SH EXAMPLES
+.TP
+Launch with a specific journal:
+.EX
+ldash \-\-file ~/Finance/all.journal
+.EE
+.TP
+Use the positional argument (shorter):
+.EX
+ldash ~/Finance/all.journal
+.EE
+.TP
+Use the environment variable:
+.EX
+export LEDGER_FILE=~/Finance/all.journal
+ldash
+.EE
+.TP
+Start on the monthly tab:
+.EX
+ldash \-\-tab monthly ~/Finance/all.journal
+.EE
+.TP
+Validate config and journal without launching the TUI:
+.EX
+ldash \-\-check
+.EE
+.TP
+Try the bundled sample journal:
+.EX
+ldash \-\-file "$(cargo locate-project \-\-message-format plain | xargs dirname)/examples/sample.journal"
+.EE
+.SH BUGS
+Report bugs at <https://codeberg.org/md-weber/ldash/issues>.
+.SH SEE ALSO
+.BR hledger (1),
+.BR hledger\-ui (1)
+.PP
+Project home: <https://codeberg.org/md-weber/ldash>
+.br
+Keep a Changelog: <https://keepachangelog.com/>
+.br
+hledger documentation: <https://hledger.org/docs.html>

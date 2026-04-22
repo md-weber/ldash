@@ -75,7 +75,7 @@ impl Default for Config {
 }
 
 const DEFAULT_CONFIG: &str = r##"# ldash configuration
-# See: https://github.com/yourusername/ledger_dashboard#configuration
+# See: https://codeberg.org/md-weber/ldash#configuration
 
 # Path to hledger journal (overrides $LEDGER_FILE and CLI arg)
 # journal = "/path/to/all.journal"
