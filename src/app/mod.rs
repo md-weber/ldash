@@ -1293,6 +1293,70 @@ impl App {
         self.detail_income_name = None;
     }
 
+    /// Detect recurring expenses across loaded months (current year + last year).
+    ///
+    /// Only leaf accounts are considered (skips parent accounts when a child is
+    /// present in the same month) to avoid the duplicate "miete, miete" problem
+    /// caused by hledger emitting both a parent and its sub-accounts.
+    ///
+    /// An expense is recurring if it appears in ≥3 months with a near-fixed
+    /// amount (max/min < 1.15 — subscriptions and rent don't vary much).
+    pub fn recurring_expenses(&self) -> Vec<RecurringExpense> {
+        let mut appearances: std::collections::HashMap<&str, Vec<f64>> =
+            std::collections::HashMap::new();
+
+        let all_months = self
+            .monthly
+            .months
+            .iter()
+            .chain(self.last_year.months.iter());
+
+        for m in all_months {
+            for (name, amount) in &m.expenses {
+                if *amount <= 0.0 {
+                    continue;
+                }
+                // Skip if any child account is present in the same month.
+                let name_lower = name.to_lowercase();
+                let has_child = m.expenses.iter().any(|(other, _)| {
+                    other
+                        .to_lowercase()
+                        .starts_with(&format!("{}:", name_lower))
+                });
+                if !has_child {
+                    appearances.entry(name.as_str()).or_default().push(*amount);
+                }
+            }
+        }
+
+        let mut recurring: Vec<RecurringExpense> = appearances
+            .into_iter()
+            .filter(|(_, amounts)| amounts.len() >= 3)
+            .filter(|(_, amounts)| {
+                let max = amounts.iter().cloned().fold(f64::NEG_INFINITY, f64::max);
+                let min = amounts.iter().cloned().fold(f64::INFINITY, f64::min);
+                // max/min < 1.15 — only near-fixed charges qualify (subscriptions,
+                // rent, insurance). Variable expenses like groceries are excluded.
+                min > 0.0 && max / min < 1.15
+            })
+            .map(|(name, amounts)| {
+                let avg = amounts.iter().sum::<f64>() / amounts.len() as f64;
+                RecurringExpense {
+                    name: name.to_string(),
+                    monthly_avg: avg,
+                    occurrences: amounts.len(),
+                }
+            })
+            .collect();
+
+        recurring.sort_by(|a, b| {
+            b.monthly_avg
+                .partial_cmp(&a.monthly_avg)
+                .unwrap_or(std::cmp::Ordering::Equal)
+        });
+        recurring
+    }
+
     pub fn toggle_monthly_focus(&mut self) {
         self.monthly_focus = match self.monthly_focus {
             MonthlyFocus::Income => MonthlyFocus::Expenses,
@@ -1839,5 +1903,166 @@ mod tests {
         let expenses = vec![("expenses:transport".to_string(), 50.0)];
         let spent = budget_spent("expenses:food", &expenses);
         assert_eq!(spent, 0.0);
+    }
+
+    fn make_month(name: &str, expenses: Vec<(&str, f64)>) -> crate::data::SingleMonth {
+        let total_expenses = expenses.iter().map(|(_, a)| a).sum();
+        crate::data::SingleMonth {
+            month_name: name.to_string(),
+            income: vec![],
+            expenses: expenses
+                .into_iter()
+                .map(|(n, a)| (n.to_string(), a))
+                .collect(),
+            total_income: 0.0,
+            total_expenses,
+        }
+    }
+
+    #[test]
+    fn recurring_expenses_detects_stable_subscription() {
+        let mut app = App::fixture_empty();
+        app.monthly = crate::data::MonthlyData {
+            months: vec![
+                make_month("January", vec![("expenses:abos:netflix", 9.99)]),
+                make_month("February", vec![("expenses:abos:netflix", 9.99)]),
+                make_month("March", vec![("expenses:abos:netflix", 9.99)]),
+                make_month("April", vec![("expenses:abos:netflix", 9.99)]),
+            ],
+            selected: 3,
+        };
+        let r = app.recurring_expenses();
+        assert_eq!(r.len(), 1);
+        assert_eq!(r[0].name, "expenses:abos:netflix");
+        assert!((r[0].monthly_avg - 9.99).abs() < 0.01);
+        assert_eq!(r[0].occurrences, 4);
+    }
+
+    #[test]
+    fn recurring_expenses_ignores_too_variable() {
+        let mut app = App::fixture_empty();
+        app.monthly = crate::data::MonthlyData {
+            months: vec![
+                make_month("January", vec![("expenses:misc", 10.0)]),
+                make_month("February", vec![("expenses:misc", 100.0)]),
+                make_month("March", vec![("expenses:misc", 500.0)]),
+            ],
+            selected: 2,
+        };
+        let r = app.recurring_expenses();
+        assert!(r.is_empty(), "variable amounts should not be recurring");
+    }
+
+    #[test]
+    fn recurring_expenses_ignores_slightly_variable() {
+        // 100 vs 150 = max/min 1.5, above 1.15 threshold → not recurring
+        let mut app = App::fixture_empty();
+        app.monthly = crate::data::MonthlyData {
+            months: vec![
+                make_month("January", vec![("expenses:food", 100.0)]),
+                make_month("February", vec![("expenses:food", 150.0)]),
+                make_month("March", vec![("expenses:food", 120.0)]),
+            ],
+            selected: 2,
+        };
+        let r = app.recurring_expenses();
+        assert!(r.is_empty(), "grocery-style variation should not be recurring");
+    }
+
+    #[test]
+    fn recurring_expenses_skips_parent_when_child_present() {
+        // parent "expenses:wohnen" and child "expenses:wohnen:miete" both in
+        // expenses — only the leaf should be counted, not the parent
+        let mut app = App::fixture_empty();
+        app.monthly = crate::data::MonthlyData {
+            months: vec![
+                make_month(
+                    "January",
+                    vec![
+                        ("expenses:wohnen", 800.0),
+                        ("expenses:wohnen:miete", 800.0),
+                    ],
+                ),
+                make_month(
+                    "February",
+                    vec![
+                        ("expenses:wohnen", 800.0),
+                        ("expenses:wohnen:miete", 800.0),
+                    ],
+                ),
+                make_month(
+                    "March",
+                    vec![
+                        ("expenses:wohnen", 800.0),
+                        ("expenses:wohnen:miete", 800.0),
+                    ],
+                ),
+            ],
+            selected: 2,
+        };
+        let r = app.recurring_expenses();
+        assert_eq!(r.len(), 1, "parent+child should deduplicate to one entry");
+        assert_eq!(r[0].name, "expenses:wohnen:miete");
+    }
+
+    #[test]
+    fn recurring_expenses_requires_at_least_3_months() {
+        let mut app = App::fixture_empty();
+        app.monthly = crate::data::MonthlyData {
+            months: vec![
+                make_month("January", vec![("expenses:abos:spotify", 9.99)]),
+                make_month("February", vec![("expenses:abos:spotify", 9.99)]),
+            ],
+            selected: 1,
+        };
+        let r = app.recurring_expenses();
+        assert!(r.is_empty(), "need ≥3 occurrences");
+    }
+
+    #[test]
+    fn recurring_expenses_combines_last_year_months() {
+        let mut app = App::fixture_empty();
+        app.monthly = crate::data::MonthlyData {
+            months: vec![make_month(
+                "January",
+                vec![("expenses:abos:gym", 30.0)],
+            )],
+            selected: 0,
+        };
+        app.last_year = crate::data::MonthlyData {
+            months: vec![
+                make_month("November", vec![("expenses:abos:gym", 30.0)]),
+                make_month("December", vec![("expenses:abos:gym", 30.0)]),
+            ],
+            selected: 0,
+        };
+        let r = app.recurring_expenses();
+        assert_eq!(r.len(), 1);
+        assert_eq!(r[0].occurrences, 3);
+    }
+
+    #[test]
+    fn recurring_expenses_sorted_by_amount_desc() {
+        let mut app = App::fixture_empty();
+        app.monthly = crate::data::MonthlyData {
+            months: vec![
+                make_month(
+                    "January",
+                    vec![("expenses:abos:cheap", 5.0), ("expenses:abos:pricey", 50.0)],
+                ),
+                make_month(
+                    "February",
+                    vec![("expenses:abos:cheap", 5.0), ("expenses:abos:pricey", 50.0)],
+                ),
+                make_month(
+                    "March",
+                    vec![("expenses:abos:cheap", 5.0), ("expenses:abos:pricey", 50.0)],
+                ),
+            ],
+            selected: 2,
+        };
+        let r = app.recurring_expenses();
+        assert_eq!(r.len(), 2);
+        assert!(r[0].monthly_avg > r[1].monthly_avg, "should be sorted desc");
     }
 }

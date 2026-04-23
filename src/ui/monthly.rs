@@ -285,6 +285,44 @@ fn render_monthly_summary(f: &mut Frame, app: &App, area: Rect, theme: &Theme) {
         }
     }
 
+    let recurring = app.recurring_expenses();
+    if !recurring.is_empty() {
+        let total: f64 = recurring.iter().map(|r| r.monthly_avg).sum();
+        let max_names = 3usize;
+        let names: Vec<&str> = recurring
+            .iter()
+            .take(max_names)
+            .map(|r| {
+                r.name
+                    .rsplit(':')
+                    .next()
+                    .unwrap_or(r.name.strip_prefix("expenses:").unwrap_or(&r.name))
+            })
+            .collect();
+        let names_str = names.join(", ");
+        let suffix = if recurring.len() > max_names {
+            format!(" +{} more", recurring.len() - max_names)
+        } else {
+            String::new()
+        };
+        text.push(Line::from(""));
+        text.push(Line::from(vec![
+            Span::styled("  ↻ ", Style::default().fg(theme.gold)),
+            Span::styled(
+                format!("{} recurring: ", recurring.len()),
+                Style::default().fg(theme.gold).bold(),
+            ),
+            Span::styled(
+                format!("{names_str}{suffix}"),
+                Style::default().fg(theme.fg),
+            ),
+            Span::styled(
+                format!(" = {}/mo", app.config.fmt_amount_compact(total, 0)),
+                Style::default().fg(theme.gold).bold(),
+            ),
+        ]));
+    }
+
     let left_block = Block::default()
         .title(Span::styled(
             nav_title,

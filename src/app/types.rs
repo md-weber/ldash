@@ -181,6 +181,13 @@ pub struct PriceAlert {
     pub change_pct: f64,
 }
 
+pub struct RecurringExpense {
+    pub name: String,
+    pub monthly_avg: f64,
+    #[allow(dead_code)]
+    pub occurrences: usize,
+}
+
 /// Returns true if expense `name` (e.g. "expenses:abos:youtube premium")
 /// falls under budget `category` (e.g. "expenses:abos" or "abos").
 pub fn budget_matches(category: &str, name: &str) -> bool {
