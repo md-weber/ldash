@@ -72,11 +72,8 @@ fn render_net_worth_chart(f: &mut Frame, app: &App, area: Rect, theme: &Theme) {
 
     // Use stacked breakdown when we have meaningful data (≥2 points with
     // at least one non-zero layer). Fall back to the single net-worth line.
-    let has_breakdown = bd.layer_total.len() >= 2
-        && bd
-            .layer_total
-            .iter()
-            .any(|(_, v)| v.abs() > 1e-6);
+    let has_breakdown =
+        bd.layer_total.len() >= 2 && bd.layer_total.iter().any(|(_, v)| v.abs() > 1e-6);
 
     if has_breakdown {
         render_breakdown_chart(f, app, area, theme, range_label);
@@ -85,13 +82,7 @@ fn render_net_worth_chart(f: &mut Frame, app: &App, area: Rect, theme: &Theme) {
     }
 }
 
-fn render_breakdown_chart(
-    f: &mut Frame,
-    app: &App,
-    area: Rect,
-    theme: &Theme,
-    range_label: &str,
-) {
+fn render_breakdown_chart(f: &mut Frame, app: &App, area: Rect, theme: &Theme, range_label: &str) {
     let bd = &app.net_worth_breakdown;
 
     let block = Block::default()
@@ -106,11 +97,7 @@ fn render_breakdown_chart(
     let x_min = bd.layer_total.first().map(|p| p.0).unwrap_or(0.0);
     let x_max = bd.layer_total.last().map(|p| p.0).unwrap_or(1.0);
 
-    let y_max_raw = bd
-        .layer_total
-        .iter()
-        .map(|p| p.1)
-        .fold(0.0_f64, f64::max);
+    let y_max_raw = bd.layer_total.iter().map(|p| p.1).fold(0.0_f64, f64::max);
     let (y_min, y_max, y_labels) =
         nice_y_axis(0.0, y_max_raw.max(1.0), 4, &app.config, theme.muted);
 

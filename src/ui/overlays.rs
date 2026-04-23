@@ -216,8 +216,14 @@ pub(super) fn render_price_alerts(f: &mut Frame, app: &App, area: Rect, theme: &
     };
     f.render_widget(Clear, banner);
 
+    let threshold = app.config.price_alert_threshold_pct.max(0.0);
+    let heading = if threshold > 0.0 {
+        format!("  Price moves >= {:.1}%: ", threshold)
+    } else {
+        "  Price moves: ".to_string()
+    };
     let mut spans = vec![Span::styled(
-        "  Price moves: ",
+        heading,
         Style::default().fg(theme.gold).bold(),
     )];
     for (i, alert) in app.price_alerts.iter().enumerate() {

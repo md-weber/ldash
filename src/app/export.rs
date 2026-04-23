@@ -26,13 +26,29 @@ fn html_escape(s: &str) -> String {
     out
 }
 
+fn finish_csv(wtr: csv::Writer<Vec<u8>>) -> String {
+    match wtr.into_inner() {
+        Ok(buf) => String::from_utf8(buf).unwrap_or_default(),
+        Err(e) => match e.into_inner().into_inner() {
+            Ok(buf) => String::from_utf8(buf).unwrap_or_default(),
+            Err(_) => String::new(),
+        },
+    }
+}
+
 impl App {
     pub fn export_current_view(&self) -> String {
         let sym = &self.config.currency_symbol;
         match self.tab {
             Tab::Portfolio => {
-                let header = format!("Coin,Amount,Price {sym},Value {sym},Allocation %\n");
-                let mut csv = header;
+                let mut wtr = csv::Writer::from_writer(vec![]);
+                let _ = wtr.write_record([
+                    "Coin".to_string(),
+                    "Amount".to_string(),
+                    format!("Price {sym}"),
+                    format!("Value {sym}"),
+                    "Allocation %".to_string(),
+                ]);
                 let total = self.total_portfolio_value();
                 for h in &self.holdings {
                     let alloc = if total > 0.0 {
@@ -40,12 +56,15 @@ impl App {
                     } else {
                         0.0
                     };
-                    csv.push_str(&format!(
-                        "{},{:.6},{:.2},{:.2},{:.1}\n",
-                        h.commodity, h.amount, h.price_eur, h.value_eur, alloc
-                    ));
+                    let _ = wtr.write_record([
+                        h.commodity.clone(),
+                        format!("{:.6}", h.amount),
+                        format!("{:.2}", h.price_eur),
+                        format!("{:.2}", h.value_eur),
+                        format!("{:.1}", alloc),
+                    ]);
                 }
-                csv
+                finish_csv(wtr)
             }
             Tab::Accounts => {
                 if let Some(sel) = self.account_state.selected() {
@@ -53,24 +72,26 @@ impl App {
                         return format!("{}\t{}", b.account, self.config.fmt_amount(b.amount, 2));
                     }
                 }
-                let mut csv = format!("Account,Balance {sym}\n");
+                let mut wtr = csv::Writer::from_writer(vec![]);
+                let _ = wtr.write_record(["Account".to_string(), format!("Balance {sym}")]);
                 for b in &self.account_balances {
-                    csv.push_str(&format!("{},{:.2}\n", b.account, b.amount));
+                    let _ = wtr.write_record([b.account.clone(), format!("{:.2}", b.amount)]);
                 }
-                csv
+                finish_csv(wtr)
             }
             Tab::Monthly => {
                 let empty = data::SingleMonth::default();
                 let m = self.current_month().unwrap_or(&empty);
-                let mut csv = format!("# {} Income/Expenses\n", m.month_name);
-                csv.push_str("Category,Amount\n");
+                let mut wtr = csv::Writer::from_writer(vec![]);
+                let _ = wtr.write_record([format!("# {} Income/Expenses", m.month_name)]);
+                let _ = wtr.write_record(["Category".to_string(), "Amount".to_string()]);
                 for (name, amount) in &m.income {
-                    csv.push_str(&format!("{},{:.2}\n", name, amount));
+                    let _ = wtr.write_record([name.clone(), format!("{:.2}", amount)]);
                 }
                 for (name, amount) in &m.expenses {
-                    csv.push_str(&format!("{},-{:.2}\n", name, amount));
+                    let _ = wtr.write_record([name.clone(), format!("-{:.2}", amount)]);
                 }
-                csv
+                finish_csv(wtr)
             }
         }
     }
@@ -325,5 +346,47 @@ impl App {
     pub fn cancel_export_prompt(&mut self) {
         self.export_prompt_active = false;
         self.export_prompt_path.clear();
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use crate::app::{App, Tab};
+    use crate::data::{CryptoHolding, SingleMonth};
+
+    #[test]
+    fn portfolio_export_csv_escapes_coin_name() {
+        let mut app = App::fixture_empty();
+        app.tab = Tab::Portfolio;
+        app.holdings = vec![CryptoHolding {
+            commodity: "BTC, \"main\"".to_string(),
+            amount: 1.0,
+            price_eur: 100.0,
+            value_eur: 100.0,
+        }];
+
+        let out = app.export_current_view();
+        let mut rdr = csv::Reader::from_reader(out.as_bytes());
+        let rows = rdr.records().collect::<Result<Vec<_>, _>>().expect("csv");
+        assert_eq!(rows[0].get(0), Some("BTC, \"main\""));
+    }
+
+    #[test]
+    fn monthly_export_csv_escapes_special_chars() {
+        let mut app = App::fixture_empty();
+        app.tab = Tab::Monthly;
+        app.monthly.months = vec![SingleMonth {
+            month_name: "January".to_string(),
+            income: vec![("income:salary,bonus".to_string(), 3000.0)],
+            expenses: vec![("expenses:rent \"city\"\nA".to_string(), 1200.0)],
+            total_income: 3000.0,
+            total_expenses: 1200.0,
+        }];
+        app.combined_months = vec![(app.monthly.months[0].clone(), false)];
+        app.combined_selected = 0;
+
+        let out = app.export_current_view();
+        assert!(out.contains("\"income:salary,bonus\",3000.00"));
+        assert!(out.contains("\"expenses:rent \"\"city\"\"\nA\",-1200.00"));
     }
 }

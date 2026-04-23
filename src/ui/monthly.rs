@@ -1,9 +1,9 @@
 use chrono::Datelike;
-use ratatui::{prelude::*, widgets::*};
 use ratatui::style::Modifier;
+use ratatui::{prelude::*, widgets::*};
 
-use super::{expense_color, render_detail_with_title, Theme};
-use crate::app::{budget_matches, budget_spent, App, MonthlyFocus};
+use super::{expense_color, income_color, render_detail_with_title, Theme};
+use crate::app::{budget_matches, budget_spent, App, MonthlyFocus, RecurringExpense};
 
 /// BarChart bar width (chars per bar). Shared between render and mouse hit-test.
 pub(crate) const MONTHLY_BAR_WIDTH: u16 = 3;
@@ -16,9 +16,8 @@ pub(crate) const MONTHLY_BARS_PER_GROUP: u16 = 2;
 /// Total horizontal cells per month group; `on_monthly_chart_click` divides
 /// the click x by this to map a column back to a month index. MUST stay in
 /// sync with the `BarChart` builder below.
-pub(crate) const MONTHLY_GROUP_WIDTH: u16 = MONTHLY_BARS_PER_GROUP * MONTHLY_BAR_WIDTH
-    + MONTHLY_BAR_GAP
-    + MONTHLY_GROUP_GAP;
+pub(crate) const MONTHLY_GROUP_WIDTH: u16 =
+    MONTHLY_BARS_PER_GROUP * MONTHLY_BAR_WIDTH + MONTHLY_BAR_GAP + MONTHLY_GROUP_GAP;
 
 pub(super) fn render_monthly(f: &mut Frame, app: &mut App, area: Rect, theme: &Theme) {
     let narrow = area.width < 100;
@@ -34,11 +33,8 @@ pub(super) fn render_monthly(f: &mut Frame, app: &mut App, area: Rect, theme: &T
     .split(area);
 
     if show_forecast {
-        let top = Layout::horizontal([
-            Constraint::Percentage(55),
-            Constraint::Percentage(45),
-        ])
-        .split(chunks[0]);
+        let top = Layout::horizontal([Constraint::Percentage(55), Constraint::Percentage(45)])
+            .split(chunks[0]);
         app.geometry.monthly_chart_area = top[0];
         render_monthly_chart(f, app, top[0], theme);
         render_forecast_chart(f, app, top[1], theme);
@@ -146,7 +142,9 @@ fn render_monthly_chart(f: &mut Frame, app: &App, area: Rect, theme: &Theme) {
                 .label(Line::from(label).style(Style::default().fg(label_color)))
                 .bars(&[
                     Bar::default().value(m.total_income as u64).style(inc_style),
-                    Bar::default().value(m.total_expenses as u64).style(exp_style),
+                    Bar::default()
+                        .value(m.total_expenses as u64)
+                        .style(exp_style),
                 ])
         })
         .collect();
@@ -219,7 +217,12 @@ fn render_monthly_summary(f: &mut Frame, app: &App, area: Rect, theme: &Theme) {
     let is_forecast = app.current_month_is_forecast();
     let forecast_tag = if is_forecast { "  ~ forecast" } else { "" };
     let nav_title = if app.monthly_year_offset != 0 {
-        format!(" ◀ {} {} ▶  [y/Y]{} ", m.month_name, app.displayed_year(), forecast_tag)
+        format!(
+            " ◀ {} {} ▶  [y/Y]{} ",
+            m.month_name,
+            app.displayed_year(),
+            forecast_tag
+        )
     } else {
         format!(" ◀ {} ▶{} ", m.month_name, forecast_tag)
     };
@@ -335,16 +338,7 @@ fn render_monthly_summary(f: &mut Frame, app: &App, area: Rect, theme: &Theme) {
     if !recurring.is_empty() {
         let total: f64 = recurring.iter().map(|r| r.monthly_avg).sum();
         let max_names = 3usize;
-        let names: Vec<&str> = recurring
-            .iter()
-            .take(max_names)
-            .map(|r| {
-                r.name
-                    .rsplit(':')
-                    .next()
-                    .unwrap_or(r.name.strip_prefix("expenses:").unwrap_or(&r.name))
-            })
-            .collect();
+        let names = recurring_display_names(&recurring, max_names);
         let names_str = names.join(", ");
         let suffix = if recurring.len() > max_names {
             format!(" +{} more", recurring.len() - max_names)
@@ -534,15 +528,18 @@ fn render_monthly_income(f: &mut Frame, app: &mut App, area: Rect, theme: &Theme
         .iter()
         .map(|(name, amount)| {
             let short = name.strip_prefix("income:").unwrap_or(name);
+            let override_color = income_color(short, app, theme);
+            let name_color = override_color.unwrap_or(theme.fg);
+            let amt_color = override_color.unwrap_or(theme.positive);
             let mut cells = vec![
-                Cell::from(short.to_string()).style(Style::default().fg(theme.fg)),
+                Cell::from(short.to_string()).style(Style::default().fg(name_color)),
                 Cell::from(app.config.fmt_amount(*amount, 2))
-                    .style(Style::default().fg(theme.positive)),
+                    .style(Style::default().fg(amt_color)),
             ];
             if !narrow {
                 let bar_len = ((amount / max_val) * bar_width as f64) as usize;
                 let bar = "█".repeat(bar_len.min(bar_width));
-                cells.push(Cell::from(bar).style(Style::default().fg(theme.positive)));
+                cells.push(Cell::from(bar).style(Style::default().fg(amt_color)));
             }
             Row::new(cells)
         })
@@ -734,8 +731,8 @@ fn render_monthly_expenses(f: &mut Frame, app: &mut App, area: Rect, theme: &The
 }
 
 fn render_forecast_chart(f: &mut Frame, app: &App, area: Rect, theme: &Theme) {
-    use ratatui::widgets::{Axis, Chart, Dataset, GraphType};
     use ratatui::symbols;
+    use ratatui::widgets::{Axis, Chart, Dataset, GraphType};
 
     if app.monthly.months.is_empty() {
         return;
@@ -778,7 +775,8 @@ fn render_forecast_chart(f: &mut Frame, app: &App, area: Rect, theme: &Theme) {
     let title = if has_projection {
         format!(
             " Forecast ~{}/mo ",
-            app.config.fmt_amount_compact(forecast.projected_monthly_net, 0)
+            app.config
+                .fmt_amount_compact(forecast.projected_monthly_net, 0)
         )
     } else {
         " Cash Flow ".to_string()
@@ -818,4 +816,81 @@ fn render_forecast_chart(f: &mut Frame, app: &App, area: Rect, theme: &Theme) {
         );
 
     f.render_widget(chart, area);
+}
+
+/// Build short display labels for the recurring expenses summary line.
+/// Always uses the leaf segment. Duplicate leaves are dropped so the same
+/// word never appears twice; the caller's count reflects the true total.
+fn recurring_display_names(recurring: &[RecurringExpense], max: usize) -> Vec<String> {
+    let mut seen = std::collections::HashSet::new();
+    let mut out = Vec::with_capacity(max);
+    for r in recurring {
+        if out.len() >= max {
+            break;
+        }
+        let leaf = r.name.rsplit(':').next().unwrap_or(&r.name).to_string();
+        if seen.insert(leaf.clone()) {
+            out.push(leaf);
+        }
+    }
+    out
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    fn rec(name: &str, avg: f64) -> RecurringExpense {
+        RecurringExpense {
+            name: name.to_string(),
+            monthly_avg: avg,
+        }
+    }
+
+    #[test]
+    fn display_names_uses_leaf() {
+        let r = vec![
+            rec("expenses:wohnen:miete", 800.0),
+            rec("expenses:abos:netflix", 10.0),
+            rec("expenses:abos:lilly", 5.0),
+        ];
+        assert_eq!(
+            recurring_display_names(&r, 3),
+            vec!["miete", "netflix", "lilly"]
+        );
+    }
+
+    #[test]
+    fn display_names_deduplicates_same_leaf() {
+        // "miete" must not appear twice even if two accounts share that leaf
+        let r = vec![
+            rec("expenses:wohnen:miete", 800.0),
+            rec("expenses:auto:miete", 300.0),
+            rec("expenses:abos:lilly", 5.0),
+        ];
+        let names = recurring_display_names(&r, 3);
+        assert_eq!(names, vec!["miete", "lilly"]);
+    }
+
+    #[test]
+    fn display_names_respects_max() {
+        let r = vec![
+            rec("expenses:a", 3.0),
+            rec("expenses:b", 2.0),
+            rec("expenses:c", 1.0),
+        ];
+        assert_eq!(recurring_display_names(&r, 2), vec!["a", "b"]);
+    }
+
+    #[test]
+    fn display_names_max_applies_after_dedup() {
+        // max=2 with a collision: first unique leaf + skip dup + next unique
+        let r = vec![
+            rec("expenses:wohnen:miete", 800.0),
+            rec("expenses:auto:miete", 300.0),
+            rec("expenses:abos:lilly", 5.0),
+        ];
+        // after dedup: ["miete", "lilly"] → max=2 fits exactly
+        assert_eq!(recurring_display_names(&r, 2), vec!["miete", "lilly"]);
+    }
 }

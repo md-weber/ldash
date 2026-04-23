@@ -1,6 +1,6 @@
 use anyhow::Result;
 
-use super::{MonthlyData, SingleMonth};
+use super::{currency_matches, MonthlyData, SingleMonth};
 
 /// Parse a European-formatted number like "1.524,00" or "74,52" or "0,02352448"
 pub fn parse_eu_number(s: &str) -> Option<f64> {
@@ -137,7 +137,7 @@ pub(super) fn parse_monthly_csv(text: &str, currency_symbol: &str) -> Result<Mon
             }
             let val_str = &fields[col_idx];
             if let Some((amount, commodity)) = parse_amount_str(val_str) {
-                if commodity == currency_symbol && amount.abs() > 0.005 {
+                if currency_matches(currency_symbol, &commodity) && amount.abs() > 0.005 {
                     let month = &mut months_data[col_idx - 1];
                     if in_revenues {
                         month.income.push((account.clone(), amount.abs()));
@@ -388,6 +388,13 @@ mod tests {
         let csv = two_month_csv("$");
         let data = parse_monthly_csv(&csv, "€").unwrap();
         assert!(data.months.is_empty());
+    }
+
+    #[test]
+    fn monthly_csv_accepts_currency_aliases() {
+        let csv = two_month_csv("EUR");
+        let data = parse_monthly_csv(&csv, "€").unwrap();
+        assert_eq!(data.months.len(), 2);
     }
 
     #[test]

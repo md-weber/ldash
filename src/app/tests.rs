@@ -1,5 +1,7 @@
 use std::collections::HashMap;
 
+use chrono::Local;
+
 use super::*;
 
 fn empty_refresh_result(tabs: TabFlags) -> RefreshResult {
@@ -24,7 +26,11 @@ fn apply_refresh_err_keeps_stale_data_and_sets_status() {
     let mut app = App::fixture_with_accounts();
     let stale = app.account_balances.clone();
 
-    let mut r = empty_refresh_result(TabFlags { portfolio: false, accounts: true, monthly: false });
+    let mut r = empty_refresh_result(TabFlags {
+        portfolio: false,
+        accounts: true,
+        monthly: false,
+    });
     r.account_balances = TabData::Err("hledger: parse error line 42".to_string());
 
     app.apply_refresh(r);
@@ -45,7 +51,11 @@ fn apply_refresh_err_keeps_stale_data_and_sets_status() {
 #[test]
 fn apply_refresh_ok_overwrites_stale_data() {
     let mut app = App::fixture_with_accounts();
-    let mut r = empty_refresh_result(TabFlags { portfolio: false, accounts: true, monthly: false });
+    let mut r = empty_refresh_result(TabFlags {
+        portfolio: false,
+        accounts: true,
+        monthly: false,
+    });
     r.account_balances = TabData::Ok(vec![crate::data::AccountBalance {
         account: "assets:new".to_string(),
         amount: 1.0,
@@ -82,8 +92,7 @@ fn auto_refresh_missing_journal_does_not_overwrite_message() {
     let mut app = App::fixture_empty();
     app.journal_path = std::path::PathBuf::from("/tmp/does_not_exist_xyz.journal");
     app.status_msg =
-        "Journal not found: /tmp/does_not_exist_xyz.journal — waiting for re-creation"
-            .to_string();
+        "Journal not found: /tmp/does_not_exist_xyz.journal — waiting for re-creation".to_string();
 
     app.auto_refresh();
 
@@ -206,7 +215,10 @@ fn recurring_expenses_ignores_slightly_variable() {
         ],
     };
     let r = app.recurring_expenses();
-    assert!(r.is_empty(), "grocery-style variation should not be recurring");
+    assert!(
+        r.is_empty(),
+        "grocery-style variation should not be recurring"
+    );
 }
 
 #[test]
@@ -218,24 +230,15 @@ fn recurring_expenses_skips_parent_when_child_present() {
         months: vec![
             make_month(
                 "January",
-                vec![
-                    ("expenses:wohnen", 800.0),
-                    ("expenses:wohnen:miete", 800.0),
-                ],
+                vec![("expenses:wohnen", 800.0), ("expenses:wohnen:miete", 800.0)],
             ),
             make_month(
                 "February",
-                vec![
-                    ("expenses:wohnen", 800.0),
-                    ("expenses:wohnen:miete", 800.0),
-                ],
+                vec![("expenses:wohnen", 800.0), ("expenses:wohnen:miete", 800.0)],
             ),
             make_month(
                 "March",
-                vec![
-                    ("expenses:wohnen", 800.0),
-                    ("expenses:wohnen:miete", 800.0),
-                ],
+                vec![("expenses:wohnen", 800.0), ("expenses:wohnen:miete", 800.0)],
             ),
         ],
     };
@@ -316,7 +319,10 @@ fn cash_flow_forecast_projects_remaining_months() {
     assert_eq!(f.projected.len(), 10);
     assert!((f.projected_monthly_net - 1500.0).abs() < 0.01);
     // First projected point is the last actual (bridge)
-    assert!((f.projected[0].0 - 2.0).abs() < 1e-9, "bridge at month idx 2");
+    assert!(
+        (f.projected[0].0 - 2.0).abs() < 1e-9,
+        "bridge at month idx 2"
+    );
 }
 
 #[test]
@@ -412,4 +418,156 @@ fn recurring_expenses_sorted_by_amount_desc() {
     let r = app.recurring_expenses();
     assert_eq!(r.len(), 2);
     assert!(r[0].monthly_avg > r[1].monthly_avg, "should be sorted desc");
+}
+
+#[test]
+fn price_alerts_match_with_normalized_commodities() {
+    let mut app = App::fixture_empty();
+    app.has_crypto = true;
+    app.alert_dismissed = false;
+    app.holdings = vec![
+        crate::data::CryptoHolding {
+            commodity: "ETH".to_string(),
+            amount: 1.0,
+            price_eur: 0.0,
+            value_eur: 0.0,
+        },
+        crate::data::CryptoHolding {
+            commodity: "SOL".to_string(),
+            amount: 1.0,
+            price_eur: 0.0,
+            value_eur: 0.0,
+        },
+        crate::data::CryptoHolding {
+            commodity: "LINK".to_string(),
+            amount: 1.0,
+            price_eur: 0.0,
+            value_eur: 0.0,
+        },
+    ];
+
+    let today = Local::now().date_naive();
+    let yesterday = today - chrono::Duration::days(1);
+    app.price_history = vec![
+        crate::data::PriceEntry {
+            date: yesterday,
+            commodity: "\"eth\"".to_string(),
+            price_eur: 100.0,
+        },
+        crate::data::PriceEntry {
+            date: today,
+            commodity: "eth".to_string(),
+            price_eur: 103.0,
+        },
+        crate::data::PriceEntry {
+            date: yesterday,
+            commodity: "sol".to_string(),
+            price_eur: 50.0,
+        },
+        crate::data::PriceEntry {
+            date: today,
+            commodity: "\"SOL\"".to_string(),
+            price_eur: 48.0,
+        },
+        crate::data::PriceEntry {
+            date: yesterday,
+            commodity: "link".to_string(),
+            price_eur: 20.0,
+        },
+        crate::data::PriceEntry {
+            date: today,
+            commodity: "LINK".to_string(),
+            price_eur: 20.6,
+        },
+    ];
+
+    app.compute_price_alerts();
+    assert_eq!(app.price_alerts.len(), 3);
+    let coins: std::collections::HashSet<&str> =
+        app.price_alerts.iter().map(|a| a.coin.as_str()).collect();
+    assert!(coins.contains("ETH"));
+    assert!(coins.contains("SOL"));
+    assert!(coins.contains("LINK"));
+}
+
+#[test]
+fn price_alerts_clear_when_no_longer_over_threshold() {
+    let mut app = App::fixture_empty();
+    app.has_crypto = true;
+    app.alert_dismissed = false;
+    app.holdings = vec![crate::data::CryptoHolding {
+        commodity: "BTC".to_string(),
+        amount: 1.0,
+        price_eur: 0.0,
+        value_eur: 0.0,
+    }];
+
+    let today = Local::now().date_naive();
+    let yesterday = today - chrono::Duration::days(1);
+    app.price_history = vec![
+        crate::data::PriceEntry {
+            date: yesterday,
+            commodity: "BTC".to_string(),
+            price_eur: 100.0,
+        },
+        crate::data::PriceEntry {
+            date: today,
+            commodity: "BTC".to_string(),
+            price_eur: 105.0,
+        },
+    ];
+    app.compute_price_alerts();
+    assert_eq!(app.price_alerts.len(), 1);
+
+    app.price_history = vec![
+        crate::data::PriceEntry {
+            date: yesterday,
+            commodity: "BTC".to_string(),
+            price_eur: 100.0,
+        },
+        crate::data::PriceEntry {
+            date: today,
+            commodity: "BTC".to_string(),
+            price_eur: 101.0,
+        },
+    ];
+    app.compute_price_alerts();
+    assert!(app.price_alerts.is_empty());
+    assert!(!app.show_alerts);
+}
+
+#[test]
+fn price_alert_threshold_comes_from_config() {
+    let mut app = App::fixture_empty();
+    app.has_crypto = true;
+    app.alert_dismissed = false;
+    app.holdings = vec![crate::data::CryptoHolding {
+        commodity: "ETH".to_string(),
+        amount: 1.0,
+        price_eur: 0.0,
+        value_eur: 0.0,
+    }];
+
+    let today = Local::now().date_naive();
+    let yesterday = today - chrono::Duration::days(1);
+    app.price_history = vec![
+        crate::data::PriceEntry {
+            date: yesterday,
+            commodity: "ETH".to_string(),
+            price_eur: 100.0,
+        },
+        crate::data::PriceEntry {
+            date: today,
+            commodity: "ETH".to_string(),
+            price_eur: 101.0, // +1.0%
+        },
+    ];
+
+    app.config.price_alert_threshold_pct = 2.0;
+    app.compute_price_alerts();
+    assert!(app.price_alerts.is_empty(), "1% should be filtered at 2%");
+
+    app.config.price_alert_threshold_pct = 0.5;
+    app.compute_price_alerts();
+    assert_eq!(app.price_alerts.len(), 1, "1% should pass at 0.5%");
 }

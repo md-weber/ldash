@@ -3,7 +3,9 @@ use chrono::NaiveDate;
 use std::path::Path;
 
 use super::parse::{parse_balance_csv, parse_eu_number};
-use super::{run_hledger, AccountBalance, NetWorthBreakdownSeries, NetWorthSeries};
+use super::{
+    currency_matches, run_hledger, AccountBalance, NetWorthBreakdownSeries, NetWorthSeries,
+};
 
 pub fn load_crypto_balances(journal_path: &Path) -> Result<Vec<AccountBalance>> {
     let jp = journal_path.to_str().unwrap_or("all.journal");
@@ -128,7 +130,7 @@ pub fn load_net_worth_breakdown(
         }
         let account = fields.get(0).unwrap_or("").trim().trim_matches('"');
         let commodity = fields.get(1).unwrap_or("").trim().trim_matches('"');
-        if commodity != currency_symbol {
+        if !currency_matches(currency_symbol, commodity) {
             continue;
         }
         let category = breakdown_category(account);
@@ -228,7 +230,7 @@ pub fn load_net_worth_history(
         // Column 1 is the commodity in bare layout — only sum rows in the
         // configured display currency.
         let commodity = fields.get(1).unwrap_or("").trim().trim_matches('"');
-        if commodity != currency_symbol {
+        if !currency_matches(currency_symbol, commodity) {
             continue;
         }
         for (idx, &(col, _)) in month_cols.iter().enumerate() {

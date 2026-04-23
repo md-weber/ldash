@@ -82,7 +82,6 @@ pub enum Tab {
     Monthly,
 }
 
-
 /// Per-tab boolean flags with named accessors. Replaces the older `[bool; 3]`
 /// indexed by `Tab::index()` — fewer off-by-index bugs and self-documenting
 /// field names.

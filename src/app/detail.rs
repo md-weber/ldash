@@ -19,14 +19,9 @@ fn spawn_detail_load(
     currency_symbol: String,
 ) {
     std::thread::spawn(move || {
-        let result = load_recent_transactions(
-            &journal_path,
-            &name,
-            n,
-            period.as_deref(),
-            &currency_symbol,
-        )
-        .map_err(|e| e.to_string());
+        let result =
+            load_recent_transactions(&journal_path, &name, n, period.as_deref(), &currency_symbol)
+                .map_err(|e| e.to_string());
         let _ = tx.send(DetailLoad { name, result });
     });
 }

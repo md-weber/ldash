@@ -8,7 +8,9 @@ use super::{App, MonthlyFocus, MonthlyYearLoad, NetWorthLoad, PortfolioRange};
 
 impl App {
     pub fn current_month(&self) -> Option<&SingleMonth> {
-        self.combined_months.get(self.combined_selected).map(|(m, _)| m)
+        self.combined_months
+            .get(self.combined_selected)
+            .map(|(m, _)| m)
     }
 
     pub fn last_year_match(&self) -> Option<&SingleMonth> {
@@ -50,8 +52,8 @@ impl App {
         self.status_msg = format!("Loading {year}…");
 
         std::thread::spawn(move || {
-            let result = data::load_monthly_for_period(&jp, &period, &currency)
-                .map_err(|e| e.to_string());
+            let result =
+                data::load_monthly_for_period(&jp, &period, &currency).map_err(|e| e.to_string());
             let _ = tx.send(MonthlyYearLoad {
                 year_offset: offset,
                 result,
@@ -131,8 +133,8 @@ impl App {
         self.status_msg = "Loading net worth…".to_string();
 
         std::thread::spawn(move || {
-            let history = load_net_worth_history(&jp, &period, &currency)
-                .map_err(|e| e.to_string());
+            let history =
+                load_net_worth_history(&jp, &period, &currency).map_err(|e| e.to_string());
             // Breakdown is non-fatal: chart simply omits the layer if it fails.
             let breakdown = load_net_worth_breakdown(&jp, &period, &currency).ok();
             let _ = tx.send(NetWorthLoad { history, breakdown });
@@ -146,17 +148,25 @@ impl App {
     /// only added when viewing the current year (`monthly_year_offset == 0`).
     /// The previous selection is preserved by month name when possible.
     pub(super) fn rebuild_combined_months(&mut self) {
-        let actual_names: std::collections::HashSet<&str> =
-            self.monthly.months.iter().map(|m| m.month_name.as_str()).collect();
+        let actual_names: std::collections::HashSet<&str> = self
+            .monthly
+            .months
+            .iter()
+            .map(|m| m.month_name.as_str())
+            .collect();
 
         let mut combined: Vec<(SingleMonth, bool)> = Vec::new();
         for name in &crate::data::MONTH_NAMES {
-            if let Some(m) = self.monthly.months.iter().find(|m| m.month_name.as_str() == *name) {
+            if let Some(m) = self
+                .monthly
+                .months
+                .iter()
+                .find(|m| m.month_name.as_str() == *name)
+            {
                 combined.push((m.clone(), false));
             } else if self.monthly_year_offset == 0 {
                 if let Some(m) = self.monthly_forecast.months.iter().find(|m| {
-                    m.month_name.as_str() == *name
-                        && !actual_names.contains(m.month_name.as_str())
+                    m.month_name.as_str() == *name && !actual_names.contains(m.month_name.as_str())
                 }) {
                     combined.push((m.clone(), true));
                 }
@@ -171,7 +181,11 @@ impl App {
             .or_else(|| self.monthly.months.last().map(|m| m.month_name.as_str()));
 
         self.combined_selected = target_name
-            .and_then(|name| combined.iter().position(|(m, _)| m.month_name.as_str() == name))
+            .and_then(|name| {
+                combined
+                    .iter()
+                    .position(|(m, _)| m.month_name.as_str() == name)
+            })
             .unwrap_or_else(|| combined.len().saturating_sub(1));
 
         self.combined_months = combined;

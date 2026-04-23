@@ -14,8 +14,7 @@ pub use balances::{
     load_net_worth_breakdown, load_net_worth_history,
 };
 pub use monthly::{
-    load_last_year_monthly, load_monthly_data, load_monthly_for_period,
-    load_monthly_with_forecast,
+    load_last_year_monthly, load_monthly_data, load_monthly_for_period, load_monthly_with_forecast,
 };
 #[allow(unused_imports)]
 pub use parse::parse_eu_number;
@@ -24,6 +23,36 @@ pub(crate) use parse::{month_index, month_name, MONTH_NAMES};
 pub use portfolio::{compute_portfolio, load_all_coin_chart_series};
 pub use prices::{latest_prices, load_price_history};
 pub use transactions::{load_recent_transactions, search_transactions};
+
+pub(crate) fn commodity_key(raw: &str) -> String {
+    raw.trim().trim_matches('"').to_ascii_uppercase()
+}
+
+fn canonical_currency(raw: &str) -> String {
+    let s = raw.trim();
+    if s.is_empty() {
+        return String::new();
+    }
+    if s == "€" || s.eq_ignore_ascii_case("EUR") {
+        return "EUR".to_string();
+    }
+    if s == "$" || s.eq_ignore_ascii_case("USD") || s.eq_ignore_ascii_case("US$") {
+        return "USD".to_string();
+    }
+    if s == "£" || s.eq_ignore_ascii_case("GBP") {
+        return "GBP".to_string();
+    }
+    if s == "¥" || s.eq_ignore_ascii_case("JPY") {
+        return "JPY".to_string();
+    }
+    s.to_ascii_uppercase()
+}
+
+pub(crate) fn currency_matches(configured: &str, commodity: &str) -> bool {
+    let a = canonical_currency(configured);
+    let b = canonical_currency(commodity);
+    !a.is_empty() && a == b
+}
 
 #[derive(Debug, Clone)]
 pub struct PriceEntry {
@@ -140,4 +169,33 @@ pub(crate) fn run_hledger(args: &[&str]) -> Result<String> {
             e.utf8_error().valid_up_to()
         )
     })
+}
+
+#[cfg(test)]
+mod tests {
+    use super::{commodity_key, currency_matches};
+
+    #[test]
+    fn currency_matches_eur_aliases() {
+        assert!(currency_matches("€", "EUR"));
+        assert!(currency_matches("EUR", "€"));
+        assert!(currency_matches("eur", "EUR"));
+    }
+
+    #[test]
+    fn currency_matches_usd_aliases() {
+        assert!(currency_matches("$", "USD"));
+        assert!(currency_matches("usd", "$"));
+    }
+
+    #[test]
+    fn currency_matches_rejects_mismatch() {
+        assert!(!currency_matches("€", "$"));
+    }
+
+    #[test]
+    fn commodity_key_normalizes_case_and_quotes() {
+        assert_eq!(commodity_key("\"btc\""), "BTC");
+        assert_eq!(commodity_key(" Eth "), "ETH");
+    }
 }

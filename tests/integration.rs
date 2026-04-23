@@ -89,15 +89,16 @@ fn integration_load_monthly_with_forecast_periodic_rules() {
     let future_months: Vec<_> = data
         .months
         .iter()
-        .filter(|m| {
-            !["January", "February", "March"].contains(&m.month_name.as_str())
-        })
+        .filter(|m| !["January", "February", "March"].contains(&m.month_name.as_str()))
         .collect();
 
     assert!(
         !future_months.is_empty(),
         "expected at least one forecasted month, got: {:?}",
-        data.months.iter().map(|m| &m.month_name).collect::<Vec<_>>()
+        data.months
+            .iter()
+            .map(|m| &m.month_name)
+            .collect::<Vec<_>>()
     );
 
     for m in future_months {
@@ -135,5 +136,32 @@ fn integration_load_account_balances_checking() {
         (checking.amount - expected).abs() < 0.01,
         "checking balance {}, expected {expected}",
         checking.amount,
+    );
+}
+
+#[test]
+#[ignore]
+fn integration_currency_alias_eur_symbol_loaders() {
+    if !hledger_available() {
+        return;
+    }
+    let path = fixture("simple.journal");
+
+    let monthly = ldash::data::load_monthly_data(&path, "€").unwrap();
+    assert!(
+        !monthly.months.is_empty(),
+        "expected monthly rows with EUR alias"
+    );
+
+    let nw = ldash::data::load_net_worth_history(&path, "monthly", "€").unwrap();
+    assert!(
+        !nw.points.is_empty(),
+        "expected net worth points with EUR alias"
+    );
+
+    let breakdown = ldash::data::load_net_worth_breakdown(&path, "monthly", "€").unwrap();
+    assert!(
+        !breakdown.layer_total.is_empty(),
+        "expected breakdown rows with EUR alias"
     );
 }

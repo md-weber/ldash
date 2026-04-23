@@ -188,17 +188,7 @@ fn handle_normal_key(app: &mut App, key: KeyEvent) -> Action {
             if app.tab == Tab::Accounts
                 && !matches!(
                     c,
-                    'q' | '/'
-                        | '?'
-                        | 'r'
-                        | 's'
-                        | 'c'
-                        | 'y'
-                        | 'Y'
-                        | 'e'
-                        | '1'
-                        | '2'
-                        | '3'
+                    'q' | '/' | '?' | 'r' | 's' | 'c' | 'y' | 'Y' | 'e' | '1' | '2' | '3'
                 ) =>
         {
             app.account_filter_active = true;

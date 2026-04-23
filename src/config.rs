@@ -18,6 +18,7 @@ pub struct Config {
     pub number_format: String,
     pub currency_symbol: String,
     pub chart_mode: String,
+    pub price_alert_threshold_pct: f64,
     pub show_portfolio: Option<bool>,
     pub colors: ColorConfig,
     pub theme: ThemeConfig,
@@ -38,6 +39,7 @@ pub struct SavingsGoal {
 #[serde(default)]
 pub struct ColorConfig {
     pub expenses: HashMap<String, String>,
+    pub income: HashMap<String, String>,
 }
 
 #[derive(Debug, Deserialize, Default)]
@@ -63,6 +65,7 @@ impl Default for Config {
             number_format: "eu".to_string(),
             currency_symbol: "€".to_string(),
             chart_mode: "stacked".to_string(),
+            price_alert_threshold_pct: 2.0,
             show_portfolio: None,
             colors: ColorConfig::default(),
             theme: ThemeConfig::default(),
@@ -104,12 +107,24 @@ const DEFAULT_CONFIG: &str = r##"# ldash configuration
 # Toggle at runtime with 's' key.
 # chart_mode = "stacked"
 
-# Expense category color overrides
+# Price alert threshold in percent (default: 2.0)
+# Popup shows only coins with absolute day-over-day move >= threshold.
+# Set 0.0 to show all daily moves.
+# price_alert_threshold_pct = 2.0
+
+# Expense and income category color overrides
 # Colors: red, green, blue, yellow, cyan, magenta, white, darkgray,
 #         or RGB hex like "#B48CFF"
+# Keys match account names case-insensitively. A top-level key colors all
+# its sub-accounts; the most specific (longest) matching key wins.
 # [colors.expenses]
-# Wohnen = "blue"
-# Essen = "yellow"
+# wohnen = "blue"            # colors expenses:wohnen and all children
+# "wohnen:miete" = "#B48CFF" # overrides just the miete sub-account
+# essen = "yellow"
+#
+# [colors.income]
+# gehalt = "cyan"
+# nebenjob = "#B48CFF"
 
 # Monthly budget limits per expense category
 # Matched case-insensitively against expense accounts.
@@ -191,6 +206,13 @@ impl Config {
                     .to_string(),
             );
         }
+        if self.price_alert_threshold_pct < 0.0 {
+            out.push(
+                "price_alert_threshold_pct < 0 is invalid; falling back to 2.0. \
+                 Set a non-negative value or remove the key."
+                    .to_string(),
+            );
+        }
         out
     }
 
@@ -207,6 +229,7 @@ impl Config {
         self.number_format = fresh.number_format;
         self.currency_symbol = fresh.currency_symbol;
         self.chart_mode = fresh.chart_mode;
+        self.price_alert_threshold_pct = fresh.price_alert_threshold_pct;
         self.show_portfolio = fresh.show_portfolio;
         self.colors = fresh.colors;
         self.theme = fresh.theme;
@@ -297,7 +320,11 @@ impl Config {
     /// Used in tight spots (P/L cells, goal progress). For axis labels prefer
     /// `fmt_compact` so the symbol doesn't crowd the tick marks.
     pub fn fmt_amount_compact(&self, amount: f64, decimals: usize) -> String {
-        format!("{}{}", self.fmt_number(amount, decimals), self.currency_symbol)
+        format!(
+            "{}{}",
+            self.fmt_number(amount, decimals),
+            self.currency_symbol
+        )
     }
 }
 

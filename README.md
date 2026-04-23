@@ -102,6 +102,11 @@ On first launch, ldash creates a config file at `~/.config/ldash/config.toml` wi
 # Portfolio chart mode: "stacked" or "unstacked" (default: "stacked")
 # chart_mode = "stacked"
 
+# Price alert threshold in percent (default: 2.0)
+# Popup shows only coins with day-over-day move >= threshold.
+# Set 0.0 to show all daily moves.
+# price_alert_threshold_pct = 2.0
+
 # Expense category color overrides
 # Colors: red, green, blue, yellow, cyan, magenta, white, darkgray,
 #         or RGB hex like "#B48CFF"

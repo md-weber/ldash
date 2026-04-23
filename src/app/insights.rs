@@ -1,6 +1,8 @@
 use chrono::Local;
 use std::time::{Duration, Instant};
 
+use crate::data::commodity_key;
+
 use super::{
     budget_spent, App, BudgetItem, CashFlowForecast, GoalProgress, PriceAlert, RecurringExpense,
     YtdStats,
@@ -242,7 +244,11 @@ impl App {
 
         // Projected monthly net shown in the chart title: average of the
         // strictly-future projected points (skip the bridge point).
-        let forecast_points = if projected.len() > 1 { &projected[1..] } else { &projected[..] };
+        let forecast_points = if projected.len() > 1 {
+            &projected[1..]
+        } else {
+            &projected[..]
+        };
         let projected_monthly_net = if forecast_points.is_empty() {
             computed_avg_net
         } else {
@@ -255,11 +261,7 @@ impl App {
             .map(|(_, y)| *y)
             .collect();
 
-        let raw_min = all_y
-            .iter()
-            .cloned()
-            .fold(f64::INFINITY, f64::min)
-            .min(0.0);
+        let raw_min = all_y.iter().cloned().fold(f64::INFINITY, f64::min).min(0.0);
         let raw_max = all_y
             .iter()
             .cloned()
@@ -283,6 +285,7 @@ impl App {
 
         let today = Local::now().date_naive();
         let yesterday = today - chrono::Duration::days(1);
+        let threshold = self.config.price_alert_threshold_pct.max(0.0);
 
         // One pass over `price_history` to bucket entries per commodity, so
         // the per-coin lookups below are O(log M) instead of O(M). Original
@@ -290,19 +293,18 @@ impl App {
         // the borrow of `self.price_history` from leaking into the mutation
         // of `self.price_alerts` further down.
         let mut alerts: Vec<PriceAlert> = {
-            let mut by_coin: std::collections::HashMap<&str, Vec<&crate::data::PriceEntry>> =
+            let mut by_coin: std::collections::HashMap<String, Vec<&crate::data::PriceEntry>> =
                 std::collections::HashMap::new();
             for entry in &self.price_history {
                 by_coin
-                    .entry(entry.commodity.as_str())
+                    .entry(commodity_key(&entry.commodity))
                     .or_default()
                     .push(entry);
             }
 
             let mut out = Vec::new();
             for h in &self.holdings {
-                let coin = h.commodity.as_str();
-                let prices = match by_coin.get(coin) {
+                let prices = match by_coin.get(&commodity_key(&h.commodity)) {
                     Some(p) if !p.is_empty() => p,
                     _ => continue,
                 };
@@ -320,9 +322,9 @@ impl App {
                 if let (Some(cur), Some(old)) = (current, prev) {
                     if old > 0.0 {
                         let change = (cur - old) / old * 100.0;
-                        if change.abs() >= 2.0 {
+                        if change.abs() >= threshold {
                             out.push(PriceAlert {
-                                coin: coin.to_string(),
+                                coin: h.commodity.clone(),
                                 change_pct: change,
                             });
                         }
@@ -342,6 +344,10 @@ impl App {
             self.price_alerts = alerts;
             self.show_alerts = true;
             self.alert_shown_at = Some(Instant::now());
+        } else {
+            self.price_alerts.clear();
+            self.show_alerts = false;
+            self.alert_shown_at = None;
         }
     }
 

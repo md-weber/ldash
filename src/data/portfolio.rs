@@ -3,6 +3,7 @@ use chrono::NaiveDate;
 use std::collections::{HashMap, VecDeque};
 use std::path::Path;
 
+use super::commodity_key;
 use super::parse::parse_amount_str;
 use super::{run_hledger, AccountBalance, CoinChartSeries, CryptoHolding, PriceEntry};
 
@@ -19,7 +20,10 @@ pub fn compute_portfolio(
         .into_iter()
         .filter(|(_, amount)| *amount > 1e-8)
         .map(|(coin, amount)| {
-            let price = latest_prices.get(&coin).copied().unwrap_or(0.0);
+            let price = latest_prices
+                .get(&commodity_key(&coin))
+                .copied()
+                .unwrap_or(0.0);
             CryptoHolding {
                 commodity: coin,
                 amount,
@@ -263,9 +267,10 @@ pub fn load_all_coin_chart_series(
 
     let mut result = HashMap::new();
     for coin in coins {
+        let coin_key = commodity_key(coin);
         let coin_prices: Vec<&PriceEntry> = price_history
             .iter()
-            .filter(|e| e.commodity == *coin)
+            .filter(|e| commodity_key(&e.commodity) == coin_key)
             .collect();
 
         if coin_prices.len() < 2 {

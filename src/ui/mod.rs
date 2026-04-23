@@ -135,8 +135,11 @@ pub(super) fn parse_color(s: &str) -> Option<Color> {
 /// Map an expense category to a display color. Config overrides via
 /// `[colors.expenses]` take precedence; use those to add locale-specific
 /// aliases (e.g. `Wohnen = "blue"` for German journals).
+///
+/// Lookup is case-insensitive and prefix-aware: a key like `wohnen` will
+/// match `Wohnen:Miete`, and the most specific (longest) matching key wins.
 pub(super) fn expense_color(category: &str, app: &App, theme: &Theme) -> Color {
-    if let Some(color_str) = app.config.colors.expenses.get(category) {
+    if let Some(color_str) = lookup_expense_color_override(category, &app.config.colors.expenses) {
         if let Some(c) = parse_color(color_str) {
             return c;
         }
@@ -158,6 +161,39 @@ pub(super) fn expense_color(category: &str, app: &App, theme: &Theme) -> Color {
         "amazon" => Color::Rgb(255, 120, 200),
         _ => theme.fg,
     }
+}
+
+/// Find the configured color override for `category` in `[colors.expenses]`.
+///
+/// Matching rules:
+/// - case-insensitive
+/// - exact match OR `category` starts with `key:` (so `wohnen` matches
+///   `Wohnen:Miete` and any deeper sub-account)
+/// - longest (most specific) matching key wins
+fn lookup_expense_color_override<'a>(
+    category: &str,
+    map: &'a std::collections::HashMap<String, String>,
+) -> Option<&'a str> {
+    let cat_lower = category.to_lowercase();
+    let mut best: Option<(usize, &'a str)> = None;
+    for (key, val) in map {
+        let key_lower = key.to_lowercase();
+        let matches = cat_lower == key_lower
+            || cat_lower.starts_with(&format!("{key_lower}:"));
+        if matches && best.is_none_or(|(len, _)| key_lower.len() > len) {
+            best = Some((key_lower.len(), val.as_str()));
+        }
+    }
+    best.map(|(_, v)| v)
+}
+
+/// Return a configured color override for an income category, or `None` if
+/// no override is set. Caller decides the fallback (name → `theme.fg`,
+/// amount/bar → `theme.positive`). Same case-insensitive prefix matching
+/// as `expense_color`.
+pub(super) fn income_color(category: &str, app: &App, _theme: &Theme) -> Option<Color> {
+    lookup_expense_color_override(category, &app.config.colors.income)
+        .and_then(parse_color)
 }
 
 pub(super) fn coin_color(commodity: &str, theme: &Theme) -> Color {
@@ -377,6 +413,7 @@ fn render_tabs(f: &mut Frame, app: &mut App, area: Rect, theme: &Theme) {
         .highlight_style(
             Style::default()
                 .fg(theme.accent)
+                .bg(theme.highlight_bg)
                 .bold()
                 .add_modifier(Modifier::UNDERLINED),
         );
@@ -435,5 +472,89 @@ mod tests {
     fn snapshot_monthly_tab() {
         let mut app = App::fixture_with_monthly();
         insta::assert_snapshot!(render_to_string(&mut app));
+    }
+
+    #[test]
+    fn color_override_exact_match() {
+        let mut map = std::collections::HashMap::new();
+        map.insert("essen".to_string(), "yellow".to_string());
+        assert_eq!(lookup_expense_color_override("essen", &map), Some("yellow"));
+    }
+
+    #[test]
+    fn color_override_case_insensitive() {
+        let mut map = std::collections::HashMap::new();
+        map.insert("wohnen:miete".to_string(), "blue".to_string());
+        assert_eq!(
+            lookup_expense_color_override("Wohnen:Miete", &map),
+            Some("blue")
+        );
+    }
+
+    #[test]
+    fn color_override_prefix_match() {
+        // top-level key colors all sub-accounts
+        let mut map = std::collections::HashMap::new();
+        map.insert("essen".to_string(), "yellow".to_string());
+        assert_eq!(
+            lookup_expense_color_override("Essen:Restaurant", &map),
+            Some("yellow")
+        );
+    }
+
+    #[test]
+    fn color_override_longest_key_wins() {
+        let mut map = std::collections::HashMap::new();
+        map.insert("wohnen".to_string(), "blue".to_string());
+        map.insert("wohnen:miete".to_string(), "red".to_string());
+        assert_eq!(
+            lookup_expense_color_override("wohnen:miete", &map),
+            Some("red")
+        );
+        assert_eq!(
+            lookup_expense_color_override("wohnen:strom", &map),
+            Some("blue")
+        );
+    }
+
+    #[test]
+    fn color_override_no_partial_segment_match() {
+        // "foo" must not match "food" — only full segment boundary
+        let mut map = std::collections::HashMap::new();
+        map.insert("foo".to_string(), "red".to_string());
+        assert_eq!(lookup_expense_color_override("food", &map), None);
+    }
+
+    #[test]
+    fn color_override_returns_none_when_unmatched() {
+        let mut map = std::collections::HashMap::new();
+        map.insert("transport".to_string(), "magenta".to_string());
+        assert_eq!(lookup_expense_color_override("essen", &map), None);
+    }
+
+    #[test]
+    fn income_color_returns_override() {
+        use crate::app::App;
+        let mut app = App::fixture_empty();
+        app.config.colors.income.insert("gehalt".to_string(), "cyan".to_string());
+        let theme = Theme::from_config(&app.config);
+        assert_eq!(income_color("gehalt", &app, &theme), Some(Color::Cyan));
+    }
+
+    #[test]
+    fn income_color_prefix_match() {
+        use crate::app::App;
+        let mut app = App::fixture_empty();
+        app.config.colors.income.insert("gehalt".to_string(), "cyan".to_string());
+        let theme = Theme::from_config(&app.config);
+        assert_eq!(income_color("gehalt:bonus", &app, &theme), Some(Color::Cyan));
+    }
+
+    #[test]
+    fn income_color_falls_back_to_none() {
+        use crate::app::App;
+        let app = App::fixture_empty();
+        let theme = Theme::from_config(&app.config);
+        assert_eq!(income_color("gehalt", &app, &theme), None);
     }
 }

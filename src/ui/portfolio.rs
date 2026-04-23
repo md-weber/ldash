@@ -2,6 +2,7 @@ use ratatui::{prelude::*, widgets::*};
 
 use super::{coin_color, nice_y_axis, Theme};
 use crate::app::App;
+use crate::data::commodity_key;
 
 fn series_interp(series: &[(f64, f64)], day: f64) -> f64 {
     match series.iter().rposition(|p| p.0 <= day) {
@@ -457,7 +458,7 @@ fn render_price_chart(f: &mut Frame, app: &App, area: Rect, theme: &Theme) {
     let coin_entries: Vec<_> = app
         .price_history
         .iter()
-        .filter(|e| e.commodity == selected_coin)
+        .filter(|e| commodity_key(&e.commodity) == commodity_key(selected_coin))
         .collect();
     let first_date = coin_entries
         .first()
@@ -488,27 +489,28 @@ fn render_price_chart(f: &mut Frame, app: &App, area: Rect, theme: &Theme) {
         .collect();
 
     type ChartLines<'a> = (Vec<(f64, f64)>, Vec<(f64, f64)>, &'a str, &'a str);
-    let (line2_data, line3_data, line2_name, line3_name): ChartLines<'_> = if app.chart_mode.is_stacked() {
-        let purchased: Vec<(f64, f64)> = filtered_inv
-            .iter()
-            .zip(filtered_price.iter())
-            .map(|(inv, pg)| (inv.0, inv.1 + pg.1))
-            .collect();
-        let total: Vec<(f64, f64)> = filtered_inv
-            .iter()
-            .zip(filtered_price.iter())
-            .zip(filtered_staking.iter())
-            .map(|((inv, pg), sg)| (inv.0, inv.1 + pg.1 + sg.1))
-            .collect();
-        (purchased, total, "Purchased value", "Total value")
-    } else {
-        (
-            filtered_price.clone(),
-            filtered_staking.clone(),
-            "Price gain",
-            "Staking gain",
-        )
-    };
+    let (line2_data, line3_data, line2_name, line3_name): ChartLines<'_> =
+        if app.chart_mode.is_stacked() {
+            let purchased: Vec<(f64, f64)> = filtered_inv
+                .iter()
+                .zip(filtered_price.iter())
+                .map(|(inv, pg)| (inv.0, inv.1 + pg.1))
+                .collect();
+            let total: Vec<(f64, f64)> = filtered_inv
+                .iter()
+                .zip(filtered_price.iter())
+                .zip(filtered_staking.iter())
+                .map(|((inv, pg), sg)| (inv.0, inv.1 + pg.1 + sg.1))
+                .collect();
+            (purchased, total, "Purchased value", "Total value")
+        } else {
+            (
+                filtered_price.clone(),
+                filtered_staking.clone(),
+                "Price gain",
+                "Staking gain",
+            )
+        };
 
     let x_min = min_x;
     let x_max = today_x.max(filtered_inv.last().map(|p| p.0).unwrap_or(1.0));

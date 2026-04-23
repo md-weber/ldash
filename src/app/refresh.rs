@@ -73,7 +73,9 @@ fn spawn_all(
 /// crashing loader can't take the whole TUI down. The error message is
 /// intentionally generic — the panic message has already been printed by the
 /// default panic hook.
-fn join_or_panic_err<T>(handle: std::thread::ScopedJoinHandle<'_, Result<T, anyhow::Error>>) -> Result<T, anyhow::Error> {
+fn join_or_panic_err<T>(
+    handle: std::thread::ScopedJoinHandle<'_, Result<T, anyhow::Error>>,
+) -> Result<T, anyhow::Error> {
     handle
         .join()
         .unwrap_or_else(|_| Err(anyhow::anyhow!("worker thread panicked")))
@@ -106,17 +108,17 @@ pub(super) fn load_all_data(
         Some(Err(e)) => TabData::Err(e.to_string()),
     };
 
-    let coin_chart_cache: TabData<HashMap<String, CoinChartSeries>> =
-        if let TabData::Ok(ref hs) = holdings {
-            let coins: Vec<String> = hs.iter().map(|holding| holding.commodity.clone()).collect();
-            match load_all_coin_chart_series(journal_path, &price_history, &coins, currency_symbol)
-            {
-                Ok(cache) => TabData::Ok(cache),
-                Err(e) => TabData::Err(e.to_string()),
-            }
-        } else {
-            TabData::NotRequested
-        };
+    let coin_chart_cache: TabData<HashMap<String, CoinChartSeries>> = if let TabData::Ok(ref hs) =
+        holdings
+    {
+        let coins: Vec<String> = hs.iter().map(|holding| holding.commodity.clone()).collect();
+        match load_all_coin_chart_series(journal_path, &price_history, &coins, currency_symbol) {
+            Ok(cache) => TabData::Ok(cache),
+            Err(e) => TabData::Err(e.to_string()),
+        }
+    } else {
+        TabData::NotRequested
+    };
 
     let account_balances: TabData<Vec<AccountBalance>> = match h.accounts {
         None => TabData::NotRequested,
@@ -404,7 +406,7 @@ impl App {
         }
         self.loading = false;
 
-        if self.price_alerts.is_empty() && !self.alert_dismissed {
+        if !self.alert_dismissed {
             self.compute_price_alerts();
         }
     }
