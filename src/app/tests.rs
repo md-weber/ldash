@@ -173,13 +173,11 @@ fn recurring_expenses_detects_stable_subscription() {
             make_month("March", vec![("expenses:abos:netflix", 9.99)]),
             make_month("April", vec![("expenses:abos:netflix", 9.99)]),
         ],
-        selected: 3,
     };
     let r = app.recurring_expenses();
     assert_eq!(r.len(), 1);
     assert_eq!(r[0].name, "expenses:abos:netflix");
     assert!((r[0].monthly_avg - 9.99).abs() < 0.01);
-    assert_eq!(r[0].occurrences, 4);
 }
 
 #[test]
@@ -191,7 +189,6 @@ fn recurring_expenses_ignores_too_variable() {
             make_month("February", vec![("expenses:misc", 100.0)]),
             make_month("March", vec![("expenses:misc", 500.0)]),
         ],
-        selected: 2,
     };
     let r = app.recurring_expenses();
     assert!(r.is_empty(), "variable amounts should not be recurring");
@@ -207,7 +204,6 @@ fn recurring_expenses_ignores_slightly_variable() {
             make_month("February", vec![("expenses:food", 150.0)]),
             make_month("March", vec![("expenses:food", 120.0)]),
         ],
-        selected: 2,
     };
     let r = app.recurring_expenses();
     assert!(r.is_empty(), "grocery-style variation should not be recurring");
@@ -242,7 +238,6 @@ fn recurring_expenses_skips_parent_when_child_present() {
                 ],
             ),
         ],
-        selected: 2,
     };
     let r = app.recurring_expenses();
     assert_eq!(r.len(), 1, "parent+child should deduplicate to one entry");
@@ -257,7 +252,6 @@ fn recurring_expenses_requires_at_least_3_months() {
             make_month("January", vec![("expenses:abos:spotify", 9.99)]),
             make_month("February", vec![("expenses:abos:spotify", 9.99)]),
         ],
-        selected: 1,
     };
     let r = app.recurring_expenses();
     assert!(r.is_empty(), "need ≥3 occurrences");
@@ -267,22 +261,16 @@ fn recurring_expenses_requires_at_least_3_months() {
 fn recurring_expenses_combines_last_year_months() {
     let mut app = App::fixture_empty();
     app.monthly = crate::data::MonthlyData {
-        months: vec![make_month(
-            "January",
-            vec![("expenses:abos:gym", 30.0)],
-        )],
-        selected: 0,
+        months: vec![make_month("January", vec![("expenses:abos:gym", 30.0)])],
     };
     app.last_year = crate::data::MonthlyData {
         months: vec![
             make_month("November", vec![("expenses:abos:gym", 30.0)]),
             make_month("December", vec![("expenses:abos:gym", 30.0)]),
         ],
-        selected: 0,
     };
     let r = app.recurring_expenses();
     assert_eq!(r.len(), 1);
-    assert_eq!(r[0].occurrences, 3);
 }
 
 #[test]
@@ -301,7 +289,7 @@ fn cash_flow_forecast_actuals_only_when_full_year() {
             }
         })
         .collect();
-    app.monthly = crate::data::MonthlyData { months, selected: 11 };
+    app.monthly = crate::data::MonthlyData { months };
     let f = app.cash_flow_forecast();
     assert_eq!(f.actuals.len(), 12);
     assert!(f.projected.is_empty());
@@ -321,7 +309,7 @@ fn cash_flow_forecast_projects_remaining_months() {
             total_expenses: 1500.0,
         })
         .collect();
-    app.monthly = crate::data::MonthlyData { months, selected: 2 };
+    app.monthly = crate::data::MonthlyData { months };
     let f = app.cash_flow_forecast();
     assert_eq!(f.actuals.len(), 3);
     // projected = bridge(Mar) + Apr..Dec = 1 + 9 = 10
@@ -348,7 +336,6 @@ fn cash_flow_forecast_uses_hledger_forecast_over_computed_avg() {
             make_month_with_income("January", 3000.0, vec![("expenses:rent", 1500.0)]),
             make_month_with_income("February", 3000.0, vec![("expenses:rent", 1500.0)]),
         ],
-        selected: 1,
     };
     // hledger forecast provides Mar–May with income 2500, rent 1000 (net 1500 differs)
     app.monthly_forecast = crate::data::MonthlyData {
@@ -361,7 +348,6 @@ fn cash_flow_forecast_uses_hledger_forecast_over_computed_avg() {
             make_month_with_income("April", 2500.0, vec![("expenses:rent", 1000.0)]),
             make_month_with_income("May", 2500.0, vec![("expenses:rent", 1000.0)]),
         ],
-        selected: 4,
     };
     let f = app.cash_flow_forecast();
     assert_eq!(f.actuals.len(), 2, "Jan+Feb are actuals");
@@ -422,7 +408,6 @@ fn recurring_expenses_sorted_by_amount_desc() {
                 vec![("expenses:abos:cheap", 5.0), ("expenses:abos:pricey", 50.0)],
             ),
         ],
-        selected: 2,
     };
     let r = app.recurring_expenses();
     assert_eq!(r.len(), 2);

@@ -59,7 +59,6 @@ pub struct SingleMonth {
 #[derive(Debug, Default, Clone)]
 pub struct MonthlyData {
     pub months: Vec<SingleMonth>,
-    pub selected: usize,
 }
 
 #[derive(Debug, Clone, Default)]

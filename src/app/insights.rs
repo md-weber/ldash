@@ -147,7 +147,6 @@ impl App {
                 RecurringExpense {
                     name: name.to_string(),
                     monthly_avg: avg,
-                    occurrences: amounts.len(),
                 }
             })
             .collect();

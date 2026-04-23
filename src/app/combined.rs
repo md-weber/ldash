@@ -163,17 +163,12 @@ impl App {
             }
         }
 
-        // Preserve selection by month name; fall back to monthly.selected then last.
+        // Preserve selection by month name; fall back to last actual month.
         let target_name: Option<&str> = self
             .combined_months
             .get(self.combined_selected)
             .map(|(m, _)| m.month_name.as_str())
-            .or_else(|| {
-                self.monthly
-                    .months
-                    .get(self.monthly.selected)
-                    .map(|m| m.month_name.as_str())
-            });
+            .or_else(|| self.monthly.months.last().map(|m| m.month_name.as_str()));
 
         self.combined_selected = target_name
             .and_then(|name| combined.iter().position(|(m, _)| m.month_name.as_str() == name))

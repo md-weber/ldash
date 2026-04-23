@@ -298,7 +298,7 @@ fn run(
             last_tick = Instant::now();
         }
 
-        let check_interval = if app.has_watcher() {
+        let check_interval = if app.watcher.is_some() {
             Duration::from_secs(1)
         } else {
             app.config.refresh_duration()

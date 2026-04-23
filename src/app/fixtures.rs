@@ -57,7 +57,6 @@ impl App {
                     total_expenses: 1650.0,
                 },
             ],
-            selected: 0,
         };
         app.rebuild_combined_months();
         app

@@ -116,6 +116,12 @@ pub(super) fn parse_color(s: &str) -> Option<Color> {
         "white" => Some(Color::White),
         "gray" => Some(Color::Gray),
         "darkgray" => Some(Color::DarkGray),
+        "lightred" => Some(Color::LightRed),
+        "lightgreen" => Some(Color::LightGreen),
+        "lightblue" => Some(Color::LightBlue),
+        "lightyellow" => Some(Color::LightYellow),
+        "lightcyan" => Some(Color::LightCyan),
+        "lightmagenta" => Some(Color::LightMagenta),
         s if s.starts_with('#') && s.len() == 7 => {
             let r = u8::from_str_radix(&s[1..3], 16).ok()?;
             let g = u8::from_str_radix(&s[3..5], 16).ok()?;
@@ -126,6 +132,9 @@ pub(super) fn parse_color(s: &str) -> Option<Color> {
     }
 }
 
+/// Map an expense category to a display color. Config overrides via
+/// `[colors.expenses]` take precedence; use those to add locale-specific
+/// aliases (e.g. `Wohnen = "blue"` for German journals).
 pub(super) fn expense_color(category: &str, app: &App, theme: &Theme) -> Color {
     if let Some(color_str) = app.config.colors.expenses.get(category) {
         if let Some(c) = parse_color(color_str) {
@@ -136,18 +145,17 @@ pub(super) fn expense_color(category: &str, app: &App, theme: &Theme) -> Color {
     let cat = category.to_lowercase();
     let top = cat.split(':').next().unwrap_or(&cat);
     match top {
-        "wohnen" | "housing" | "hauskauf" => Color::Blue,
-        "essen" | "food" | "groceries" | "restaurant" => theme.gold,
+        "housing" => Color::Blue,
+        "food" | "groceries" | "restaurant" => theme.gold,
         "transport" | "car" | "fuel" => Color::Magenta,
-        "gesundheit" | "health" | "hygiene" => Color::LightCyan,
-        "versicherung" | "insurance" => Color::LightBlue,
-        "kommunikation" | "telecom" | "haushalt" => Color::Rgb(180, 140, 255),
-        "freizeit" | "entertainment" | "urlaub" => Color::LightGreen,
-        "kleider" | "kinder" | "shopping" | "clothing" => Color::Rgb(255, 150, 80),
-        "fortbildung" | "education" | "books" => theme.accent,
-        "steuer" | "tax" | "fees" | "crypto" => Color::Rgb(200, 200, 100),
-        "abos" | "amazon" => Color::Rgb(255, 120, 200),
-        "spende" | "schenkung" => Color::Rgb(150, 220, 180),
+        "health" => Color::LightCyan,
+        "insurance" => Color::LightBlue,
+        "telecom" => Color::Rgb(180, 140, 255),
+        "entertainment" => Color::LightGreen,
+        "shopping" | "clothing" => Color::Rgb(255, 150, 80),
+        "education" | "books" => theme.accent,
+        "tax" | "fees" | "crypto" => Color::Rgb(200, 200, 100),
+        "amazon" => Color::Rgb(255, 120, 200),
         _ => theme.fg,
     }
 }
@@ -201,11 +209,11 @@ pub(super) fn nice_y_axis(
         .map(|i| {
             let v = lo + step * i as f64;
             let s = if v.abs() >= 100.0 {
-                cfg.fmt_amount_compact(v, 0)
+                cfg.fmt_compact(v, 0)
             } else {
-                cfg.fmt_amount_compact(v, 1)
+                cfg.fmt_compact(v, 1)
             };
-                    Span::styled(s, crate::fg!(muted))
+            Span::styled(s, crate::fg!(muted))
         })
         .collect();
     (lo, hi, labels)

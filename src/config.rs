@@ -286,14 +286,18 @@ impl Config {
         )
     }
 
+    /// Compact number with no currency symbol — e.g. `"1.234,56"`.
+    /// Use for axis labels and other tight contexts where the symbol is shown
+    /// elsewhere or would add visual noise.
+    pub fn fmt_compact(&self, amount: f64, decimals: usize) -> String {
+        self.fmt_number(amount, decimals)
+    }
+
     /// Like `fmt_amount` but no space between number and symbol — e.g. `"1.234,56€"`.
-    /// Used in tight spots (axis labels, P/L cells).
+    /// Used in tight spots (P/L cells, goal progress). For axis labels prefer
+    /// `fmt_compact` so the symbol doesn't crowd the tick marks.
     pub fn fmt_amount_compact(&self, amount: f64, decimals: usize) -> String {
-        format!(
-            "{}{}",
-            self.fmt_number(amount, decimals),
-            self.currency_symbol
-        )
+        format!("{}{}", self.fmt_number(amount, decimals), self.currency_symbol)
     }
 }
 

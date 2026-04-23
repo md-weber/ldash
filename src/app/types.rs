@@ -261,8 +261,6 @@ pub struct PriceAlert {
 pub struct RecurringExpense {
     pub name: String,
     pub monthly_avg: f64,
-    #[allow(dead_code)]
-    pub occurrences: usize,
 }
 
 /// Render-pass geometry written by `ui::*` and read back by mouse hit-testing.

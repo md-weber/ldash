@@ -87,11 +87,7 @@ pub(super) fn parse_balance_csv(text: &str) -> Result<Vec<super::AccountBalance>
     Ok(result)
 }
 
-pub(super) fn parse_monthly_csv(
-    text: &str,
-    current_month: usize,
-    currency_symbol: &str,
-) -> Result<MonthlyData> {
+pub(super) fn parse_monthly_csv(text: &str, currency_symbol: &str) -> Result<MonthlyData> {
     let mut rdr = csv::ReaderBuilder::new()
         .flexible(true)
         .from_reader(text.as_bytes());
@@ -167,12 +163,7 @@ pub(super) fn parse_monthly_csv(
         })
         .collect();
 
-    let selected = months
-        .iter()
-        .position(|m| m.month_name == month_name(current_month))
-        .unwrap_or(months.len().saturating_sub(1));
-
-    Ok(MonthlyData { months, selected })
+    Ok(MonthlyData { months })
 }
 
 /// Calendar month names indexed 0..=11 (January = 0).
@@ -375,7 +366,7 @@ mod tests {
     #[test]
     fn monthly_csv_two_months_income_and_expenses() {
         let csv = two_month_csv("€");
-        let data = parse_monthly_csv(&csv, 0, "€").unwrap();
+        let data = parse_monthly_csv(&csv, "€").unwrap();
 
         assert_eq!(data.months.len(), 2);
 
@@ -393,23 +384,9 @@ mod tests {
     }
 
     #[test]
-    fn monthly_csv_selected_defaults_to_last_when_no_match() {
-        let csv = two_month_csv("€");
-        let data = parse_monthly_csv(&csv, 0, "€").unwrap();
-        assert_eq!(data.selected, 1);
-    }
-
-    #[test]
-    fn monthly_csv_selected_points_to_current_month() {
-        let csv = two_month_csv("€");
-        let data = parse_monthly_csv(&csv, 1, "€").unwrap();
-        assert_eq!(data.selected, 0);
-    }
-
-    #[test]
     fn monthly_csv_ignores_wrong_currency() {
         let csv = two_month_csv("$");
-        let data = parse_monthly_csv(&csv, 0, "€").unwrap();
+        let data = parse_monthly_csv(&csv, "€").unwrap();
         assert!(data.months.is_empty());
     }
 
@@ -421,7 +398,7 @@ mod tests {
                    Expenses,\n\
                    expenses:food,\"100,00 €\"\n\
                    expenses:housing,\"1.200,00 €\"\n";
-        let data = parse_monthly_csv(csv, 0, "€").unwrap();
+        let data = parse_monthly_csv(csv, "€").unwrap();
         let jan = &data.months[0];
         assert!(
             jan.expenses[0].1 >= jan.expenses[1].1,

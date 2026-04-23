@@ -6,8 +6,6 @@ use super::parse::parse_monthly_csv;
 use super::{run_hledger, MonthlyData};
 
 pub fn load_monthly_data(journal_path: &Path, currency_symbol: &str) -> Result<MonthlyData> {
-    let now = chrono::Local::now().date_naive();
-    let current_month = now.month() as usize;
     let jp = journal_path.to_str().unwrap_or("all.journal");
     let text = run_hledger(&[
         "-f",
@@ -19,7 +17,7 @@ pub fn load_monthly_data(journal_path: &Path, currency_symbol: &str) -> Result<M
         "-p",
         "monthly this year",
     ])?;
-    parse_monthly_csv(&text, current_month, currency_symbol)
+    parse_monthly_csv(&text, currency_symbol)
 }
 
 pub fn load_monthly_for_period(
@@ -38,7 +36,7 @@ pub fn load_monthly_for_period(
         "-p",
         period,
     ])?;
-    parse_monthly_csv(&text, 0, currency_symbol)
+    parse_monthly_csv(&text, currency_symbol)
 }
 
 /// Load income statement for the current year with `--forecast` applied.
@@ -84,7 +82,7 @@ pub fn load_monthly_with_forecast(
         &forecast_arg,
     ])?;
 
-    parse_monthly_csv(&text, 0, currency_symbol)
+    parse_monthly_csv(&text, currency_symbol)
 }
 
 pub fn load_last_year_monthly(journal_path: &Path, currency_symbol: &str) -> Result<MonthlyData> {
@@ -99,5 +97,5 @@ pub fn load_last_year_monthly(journal_path: &Path, currency_symbol: &str) -> Res
         "-p",
         "monthly last year",
     ])?;
-    parse_monthly_csv(&text, 0, currency_symbol)
+    parse_monthly_csv(&text, currency_symbol)
 }

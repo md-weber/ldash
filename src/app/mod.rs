@@ -100,7 +100,7 @@ pub struct App {
     pub(super) income_detail_rx: Option<mpsc::Receiver<DetailLoad>>,
     pub(super) monthly_year_rx: Option<mpsc::Receiver<MonthlyYearLoad>>,
     pub(super) net_worth_rx: Option<mpsc::Receiver<NetWorthLoad>>,
-    watcher: Option<JournalWatcher>,
+    pub(crate) watcher: Option<JournalWatcher>,
     last_journal_mtime: Option<SystemTime>,
     last_config_mtime: Option<SystemTime>,
 }
@@ -296,10 +296,6 @@ impl App {
 
     pub fn crypto_enabled(&self) -> bool {
         self.config.show_portfolio.unwrap_or(self.has_crypto)
-    }
-
-    pub fn has_watcher(&self) -> bool {
-        self.watcher.is_some()
     }
 
     pub fn next_tab(&mut self) {
