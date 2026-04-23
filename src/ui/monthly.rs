@@ -1,5 +1,6 @@
 use chrono::Datelike;
 use ratatui::{prelude::*, widgets::*};
+use ratatui::style::Modifier;
 
 use super::{expense_color, render_detail_with_title, Theme};
 use crate::app::{budget_matches, budget_spent, App, MonthlyFocus};
@@ -7,6 +8,8 @@ use crate::app::{budget_matches, budget_spent, App, MonthlyFocus};
 pub(super) fn render_monthly(f: &mut Frame, app: &mut App, area: Rect, theme: &Theme) {
     let narrow = area.width < 100;
     let very_narrow = area.width < 80;
+    // Show forecast chart side-by-side only for the current year on wide screens.
+    let show_forecast = area.width >= 115 && app.monthly_year_offset == 0;
 
     let chunks = Layout::vertical([
         Constraint::Length(12),
@@ -15,8 +18,19 @@ pub(super) fn render_monthly(f: &mut Frame, app: &mut App, area: Rect, theme: &T
     ])
     .split(area);
 
-    app.monthly_chart_area = chunks[0];
-    render_monthly_chart(f, app, chunks[0], theme);
+    if show_forecast {
+        let top = Layout::horizontal([
+            Constraint::Percentage(55),
+            Constraint::Percentage(45),
+        ])
+        .split(chunks[0]);
+        app.monthly_chart_area = top[0];
+        render_monthly_chart(f, app, top[0], theme);
+        render_forecast_chart(f, app, top[1], theme);
+    } else {
+        app.monthly_chart_area = chunks[0];
+        render_monthly_chart(f, app, chunks[0], theme);
+    }
     render_monthly_summary(f, app, chunks[1], theme);
 
     let detail_chunks = if very_narrow {
@@ -75,34 +89,49 @@ fn render_monthly_chart(f: &mut Frame, app: &App, area: Rect, theme: &Theme) {
     use ratatui::widgets::{Bar, BarChart, BarGroup};
 
     let groups: Vec<BarGroup> = app
-        .monthly
-        .months
+        .combined_months
         .iter()
         .enumerate()
-        .map(|(i, m)| {
-            let selected = i == app.monthly.selected;
+        .map(|(i, (m, is_forecast))| {
+            let selected = i == app.combined_selected;
             let (inc_color, exp_color) = if selected {
                 (Color::LightGreen, Color::LightRed)
             } else {
                 (theme.positive, theme.negative)
             };
 
-            let label = &m.month_name[..3];
+            let label_color = if selected {
+                theme.accent
+            } else if *is_forecast {
+                theme.gold
+            } else {
+                theme.muted
+            };
+
+            // Prefix forecast month labels with "~" to signal they're projected.
+            let label = if *is_forecast {
+                format!("~{}", &m.month_name[..3])
+            } else {
+                m.month_name[..3].to_string()
+            };
+
+            // Dim the bars of unselected forecast months so actuals stand out.
+            let inc_style = if *is_forecast && !selected {
+                Style::default().fg(inc_color).add_modifier(Modifier::DIM)
+            } else {
+                Style::default().fg(inc_color)
+            };
+            let exp_style = if *is_forecast && !selected {
+                Style::default().fg(exp_color).add_modifier(Modifier::DIM)
+            } else {
+                Style::default().fg(exp_color)
+            };
+
             BarGroup::default()
-                .label(
-                    Line::from(label.to_string()).style(Style::default().fg(if selected {
-                        theme.accent
-                    } else {
-                        theme.muted
-                    })),
-                )
+                .label(Line::from(label).style(Style::default().fg(label_color)))
                 .bars(&[
-                    Bar::default()
-                        .value(m.total_income as u64)
-                        .style(Style::default().fg(inc_color)),
-                    Bar::default()
-                        .value(m.total_expenses as u64)
-                        .style(Style::default().fg(exp_color)),
+                    Bar::default().value(m.total_income as u64).style(inc_style),
+                    Bar::default().value(m.total_expenses as u64).style(exp_style),
                 ])
         })
         .collect();
@@ -172,10 +201,12 @@ fn render_monthly_summary(f: &mut Frame, app: &App, area: Rect, theme: &Theme) {
         .split(area)
     };
 
+    let is_forecast = app.current_month_is_forecast();
+    let forecast_tag = if is_forecast { "  ~ forecast" } else { "" };
     let nav_title = if app.monthly_year_offset != 0 {
-        format!(" ◀ {} {} ▶  [y/Y] ", m.month_name, app.displayed_year())
+        format!(" ◀ {} {} ▶  [y/Y]{} ", m.month_name, app.displayed_year(), forecast_tag)
     } else {
-        format!(" ◀ {} ▶ ", m.month_name)
+        format!(" ◀ {} ▶{} ", m.month_name, forecast_tag)
     };
 
     let mut text = vec![
@@ -518,7 +549,11 @@ fn render_monthly_income(f: &mut Frame, app: &mut App, area: Rect, theme: &Theme
     }
 
     let title = if app.income_detail.is_none() {
-        " Income  [i] focus  [Enter] detail ".to_string()
+        if app.current_month_is_forecast() {
+            " Income  ~ forecast ".to_string()
+        } else {
+            " Income  [i] focus  [Enter] detail ".to_string()
+        }
     } else {
         " Income ".to_string()
     };
@@ -661,7 +696,9 @@ fn render_monthly_expenses(f: &mut Frame, app: &mut App, area: Rect, theme: &The
         .block(
             Block::default()
                 .title(Span::styled(
-                    if has_budgets {
+                    if app.current_month_is_forecast() {
+                        " Expenses  ~ forecast ".to_string()
+                    } else if has_budgets {
                         format!(" Expenses ({} budgets) ", app.config.budgets.len())
                     } else {
                         " Expenses ".to_string()
@@ -679,4 +716,91 @@ fn render_monthly_expenses(f: &mut Frame, app: &mut App, area: Rect, theme: &The
 
     app.expense_table_area = area;
     f.render_stateful_widget(table, area, &mut app.expense_state);
+}
+
+fn render_forecast_chart(f: &mut Frame, app: &App, area: Rect, theme: &Theme) {
+    use ratatui::widgets::{Axis, Chart, Dataset, GraphType};
+    use ratatui::symbols;
+
+    if app.monthly.months.is_empty() {
+        return;
+    }
+
+    let forecast = app.cash_flow_forecast();
+    if forecast.actuals.is_empty() {
+        return;
+    }
+
+    let has_projection = forecast.projected.len() > 1;
+
+    let mut datasets = vec![Dataset::default()
+        .name("Actual")
+        .marker(symbols::Marker::Braille)
+        .graph_type(GraphType::Line)
+        .style(Style::default().fg(theme.positive))
+        .data(&forecast.actuals)];
+
+    if has_projection {
+        datasets.push(
+            Dataset::default()
+                .name("Forecast")
+                .marker(symbols::Marker::Dot)
+                .graph_type(GraphType::Line)
+                .style(Style::default().fg(theme.gold))
+                .data(&forecast.projected),
+        );
+    }
+
+    let fmt_k = |v: f64| -> Span {
+        let s = if v.abs() >= 1000.0 {
+            format!("{:.0}k", v / 1000.0)
+        } else {
+            format!("{:.0}", v)
+        };
+        Span::styled(s, Style::default().fg(theme.muted))
+    };
+
+    let title = if has_projection {
+        format!(
+            " Forecast ~{}/mo ",
+            app.config.fmt_amount_compact(forecast.projected_monthly_net, 0)
+        )
+    } else {
+        " Cash Flow ".to_string()
+    };
+
+    let mid_y = (forecast.min_y + forecast.max_y) / 2.0;
+
+    let chart = Chart::new(datasets)
+        .block(
+            Block::default()
+                .title(Span::styled(title, Style::default().fg(theme.gold).bold()))
+                .borders(Borders::ALL)
+                .border_type(BorderType::Rounded)
+                .border_style(Style::default().fg(theme.muted)),
+        )
+        .x_axis(
+            Axis::default()
+                .bounds([0.0, 11.0])
+                .labels(vec![
+                    Span::styled("Jan", Style::default().fg(theme.muted)),
+                    Span::styled("Apr", Style::default().fg(theme.muted)),
+                    Span::styled("Jul", Style::default().fg(theme.muted)),
+                    Span::styled("Oct", Style::default().fg(theme.muted)),
+                    Span::styled("Dec", Style::default().fg(theme.muted)),
+                ])
+                .style(Style::default().fg(theme.muted)),
+        )
+        .y_axis(
+            Axis::default()
+                .bounds([forecast.min_y, forecast.max_y])
+                .labels(vec![
+                    fmt_k(forecast.min_y),
+                    fmt_k(mid_y),
+                    fmt_k(forecast.max_y),
+                ])
+                .style(Style::default().fg(theme.muted)),
+        );
+
+    f.render_widget(chart, area);
 }

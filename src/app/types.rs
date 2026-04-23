@@ -24,6 +24,9 @@ pub struct RefreshResult {
     pub net_worth_history: TabData<NetWorthSeries>,
     pub monthly: TabData<MonthlyData>,
     pub last_year: TabData<MonthlyData>,
+    /// Full-year income statement with periodic-rule projections for future
+    /// months, loaded via `hledger --forecast`.
+    pub monthly_forecast: TabData<MonthlyData>,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
@@ -186,6 +189,19 @@ pub struct RecurringExpense {
     pub monthly_avg: f64,
     #[allow(dead_code)]
     pub occurrences: usize,
+}
+
+/// 12-month cash flow forecast for the current year.
+/// `actuals` holds (month_idx 0-11, net) for months with real data.
+/// `projected` holds (month_idx, projected_net) for future months, with the
+/// last actual point prepended so the forecast line starts where actuals end.
+pub struct CashFlowForecast {
+    pub actuals: Vec<(f64, f64)>,
+    pub projected: Vec<(f64, f64)>,
+    /// Projected monthly net used for all future months.
+    pub projected_monthly_net: f64,
+    pub min_y: f64,
+    pub max_y: f64,
 }
 
 /// Returns true if expense `name` (e.g. "expenses:abos:youtube premium")

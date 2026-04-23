@@ -74,6 +74,50 @@ fn integration_load_monthly_data_two_months() {
 
 #[test]
 #[ignore]
+fn integration_load_monthly_with_forecast_periodic_rules() {
+    if !hledger_available() {
+        return;
+    }
+    let path = fixture("forecast.journal");
+    let data = ldash::data::load_monthly_with_forecast(&path, "EUR").unwrap();
+
+    // The fixture has actual Jan–Mar and periodic rules for salary (3000) and
+    // rent (1000). With --forecast starting from next month after today, future
+    // months (May–Dec when run in April 2026) should have the periodic income.
+    // We just assert that at least one future month is present and carries the
+    // expected periodic salary amount.
+    let future_months: Vec<_> = data
+        .months
+        .iter()
+        .filter(|m| {
+            !["January", "February", "March"].contains(&m.month_name.as_str())
+        })
+        .collect();
+
+    assert!(
+        !future_months.is_empty(),
+        "expected at least one forecasted month, got: {:?}",
+        data.months.iter().map(|m| &m.month_name).collect::<Vec<_>>()
+    );
+
+    for m in future_months {
+        assert!(
+            (m.total_income - 3000.0).abs() < 0.01,
+            "forecast month {} income should be 3000 (periodic), got {}",
+            m.month_name,
+            m.total_income
+        );
+        assert!(
+            (m.total_expenses - 1000.0).abs() < 0.01,
+            "forecast month {} expenses should be 1000 (periodic), got {}",
+            m.month_name,
+            m.total_expenses
+        );
+    }
+}
+
+#[test]
+#[ignore]
 fn integration_load_account_balances_checking() {
     if !hledger_available() {
         return;

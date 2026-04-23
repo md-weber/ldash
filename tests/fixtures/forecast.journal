@@ -1,0 +1,33 @@
+; Fixture journal with periodic transaction rules for --forecast integration tests.
+
+~ monthly
+    income:salary          -3000.00 EUR
+    assets:bank             3000.00 EUR
+
+~ monthly
+    expenses:rent           1000.00 EUR
+    assets:bank            -1000.00 EUR
+
+2026-01-15 Salary
+    income:salary          -3100.00 EUR
+    assets:bank             3100.00 EUR
+
+2026-01-20 Rent
+    expenses:rent           1000.00 EUR
+    assets:bank            -1000.00 EUR
+
+2026-02-15 Salary
+    income:salary          -3050.00 EUR
+    assets:bank             3050.00 EUR
+
+2026-02-18 Rent
+    expenses:rent           1000.00 EUR
+    assets:bank            -1000.00 EUR
+
+2026-03-15 Salary
+    income:salary          -3000.00 EUR
+    assets:bank             3000.00 EUR
+
+2026-03-21 Rent
+    expenses:rent           1000.00 EUR
+    assets:bank            -1000.00 EUR

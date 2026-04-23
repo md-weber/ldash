@@ -19,9 +19,9 @@ use crate::config::Config;
 use crate::data::{
     self, compute_portfolio, latest_prices, load_account_balances_eur, load_all_coin_chart_series,
     load_crypto_balances, load_last_year_monthly, load_liability_balances_eur, load_monthly_data,
-    load_net_worth_history, load_price_history, load_recent_transactions, AccountBalance,
-    CoinChartSeries, CryptoHolding, MonthlyData, NetWorthSeries, PriceEntry, SingleMonth,
-    Transaction,
+    load_monthly_with_forecast, load_net_worth_history, load_price_history,
+    load_recent_transactions, AccountBalance, CoinChartSeries, CryptoHolding, MonthlyData,
+    NetWorthSeries, PriceEntry, SingleMonth, Transaction,
 };
 use crate::watcher::JournalWatcher;
 
@@ -39,7 +39,7 @@ fn load_all_data(
     let want_accounts = tabs[1];
     let want_monthly = tabs[2];
 
-    let (crypto_res, accounts_res, liab_res, nw_res, monthly_res, ly_res) =
+    let (crypto_res, accounts_res, liab_res, nw_res, monthly_res, ly_res, forecast_res) =
         std::thread::scope(|s| {
             let t_crypto = want_portfolio.then(|| s.spawn(|| load_crypto_balances(journal_path)));
             let t_accounts =
@@ -53,6 +53,8 @@ fn load_all_data(
                 want_monthly.then(|| s.spawn(|| load_monthly_data(journal_path, currency_symbol)));
             let t_ly = want_monthly
                 .then(|| s.spawn(|| load_last_year_monthly(journal_path, currency_symbol)));
+            let t_forecast = want_monthly
+                .then(|| s.spawn(|| load_monthly_with_forecast(journal_path, currency_symbol)));
             (
                 t_crypto.map(|t| t.join().unwrap()),
                 t_accounts.map(|t| t.join().unwrap()),
@@ -60,6 +62,7 @@ fn load_all_data(
                 t_nw.map(|t| t.join().unwrap()),
                 t_monthly.map(|t| t.join().unwrap()),
                 t_ly.map(|t| t.join().unwrap()),
+                t_forecast.map(|t| t.join().unwrap()),
             )
         });
 
@@ -118,6 +121,12 @@ fn load_all_data(
         Some(Err(e)) => TabData::Err(e.to_string()),
     };
 
+    let monthly_forecast: TabData<MonthlyData> = match forecast_res {
+        None => TabData::NotRequested,
+        Some(Ok(f)) => TabData::Ok(f),
+        Some(Err(e)) => TabData::Err(e.to_string()),
+    };
+
     RefreshResult {
         tabs,
         price_history,
@@ -129,6 +138,7 @@ fn load_all_data(
         net_worth_history,
         monthly,
         last_year,
+        monthly_forecast,
     }
 }
 
@@ -148,6 +158,15 @@ pub struct App {
     pub nw_range: NetWorthRange,
     pub monthly: MonthlyData,
     pub last_year: MonthlyData,
+    /// Full-year data from `hledger --forecast`; future months hold periodic
+    /// projections, past/current months hold actual data (same as `monthly`).
+    pub monthly_forecast: MonthlyData,
+    /// Merged calendar-order list: actual months first, then forecast months
+    /// for the remaining months of the current year. Each entry carries a flag
+    /// indicating whether the month is projected (`true`) or actual (`false`).
+    pub combined_months: Vec<(SingleMonth, bool)>,
+    /// Index into `combined_months` for the currently viewed month.
+    pub combined_selected: usize,
     pub monthly_year_offset: i32,
     pub selected_holding: usize,
     pub monthly_focus: MonthlyFocus,
@@ -231,6 +250,9 @@ impl App {
             nw_range: NetWorthRange::All,
             monthly: MonthlyData::default(),
             last_year: MonthlyData::default(),
+            monthly_forecast: MonthlyData::default(),
+            combined_months: Vec::new(),
+            combined_selected: 0,
             monthly_year_offset: 0,
             selected_holding: 0,
             monthly_focus: MonthlyFocus::default(),
@@ -395,6 +417,13 @@ impl App {
             TabData::Err(msg) => errors.push(msg),
             TabData::NotRequested => {}
         }
+        match r.monthly_forecast {
+            TabData::Ok(f) => self.monthly_forecast = f,
+            // Forecast errors are non-fatal: the chart just won't show a
+            // projected line (user may not have periodic transaction rules).
+            TabData::Err(_) | TabData::NotRequested => {}
+        }
+        self.rebuild_combined_months();
 
         if !self.holdings.is_empty() && self.selected_holding >= self.holdings.len() {
             self.selected_holding = self.holdings.len() - 1;
@@ -677,7 +706,7 @@ impl App {
     }
 
     pub fn current_month(&self) -> Option<&SingleMonth> {
-        self.monthly.months.get(self.monthly.selected)
+        self.combined_months.get(self.combined_selected).map(|(m, _)| m)
     }
 
     pub fn last_year_match(&self) -> Option<&SingleMonth> {
@@ -802,6 +831,7 @@ impl App {
             Ok(m) => self.monthly = m,
             Err(e) => self.status_msg = format!("Error loading {year} data: {e}"),
         }
+        self.rebuild_combined_months();
     }
 
     pub fn displayed_year(&self) -> i32 {
@@ -1124,13 +1154,14 @@ impl App {
     }
 
     pub fn month_left(&mut self) {
-        self.monthly.selected = self.monthly.selected.saturating_sub(1);
+        self.combined_selected = self.combined_selected.saturating_sub(1);
     }
 
     pub fn month_right(&mut self) {
-        if !self.monthly.months.is_empty() && self.monthly.selected + 1 < self.monthly.months.len()
+        if !self.combined_months.is_empty()
+            && self.combined_selected + 1 < self.combined_months.len()
         {
-            self.monthly.selected += 1;
+            self.combined_selected += 1;
         }
     }
 
@@ -1232,7 +1263,7 @@ impl App {
     }
 
     pub fn open_expense_detail(&mut self) {
-        if self.tab != Tab::Monthly || self.expense_detail.is_some() {
+        if self.tab != Tab::Monthly || self.expense_detail.is_some() || self.current_month_is_forecast() {
             return;
         }
         let sel = self.expense_state.selected().unwrap_or(0);
@@ -1264,7 +1295,7 @@ impl App {
     }
 
     pub fn open_income_detail(&mut self) {
-        if self.tab != Tab::Monthly || self.income_detail.is_some() {
+        if self.tab != Tab::Monthly || self.income_detail.is_some() || self.current_month_is_forecast() {
             return;
         }
         let sel = self.income_state.selected().unwrap_or(0);
@@ -1355,6 +1386,182 @@ impl App {
                 .unwrap_or(std::cmp::Ordering::Equal)
         });
         recurring
+    }
+
+    /// Build a 12-month cash flow forecast for the current year.
+    ///
+    /// **Source priority:**
+    /// 1. `monthly_forecast` (loaded via `hledger --forecast`) — uses periodic
+    ///    transaction rules defined in the journal, so projections reflect the
+    ///    user's actual income/expense schedule.
+    /// 2. Computed average — when hledger returned no periodic-rule data for
+    ///    future months (journal has no `~ monthly …` rules), we fall back to
+    ///    the average net of the months loaded so far.
+    ///
+    /// Only meaningful when `monthly_year_offset == 0` (current year).
+    pub fn cash_flow_forecast(&self) -> CashFlowForecast {
+        const MONTH_NAMES: [&str; 12] = [
+            "January", "February", "March", "April", "May", "June",
+            "July", "August", "September", "October", "November", "December",
+        ];
+
+        // Actual data: months loaded from the journal without --forecast.
+        let actual_map: std::collections::HashMap<&str, f64> = self
+            .monthly
+            .months
+            .iter()
+            .map(|m| (m.month_name.as_str(), m.total_income - m.total_expenses))
+            .collect();
+
+        // hledger forecast data: months that are NOT already in actuals.
+        // These come from periodic transaction rules via `--forecast`.
+        let hledger_forecast_map: std::collections::HashMap<&str, f64> = self
+            .monthly_forecast
+            .months
+            .iter()
+            .filter(|m| !actual_map.contains_key(m.month_name.as_str()))
+            .map(|m| (m.month_name.as_str(), m.total_income - m.total_expenses))
+            .collect();
+
+        // Computed fallback: average net of actual months (for journals with
+        // no periodic transaction rules).
+        let months_with_income: Vec<_> = self
+            .monthly
+            .months
+            .iter()
+            .filter(|m| m.total_income > 0.0)
+            .collect();
+        let computed_avg_net = if months_with_income.is_empty() {
+            0.0
+        } else {
+            let sum: f64 = months_with_income
+                .iter()
+                .map(|m| m.total_income - m.total_expenses)
+                .sum();
+            sum / months_with_income.len() as f64
+        };
+
+        let last_actual_idx: Option<usize> = MONTH_NAMES
+            .iter()
+            .enumerate()
+            .filter(|(_, name)| actual_map.contains_key(**name))
+            .map(|(i, _)| i)
+            .max();
+
+        let use_fallback = hledger_forecast_map.is_empty();
+
+        let mut actuals: Vec<(f64, f64)> = Vec::new();
+        let mut projected: Vec<(f64, f64)> = Vec::new();
+
+        for (i, name) in MONTH_NAMES.iter().enumerate() {
+            let x = i as f64;
+            if let Some(&net) = actual_map.get(*name) {
+                actuals.push((x, net));
+            } else if let Some(&net) = hledger_forecast_map.get(*name) {
+                projected.push((x, net));
+            } else if use_fallback && last_actual_idx.map_or(false, |last| i > last) {
+                projected.push((x, computed_avg_net));
+            }
+        }
+
+        // Prepend the last actual point so the forecast line is visually
+        // continuous with the actuals line.
+        if let Some(&last_a) = actuals.last() {
+            if !projected.is_empty() {
+                projected.insert(0, last_a);
+            }
+        }
+
+        // Projected monthly net shown in the chart title: average of the
+        // strictly-future projected points (skip the bridge point).
+        let forecast_points = if projected.len() > 1 { &projected[1..] } else { &projected[..] };
+        let projected_monthly_net = if forecast_points.is_empty() {
+            computed_avg_net
+        } else {
+            forecast_points.iter().map(|(_, y)| *y).sum::<f64>() / forecast_points.len() as f64
+        };
+
+        let all_y: Vec<f64> = actuals
+            .iter()
+            .chain(projected.iter())
+            .map(|(_, y)| *y)
+            .collect();
+
+        let raw_min = all_y
+            .iter()
+            .cloned()
+            .fold(f64::INFINITY, f64::min)
+            .min(0.0);
+        let raw_max = all_y
+            .iter()
+            .cloned()
+            .fold(f64::NEG_INFINITY, f64::max)
+            .max(1.0);
+        let padding = (raw_max - raw_min) * 0.1;
+
+        CashFlowForecast {
+            actuals,
+            projected,
+            projected_monthly_net,
+            min_y: raw_min - padding,
+            max_y: raw_max + padding,
+        }
+    }
+
+    /// Rebuild `combined_months` from the current `monthly` (actuals) and
+    /// `monthly_forecast` (periodic projections for future months).
+    ///
+    /// Months are placed in calendar order (Jan → Dec). Forecast months are
+    /// only added when viewing the current year (`monthly_year_offset == 0`).
+    /// The previous selection is preserved by month name when possible.
+    fn rebuild_combined_months(&mut self) {
+        const MONTH_NAMES: [&str; 12] = [
+            "January", "February", "March", "April", "May", "June",
+            "July", "August", "September", "October", "November", "December",
+        ];
+
+        let actual_names: std::collections::HashSet<&str> =
+            self.monthly.months.iter().map(|m| m.month_name.as_str()).collect();
+
+        let mut combined: Vec<(SingleMonth, bool)> = Vec::new();
+        for name in &MONTH_NAMES {
+            if let Some(m) = self.monthly.months.iter().find(|m| m.month_name.as_str() == *name) {
+                combined.push((m.clone(), false));
+            } else if self.monthly_year_offset == 0 {
+                if let Some(m) = self.monthly_forecast.months.iter().find(|m| {
+                    m.month_name.as_str() == *name
+                        && !actual_names.contains(m.month_name.as_str())
+                }) {
+                    combined.push((m.clone(), true));
+                }
+            }
+        }
+
+        // Preserve selection by month name; fall back to monthly.selected then last.
+        let target_name: Option<&str> = self
+            .combined_months
+            .get(self.combined_selected)
+            .map(|(m, _)| m.month_name.as_str())
+            .or_else(|| {
+                self.monthly
+                    .months
+                    .get(self.monthly.selected)
+                    .map(|m| m.month_name.as_str())
+            });
+
+        self.combined_selected = target_name
+            .and_then(|name| combined.iter().position(|(m, _)| m.month_name.as_str() == name))
+            .unwrap_or_else(|| combined.len().saturating_sub(1));
+
+        self.combined_months = combined;
+    }
+
+    /// Returns `true` when the currently selected month is a forecast month.
+    pub fn current_month_is_forecast(&self) -> bool {
+        self.combined_months
+            .get(self.combined_selected)
+            .map(|(_, f)| *f)
+            .unwrap_or(false)
     }
 
     pub fn toggle_monthly_focus(&mut self) {
@@ -1599,9 +1806,8 @@ impl App {
         // each group: 2 bars × bar_width(3) + bar_gap(0) + group_gap(2) = 8 chars
         let group_width = 8u16;
         let slot = (col - inner_x) / group_width;
-        let n = self.monthly.months.len();
-        if (slot as usize) < n {
-            self.monthly.selected = slot as usize;
+        if (slot as usize) < self.combined_months.len() {
+            self.combined_selected = slot as usize;
         }
     }
 
@@ -1659,6 +1865,9 @@ impl App {
             nw_range: NetWorthRange::All,
             monthly: crate::data::MonthlyData::default(),
             last_year: crate::data::MonthlyData::default(),
+            monthly_forecast: crate::data::MonthlyData::default(),
+            combined_months: Vec::new(),
+            combined_selected: 0,
             monthly_year_offset: 0,
             selected_holding: 0,
             monthly_focus: MonthlyFocus::default(),
@@ -1752,6 +1961,7 @@ impl App {
             ],
             selected: 0,
         };
+        app.rebuild_combined_months();
         app
     }
 }
@@ -1772,6 +1982,7 @@ mod tests {
             net_worth_history: TabData::NotRequested,
             monthly: TabData::NotRequested,
             last_year: TabData::NotRequested,
+            monthly_forecast: TabData::NotRequested,
         }
     }
 
@@ -2039,6 +2250,125 @@ mod tests {
         let r = app.recurring_expenses();
         assert_eq!(r.len(), 1);
         assert_eq!(r[0].occurrences, 3);
+    }
+
+    #[test]
+    fn cash_flow_forecast_actuals_only_when_full_year() {
+        let mut app = App::fixture_empty();
+        // 12 months all loaded → no projected points
+        let months: Vec<crate::data::SingleMonth> = (1..=12)
+            .map(|i| {
+                let name = crate::data::month_name(i).to_string();
+                crate::data::SingleMonth {
+                    month_name: name,
+                    income: vec![("income:salary".to_string(), 2000.0)],
+                    expenses: vec![("expenses:rent".to_string(), 1000.0)],
+                    total_income: 2000.0,
+                    total_expenses: 1000.0,
+                }
+            })
+            .collect();
+        app.monthly = crate::data::MonthlyData { months, selected: 11 };
+        let f = app.cash_flow_forecast();
+        assert_eq!(f.actuals.len(), 12);
+        assert!(f.projected.is_empty());
+    }
+
+    #[test]
+    fn cash_flow_forecast_projects_remaining_months() {
+        let mut app = App::fixture_empty();
+        // 3 months loaded (Jan-Mar) → 9 projected + bridge point
+        let months: Vec<crate::data::SingleMonth> = ["January", "February", "March"]
+            .iter()
+            .map(|name| crate::data::SingleMonth {
+                month_name: name.to_string(),
+                income: vec![("income:salary".to_string(), 3000.0)],
+                expenses: vec![("expenses:rent".to_string(), 1500.0)],
+                total_income: 3000.0,
+                total_expenses: 1500.0,
+            })
+            .collect();
+        app.monthly = crate::data::MonthlyData { months, selected: 2 };
+        let f = app.cash_flow_forecast();
+        assert_eq!(f.actuals.len(), 3);
+        // projected = bridge(Mar) + Apr..Dec = 1 + 9 = 10
+        assert_eq!(f.projected.len(), 10);
+        assert!((f.projected_monthly_net - 1500.0).abs() < 0.01);
+        // First projected point is the last actual (bridge)
+        assert!((f.projected[0].0 - 2.0).abs() < 1e-9, "bridge at month idx 2");
+    }
+
+    #[test]
+    fn cash_flow_forecast_empty_months() {
+        let app = App::fixture_empty();
+        let f = app.cash_flow_forecast();
+        assert!(f.actuals.is_empty());
+        assert!(f.projected.is_empty());
+    }
+
+    #[test]
+    fn cash_flow_forecast_uses_hledger_forecast_over_computed_avg() {
+        let mut app = App::fixture_empty();
+        // 2 actual months (Jan income 3000, expenses 1500 → net 1500)
+        app.monthly = crate::data::MonthlyData {
+            months: vec![
+                make_month_with_income("January", 3000.0, vec![("expenses:rent", 1500.0)]),
+                make_month_with_income("February", 3000.0, vec![("expenses:rent", 1500.0)]),
+            ],
+            selected: 1,
+        };
+        // hledger forecast provides Mar–May with income 2500, rent 1000 (net 1500 differs)
+        app.monthly_forecast = crate::data::MonthlyData {
+            months: vec![
+                // Jan & Feb included (actual months – should be ignored in hledger_forecast_map)
+                make_month_with_income("January", 3000.0, vec![("expenses:rent", 1500.0)]),
+                make_month_with_income("February", 3000.0, vec![("expenses:rent", 1500.0)]),
+                // Forecast months
+                make_month_with_income("March", 2500.0, vec![("expenses:rent", 1000.0)]),
+                make_month_with_income("April", 2500.0, vec![("expenses:rent", 1000.0)]),
+                make_month_with_income("May", 2500.0, vec![("expenses:rent", 1000.0)]),
+            ],
+            selected: 4,
+        };
+        let f = app.cash_flow_forecast();
+        assert_eq!(f.actuals.len(), 2, "Jan+Feb are actuals");
+        // projected: bridge(Feb) + Mar + Apr + May = 4
+        assert_eq!(f.projected.len(), 4);
+        // Projected values come from hledger forecast (2500-1000=1500), not computed avg
+        for &(_, y) in &f.projected[1..] {
+            assert!(
+                (y - 1500.0).abs() < 0.01,
+                "projected net should be 1500 from hledger, got {y}"
+            );
+        }
+    }
+
+    fn make_month_with_income(
+        name: &str,
+        income: f64,
+        expenses: Vec<(&str, f64)>,
+    ) -> crate::data::SingleMonth {
+        let total_expenses = expenses.iter().map(|(_, a)| a).sum();
+        crate::data::SingleMonth {
+            month_name: name.to_string(),
+            income: vec![("income:salary".to_string(), income)],
+            expenses: expenses
+                .into_iter()
+                .map(|(n, a)| (n.to_string(), a))
+                .collect(),
+            total_income: income,
+            total_expenses,
+        }
+    }
+
+    #[test]
+    fn cash_flow_forecast_y_bounds_contain_all_points() {
+        let app = App::fixture_with_monthly();
+        let f = app.cash_flow_forecast();
+        for &(_, y) in f.actuals.iter().chain(f.projected.iter()) {
+            assert!(y >= f.min_y - 1e-9, "y={y} below min_y={}", f.min_y);
+            assert!(y <= f.max_y + 1e-9, "y={y} above max_y={}", f.max_y);
+        }
     }
 
     #[test]
