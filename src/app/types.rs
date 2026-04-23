@@ -2,7 +2,8 @@ use chrono::{Datelike, Local, NaiveDate};
 use std::collections::HashMap;
 
 use crate::data::{
-    AccountBalance, CoinChartSeries, CryptoHolding, MonthlyData, NetWorthSeries, PriceEntry,
+    AccountBalance, CoinChartSeries, CryptoHolding, MonthlyData, NetWorthBreakdownSeries,
+    NetWorthSeries, PriceEntry,
 };
 
 /// Per-tab load result. Distinguishes "not requested", "ok data", and "errored
@@ -22,6 +23,7 @@ pub struct RefreshResult {
     pub account_balances: TabData<Vec<AccountBalance>>,
     pub liabilities: TabData<Vec<AccountBalance>>,
     pub net_worth_history: TabData<NetWorthSeries>,
+    pub net_worth_breakdown: TabData<NetWorthBreakdownSeries>,
     pub monthly: TabData<MonthlyData>,
     pub last_year: TabData<MonthlyData>,
     /// Full-year income statement with periodic-rule projections for future
