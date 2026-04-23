@@ -68,6 +68,116 @@ pub(super) fn render_accounts(f: &mut Frame, app: &mut App, area: Rect, theme: &
 
 fn render_net_worth_chart(f: &mut Frame, app: &App, area: Rect, theme: &Theme) {
     let range_label = app.nw_range.label();
+    let bd = &app.net_worth_breakdown;
+
+    // Use stacked breakdown when we have meaningful data (≥2 points with
+    // at least one non-zero layer). Fall back to the single net-worth line.
+    let has_breakdown = bd.layer_total.len() >= 2
+        && bd
+            .layer_total
+            .iter()
+            .any(|(_, v)| v.abs() > 1e-6);
+
+    if has_breakdown {
+        render_breakdown_chart(f, app, area, theme, range_label);
+    } else {
+        render_single_line_chart(f, app, area, theme, range_label);
+    }
+}
+
+fn render_breakdown_chart(
+    f: &mut Frame,
+    app: &App,
+    area: Rect,
+    theme: &Theme,
+    range_label: &str,
+) {
+    let bd = &app.net_worth_breakdown;
+
+    let block = Block::default()
+        .title(Span::styled(
+            format!(" Asset Breakdown [{range_label}]  ◀ ▶ "),
+            Style::default().fg(theme.gold).bold(),
+        ))
+        .borders(Borders::ALL)
+        .border_type(BorderType::Rounded)
+        .border_style(Style::default().fg(theme.muted));
+
+    let x_min = bd.layer_total.first().map(|p| p.0).unwrap_or(0.0);
+    let x_max = bd.layer_total.last().map(|p| p.0).unwrap_or(1.0);
+
+    let y_max_raw = bd
+        .layer_total
+        .iter()
+        .map(|p| p.1)
+        .fold(0.0_f64, f64::max);
+    let (y_min, y_max, y_labels) =
+        nice_y_axis(0.0, y_max_raw.max(1.0), 4, &app.config, theme.muted);
+
+    let label_count = if area.width < 60 { 3 } else { 5 };
+    let n = bd.labels.len();
+    let x_labels: Vec<Span> = (0..label_count)
+        .map(|i| i * n.saturating_sub(1) / (label_count - 1).max(1))
+        .filter_map(|i| bd.labels.get(i))
+        .map(|(d, _)| {
+            Span::styled(
+                d.format("%b %y").to_string(),
+                Style::default().fg(theme.muted),
+            )
+        })
+        .collect();
+
+    // Stacked cumulative layers (bottom → top):
+    //   layer_investments  = investments only          (accent/blue)
+    //   layer_invest_crypto = investments + crypto     (gold)
+    //   layer_total         = all assets incl. bank   (positive/green)
+    let ds_invest = Dataset::default()
+        .name("Invest")
+        .marker(symbols::Marker::Braille)
+        .graph_type(GraphType::Line)
+        .style(Style::default().fg(theme.accent))
+        .data(&bd.layer_investments);
+
+    let ds_crypto = Dataset::default()
+        .name("+Crypto")
+        .marker(symbols::Marker::Braille)
+        .graph_type(GraphType::Line)
+        .style(Style::default().fg(theme.gold))
+        .data(&bd.layer_invest_crypto);
+
+    let ds_bank = Dataset::default()
+        .name("+Bank")
+        .marker(symbols::Marker::Braille)
+        .graph_type(GraphType::Line)
+        .style(Style::default().fg(theme.positive))
+        .data(&bd.layer_total);
+
+    let chart = Chart::new(vec![ds_invest, ds_crypto, ds_bank])
+        .style(Style::default().bg(theme.background))
+        .block(block)
+        .x_axis(
+            Axis::default()
+                .style(Style::default().fg(theme.muted))
+                .bounds([x_min, x_max])
+                .labels(x_labels),
+        )
+        .y_axis(
+            Axis::default()
+                .style(Style::default().fg(theme.muted))
+                .bounds([y_min, y_max])
+                .labels(y_labels),
+        );
+
+    f.render_widget(chart, area);
+}
+
+fn render_single_line_chart(
+    f: &mut Frame,
+    app: &App,
+    area: Rect,
+    theme: &Theme,
+    range_label: &str,
+) {
     let block = Block::default()
         .title(Span::styled(
             format!(" Net Worth History [{range_label}]  ◀ ▶ "),
