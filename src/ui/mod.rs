@@ -3,10 +3,15 @@ use ratatui::{prelude::*, widgets::*};
 use crate::app::{App, Tab};
 use crate::config::Config;
 
+#[macro_use]
+mod style_macros;
+
 mod accounts;
 mod monthly;
 mod overlays;
 mod portfolio;
+
+pub(crate) use monthly::MONTHLY_GROUP_WIDTH;
 
 use overlays::{
     render_help_popup, render_loading_overlay, render_price_alerts, render_search_overlay,
@@ -200,7 +205,7 @@ pub(super) fn nice_y_axis(
             } else {
                 cfg.fmt_amount_compact(v, 1)
             };
-            Span::styled(s, Style::default().fg(muted))
+                    Span::styled(s, crate::fg!(muted))
         })
         .collect();
     (lo, hi, labels)
@@ -338,12 +343,12 @@ fn render_tabs(f: &mut Frame, app: &mut App, area: Rect, theme: &Theme) {
         .collect();
     let selected = visible.iter().position(|&t| t == app.tab).unwrap_or(0);
 
-    app.tab_bar_area = area;
-    app.tab_rects.clear();
+    app.geometry.tab_bar_area = area;
+    app.geometry.tab_rects.clear();
     let mut x = area.x + 1;
     for label in &labels {
         let w = label.chars().count() as u16;
-        app.tab_rects.push(Rect {
+        app.geometry.tab_rects.push(Rect {
             x,
             y: area.y + 1,
             width: w,

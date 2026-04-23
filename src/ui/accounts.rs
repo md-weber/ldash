@@ -390,7 +390,7 @@ fn render_accounts_table(f: &mut Frame, app: &mut App, area: Rect, theme: &Theme
                 .border_style(Style::default().fg(theme.muted)),
         );
 
-    app.table_area = table_area;
+    app.geometry.table_area = table_area;
     f.render_stateful_widget(table, table_area, &mut app.account_state);
 }
 

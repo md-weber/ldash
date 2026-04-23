@@ -1,4 +1,5 @@
 use chrono::Local;
+use serde_json::{json, Value};
 use std::path::PathBuf;
 
 use crate::data;
@@ -6,8 +7,23 @@ use crate::data;
 use super::refresh::load_all_data;
 use super::{App, Tab};
 
-fn json_str(s: &str) -> String {
-    format!("\"{}\"", s.replace('\\', "\\\\").replace('"', "\\\""))
+/// Escape `s` for safe interpolation into HTML text / attribute context.
+/// Covers the OWASP "HTML body" + attribute set: `& < > " '`. Account names,
+/// commodities and month strings come from the user's journal and may contain
+/// any of these (e.g. an account literally named `<script>`).
+fn html_escape(s: &str) -> String {
+    let mut out = String::with_capacity(s.len());
+    for c in s.chars() {
+        match c {
+            '&' => out.push_str("&amp;"),
+            '<' => out.push_str("&lt;"),
+            '>' => out.push_str("&gt;"),
+            '"' => out.push_str("&quot;"),
+            '\'' => out.push_str("&#39;"),
+            _ => out.push(c),
+        }
+    }
+    out
 }
 
 impl App {
@@ -62,17 +78,12 @@ impl App {
     /// Synchronously load any tabs whose data hasn't been fetched yet, so that
     /// an export always contains the full three-tab snapshot.
     fn ensure_all_tabs_for_export(&mut self) {
-        let mut need = [false; 3];
-        if self.crypto_enabled() && !self.tabs_loaded[Tab::Portfolio.index()] {
-            need[Tab::Portfolio.index()] = true;
-        }
-        if !self.tabs_loaded[Tab::Accounts.index()] {
-            need[Tab::Accounts.index()] = true;
-        }
-        if !self.tabs_loaded[Tab::Monthly.index()] {
-            need[Tab::Monthly.index()] = true;
-        }
-        if need.iter().any(|&v| v) {
+        let need = super::TabFlags {
+            portfolio: self.crypto_enabled() && !self.tabs_loaded.portfolio,
+            accounts: !self.tabs_loaded.accounts,
+            monthly: !self.tabs_loaded.monthly,
+        };
+        if need.any() {
             let jp = self.journal_path.clone();
             let jd = self.journal_dir.clone();
             let nw_period = self.nw_range.period_arg().to_string();
@@ -121,7 +132,8 @@ impl App {
     }
 
     fn render_html(&self) -> String {
-        let sym = &self.config.currency_symbol;
+        let sym_raw = &self.config.currency_symbol;
+        let sym = html_escape(sym_raw);
         let ts = Local::now().format("%Y-%m-%d %H:%M:%S");
 
         let mut portfolio_rows = String::new();
@@ -134,7 +146,11 @@ impl App {
             };
             portfolio_rows.push_str(&format!(
                 "<tr><td>{}</td><td>{:.6}</td><td>{:.2}</td><td>{:.2}</td><td>{:.1}%</td></tr>\n",
-                h.commodity, h.amount, h.price_eur, h.value_eur, alloc
+                html_escape(&h.commodity),
+                h.amount,
+                h.price_eur,
+                h.value_eur,
+                alloc
             ));
         }
 
@@ -142,7 +158,8 @@ impl App {
         for b in &self.account_balances {
             account_rows.push_str(&format!(
                 "<tr><td>{}</td><td>{:.2}</td></tr>\n",
-                b.account, b.amount
+                html_escape(&b.account),
+                b.amount
             ));
         }
 
@@ -152,16 +169,18 @@ impl App {
         for (name, amount) in &m.income {
             monthly_rows.push_str(&format!(
                 "<tr><td>{}</td><td class=\"pos\">{:.2}</td></tr>\n",
-                name, amount
+                html_escape(name),
+                amount
             ));
         }
         for (name, amount) in &m.expenses {
             monthly_rows.push_str(&format!(
                 "<tr><td>{}</td><td class=\"neg\">-{:.2}</td></tr>\n",
-                name, amount
+                html_escape(name),
+                amount
             ));
         }
-        let month_title = &m.month_name;
+        let month_title = html_escape(&m.month_name);
 
         format!(
             r#"<!DOCTYPE html>
@@ -209,60 +228,70 @@ impl App {
 
     fn render_json(&self) -> String {
         let sym = &self.config.currency_symbol;
-        let ts = Local::now().format("%Y-%m-%dT%H:%M:%S");
+        let ts = Local::now().format("%Y-%m-%dT%H:%M:%S").to_string();
 
         let total = self.total_portfolio_value();
-        let portfolio: Vec<String> = self.holdings.iter().map(|h| {
-            let alloc = if total > 0.0 { h.value_eur / total * 100.0 } else { 0.0 };
-            format!(
-                r#"    {{"coin":{},"amount":{:.6},"price_{}":{},"value_{}":{},"allocation_pct":{:.1}}}"#,
-                json_str(&h.commodity), h.amount,
-                sym, h.price_eur,
-                sym, h.value_eur,
-                alloc
-            )
-        }).collect();
+        let price_key = format!("price_{sym}");
+        let value_key = format!("value_{sym}");
 
-        let accounts: Vec<String> = self
+        let portfolio: Vec<Value> = self
+            .holdings
+            .iter()
+            .map(|h| {
+                let alloc = if total > 0.0 {
+                    h.value_eur / total * 100.0
+                } else {
+                    0.0
+                };
+                json!({
+                    "coin": h.commodity,
+                    "amount": h.amount,
+                    price_key.clone(): h.price_eur,
+                    value_key.clone(): h.value_eur,
+                    "allocation_pct": alloc,
+                })
+            })
+            .collect();
+
+        let accounts: Vec<Value> = self
             .account_balances
             .iter()
-            .map(|b| {
-                format!(
-                    r#"    {{"account":{},"balance":{:.2}}}"#,
-                    json_str(&b.account),
-                    b.amount
-                )
-            })
+            .map(|b| json!({ "account": b.account, "balance": b.amount }))
             .collect();
 
         let empty = data::SingleMonth::default();
         let m = self.current_month().unwrap_or(&empty);
-        let mut monthly: Vec<String> = Vec::new();
+        let mut monthly: Vec<Value> = Vec::new();
         for (name, amount) in &m.income {
-            monthly.push(format!(
-                r#"    {{"category":{},"type":"income","amount":{:.2}}}"#,
-                json_str(name),
-                amount
-            ));
+            monthly.push(json!({
+                "category": name,
+                "type": "income",
+                "amount": amount,
+            }));
         }
         for (name, amount) in &m.expenses {
-            monthly.push(format!(
-                r#"    {{"category":{},"type":"expense","amount":{:.2}}}"#,
-                json_str(name),
-                -amount
-            ));
+            monthly.push(json!({
+                "category": name,
+                "type": "expense",
+                "amount": -amount,
+            }));
         }
 
-        format!(
-            "{{\n  \"exported\": \"{ts}\",\n  \"currency\": \"{sym}\",\
-             \n  \"portfolio\": [\n{}\n  ],\
-             \n  \"accounts\": [\n{}\n  ],\
-             \n  \"monthly\": {{\n    \"month\": {},\n    \"entries\": [\n{}\n    ]\n  }}\n}}",
-            portfolio.join(",\n"),
-            accounts.join(",\n"),
-            json_str(&m.month_name),
-            monthly.join(",\n"),
-        )
+        let root = json!({
+            "exported": ts,
+            "currency": sym,
+            "portfolio": portfolio,
+            "accounts": accounts,
+            "monthly": {
+                "month": m.month_name,
+                "entries": monthly,
+            },
+        });
+
+        // Pretty-print so the file stays human-readable. Falls back to the raw
+        // Debug repr only if serialization itself fails (effectively impossible
+        // for the value tree above).
+        serde_json::to_string_pretty(&root).unwrap_or_else(|_| format!("{root:?}"))
     }
 
     pub fn open_export_prompt(&mut self) {

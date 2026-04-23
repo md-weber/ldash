@@ -15,7 +15,6 @@ mod tests;
 pub use types::*;
 
 use anyhow::Result;
-use ratatui::layout::Rect;
 use ratatui::widgets::TableState;
 use std::collections::HashMap;
 use std::path::PathBuf;
@@ -69,7 +68,7 @@ pub struct App {
     pub detail_income_name: Option<String>,
     pub detail_state: TableState,
     pub portfolio_range: PortfolioRange,
-    pub chart_stacked: bool,
+    pub chart_mode: ChartMode,
     pub expense_colors: bool,
     pub status_msg: String,
     pub loading: bool,
@@ -87,20 +86,117 @@ pub struct App {
     pub alert_dismissed: bool,
     pub alert_shown_at: Option<Instant>,
     pub last_refresh: Instant,
-    pub tabs_loaded: [bool; 3],
-    // geometry written by the render pass, used for mouse hit-testing
-    pub tab_bar_area: Rect,
-    pub tab_rects: Vec<Rect>,
-    pub table_area: Rect,
-    pub income_table_area: Rect,
-    pub expense_table_area: Rect,
-    pub monthly_chart_area: Rect,
-    pub range_selector_rects: Vec<Rect>,
+    pub tabs_loaded: TabFlags,
+    /// Geometry written by the render pass, used for mouse hit-testing.
+    pub geometry: Geometry,
     pub portfolio_scroll_offset: usize,
-    refresh_rx: Option<mpsc::Receiver<RefreshResult>>,
+    pub(super) refresh_rx: Option<mpsc::Receiver<RefreshResult>>,
+    /// Refresh request received while another refresh is in flight. Re-fired
+    /// by `apply_refresh` once the current one completes, so pressing `r`
+    /// during a refresh isn't silently dropped.
+    pub(super) pending_refresh: Option<TabFlags>,
+    pub(super) account_detail_rx: Option<mpsc::Receiver<DetailLoad>>,
+    pub(super) expense_detail_rx: Option<mpsc::Receiver<DetailLoad>>,
+    pub(super) income_detail_rx: Option<mpsc::Receiver<DetailLoad>>,
+    pub(super) monthly_year_rx: Option<mpsc::Receiver<MonthlyYearLoad>>,
+    pub(super) net_worth_rx: Option<mpsc::Receiver<NetWorthLoad>>,
     watcher: Option<JournalWatcher>,
     last_journal_mtime: Option<SystemTime>,
     last_config_mtime: Option<SystemTime>,
+}
+
+/// Background-thread payload for an account/expense/income detail load.
+pub struct DetailLoad {
+    pub name: String,
+    pub result: Result<Vec<Transaction>, String>,
+}
+
+/// Background-thread payload for a yearly monthly-data reload.
+pub struct MonthlyYearLoad {
+    pub year_offset: i32,
+    pub result: Result<MonthlyData, String>,
+}
+
+/// Background-thread payload for a net-worth chart reload (history + the
+/// optional stacked breakdown).
+pub struct NetWorthLoad {
+    pub history: Result<NetWorthSeries, String>,
+    pub breakdown: Option<NetWorthBreakdownSeries>,
+}
+
+impl Default for App {
+    /// Cheap, in-process default — does **not** spawn watchers, read the
+    /// filesystem, or invoke `Config::config_mtime()`. Intended for tests
+    /// (`#[cfg(test)] fixtures.rs` builds on top via `..Default::default()`).
+    /// Production code must go through `App::new` instead.
+    fn default() -> Self {
+        Self {
+            journal_path: PathBuf::from("/tmp/test.journal"),
+            journal_dir: PathBuf::from("/tmp"),
+            config: Config::default(),
+            tab: Tab::Accounts,
+            has_crypto: false,
+            price_history: Vec::new(),
+            latest_prices: HashMap::new(),
+            holdings: Vec::new(),
+            coin_chart_cache: HashMap::new(),
+            account_balances: Vec::new(),
+            liabilities: Vec::new(),
+            net_worth_history: NetWorthSeries::default(),
+            net_worth_breakdown: NetWorthBreakdownSeries::default(),
+            nw_range: NetWorthRange::All,
+            monthly: MonthlyData::default(),
+            last_year: MonthlyData::default(),
+            monthly_forecast: MonthlyData::default(),
+            combined_months: Vec::new(),
+            combined_selected: 0,
+            monthly_year_offset: 0,
+            selected_holding: 0,
+            monthly_focus: MonthlyFocus::default(),
+            account_state: TableState::default().with_selected(0),
+            expense_state: TableState::default().with_selected(0),
+            income_state: TableState::default().with_selected(0),
+            account_detail: None,
+            detail_account_name: None,
+            expense_detail: None,
+            detail_expense_name: None,
+            income_detail: None,
+            detail_income_name: None,
+            detail_state: TableState::default(),
+            portfolio_range: PortfolioRange::All,
+            chart_mode: ChartMode::Stacked,
+            expense_colors: true,
+            status_msg: String::new(),
+            loading: false,
+            show_help: false,
+            account_filter: String::new(),
+            account_filter_active: false,
+            search_active: false,
+            search_query: String::new(),
+            export_prompt_active: false,
+            export_prompt_path: String::new(),
+            search_results: Vec::new(),
+            search_state: TableState::default(),
+            price_alerts: Vec::new(),
+            show_alerts: false,
+            alert_dismissed: false,
+            alert_shown_at: None,
+            last_refresh: Instant::now(),
+            tabs_loaded: TabFlags::none(),
+            geometry: Geometry::default(),
+            portfolio_scroll_offset: 0,
+            refresh_rx: None,
+            pending_refresh: None,
+            account_detail_rx: None,
+            expense_detail_rx: None,
+            income_detail_rx: None,
+            monthly_year_rx: None,
+            net_worth_rx: None,
+            watcher: None,
+            last_journal_mtime: None,
+            last_config_mtime: None,
+        }
+    }
 }
 
 impl App {
@@ -120,7 +216,7 @@ impl App {
             "monthly" => Tab::Monthly,
             _ => Tab::Accounts,
         };
-        let chart_stacked = config.chart_mode != "unstacked";
+        let chart_mode = ChartMode::from_config(&config.chart_mode);
 
         Ok(Self {
             journal_path,
@@ -156,7 +252,7 @@ impl App {
             detail_income_name: None,
             detail_state: TableState::default(),
             portfolio_range: PortfolioRange::All,
-            chart_stacked,
+            chart_mode,
             expense_colors: true,
             status_msg: "Loading data…".to_string(),
             loading: true,
@@ -174,16 +270,16 @@ impl App {
             alert_dismissed: false,
             alert_shown_at: None,
             last_refresh: Instant::now(),
-            tabs_loaded: [false; 3],
-            tab_bar_area: Rect::default(),
-            tab_rects: Vec::new(),
-            table_area: Rect::default(),
-            income_table_area: Rect::default(),
-            expense_table_area: Rect::default(),
-            monthly_chart_area: Rect::default(),
-            range_selector_rects: Vec::new(),
+            tabs_loaded: TabFlags::none(),
+            geometry: Geometry::default(),
             portfolio_scroll_offset: 0,
             refresh_rx: None,
+            pending_refresh: None,
+            account_detail_rx: None,
+            expense_detail_rx: None,
+            income_detail_rx: None,
+            monthly_year_rx: None,
+            net_worth_rx: None,
             watcher,
             last_journal_mtime: None,
             last_config_mtime: Config::config_mtime(),

@@ -15,7 +15,7 @@ pub enum TabData<T> {
 }
 
 pub struct RefreshResult {
-    pub tabs: [bool; 3],
+    pub tabs: TabFlags,
     pub price_history: Vec<PriceEntry>,
     pub latest_prices: HashMap<String, f64>,
     pub holdings: TabData<Vec<CryptoHolding>>,
@@ -29,6 +29,43 @@ pub struct RefreshResult {
     /// Full-year income statement with periodic-rule projections for future
     /// months, loaded via `hledger --forecast`.
     pub monthly_forecast: TabData<MonthlyData>,
+}
+
+/// How the portfolio analysis chart layers price-growth and staking on top of
+/// the investment cost basis. Mirrors the `chart_mode` config string and the
+/// `s` toggle key.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum ChartMode {
+    Stacked,
+    Unstacked,
+}
+
+impl ChartMode {
+    pub fn is_stacked(self) -> bool {
+        matches!(self, Self::Stacked)
+    }
+
+    pub fn label(self) -> &'static str {
+        match self {
+            Self::Stacked => "stacked",
+            Self::Unstacked => "unstacked",
+        }
+    }
+
+    pub fn toggle(self) -> Self {
+        match self {
+            Self::Stacked => Self::Unstacked,
+            Self::Unstacked => Self::Stacked,
+        }
+    }
+
+    pub fn from_config(s: &str) -> Self {
+        if s == "unstacked" {
+            Self::Unstacked
+        } else {
+            Self::Stacked
+        }
+    }
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
@@ -45,13 +82,48 @@ pub enum Tab {
     Monthly,
 }
 
-impl Tab {
-    pub fn index(self) -> usize {
-        match self {
-            Tab::Portfolio => 0,
-            Tab::Accounts => 1,
-            Tab::Monthly => 2,
+
+/// Per-tab boolean flags with named accessors. Replaces the older `[bool; 3]`
+/// indexed by `Tab::index()` — fewer off-by-index bugs and self-documenting
+/// field names.
+#[derive(Debug, Clone, Copy, Default, PartialEq, Eq)]
+pub struct TabFlags {
+    pub portfolio: bool,
+    pub accounts: bool,
+    pub monthly: bool,
+}
+
+impl TabFlags {
+    pub const fn all(value: bool) -> Self {
+        Self {
+            portfolio: value,
+            accounts: value,
+            monthly: value,
         }
+    }
+
+    pub const fn none() -> Self {
+        Self::all(false)
+    }
+
+    pub fn get(self, tab: Tab) -> bool {
+        match tab {
+            Tab::Portfolio => self.portfolio,
+            Tab::Accounts => self.accounts,
+            Tab::Monthly => self.monthly,
+        }
+    }
+
+    pub fn set(&mut self, tab: Tab, value: bool) {
+        match tab {
+            Tab::Portfolio => self.portfolio = value,
+            Tab::Accounts => self.accounts = value,
+            Tab::Monthly => self.monthly = value,
+        }
+    }
+
+    pub fn any(self) -> bool {
+        self.portfolio || self.accounts || self.monthly
     }
 }
 
@@ -193,6 +265,20 @@ pub struct RecurringExpense {
     pub occurrences: usize,
 }
 
+/// Render-pass geometry written by `ui::*` and read back by mouse hit-testing.
+/// Grouped together so `App` doesn't carry seven loose `Rect`/`Vec<Rect>`
+/// fields; everything UI-only lives behind `app.geometry.*`.
+#[derive(Debug, Default, Clone)]
+pub struct Geometry {
+    pub tab_bar_area: ratatui::layout::Rect,
+    pub tab_rects: Vec<ratatui::layout::Rect>,
+    pub table_area: ratatui::layout::Rect,
+    pub income_table_area: ratatui::layout::Rect,
+    pub expense_table_area: ratatui::layout::Rect,
+    pub monthly_chart_area: ratatui::layout::Rect,
+    pub range_selector_rects: Vec<ratatui::layout::Rect>,
+}
+
 /// 12-month cash flow forecast for the current year.
 /// `actuals` holds (month_idx 0-11, net) for months with real data.
 /// `projected` holds (month_idx, projected_net) for future months, with the
@@ -238,20 +324,6 @@ pub fn budget_spent(category: &str, expenses: &[(String, f64)]) -> f64 {
 }
 
 pub fn month_name_to_period(month_name: &str, year: i32) -> String {
-    let month_num = match month_name {
-        "January" => 1,
-        "February" => 2,
-        "March" => 3,
-        "April" => 4,
-        "May" => 5,
-        "June" => 6,
-        "July" => 7,
-        "August" => 8,
-        "September" => 9,
-        "October" => 10,
-        "November" => 11,
-        "December" => 12,
-        _ => 1,
-    };
+    let month_num = crate::data::month_index(month_name).unwrap_or(1);
     format!("{year}-{month_num:02}")
 }

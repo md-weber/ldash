@@ -172,10 +172,7 @@ impl App {
     ///
     /// Only meaningful when `monthly_year_offset == 0` (current year).
     pub fn cash_flow_forecast(&self) -> CashFlowForecast {
-        const MONTH_NAMES: [&str; 12] = [
-            "January", "February", "March", "April", "May", "June",
-            "July", "August", "September", "October", "November", "December",
-        ];
+        use crate::data::MONTH_NAMES;
 
         // Actual data: months loaded from the journal without --forecast.
         let actual_map: std::collections::HashMap<&str, f64> = self
@@ -287,35 +284,54 @@ impl App {
 
         let today = Local::now().date_naive();
         let yesterday = today - chrono::Duration::days(1);
-        let mut alerts = Vec::new();
 
-        let coins: Vec<String> = self.holdings.iter().map(|h| h.commodity.clone()).collect();
-        for coin in &coins {
-            let prices: Vec<_> = self
-                .price_history
-                .iter()
-                .filter(|e| &e.commodity == coin)
-                .collect();
+        // One pass over `price_history` to bucket entries per commodity, so
+        // the per-coin lookups below are O(log M) instead of O(M). Original
+        // (sorted) order within each bucket is preserved. Scoped block keeps
+        // the borrow of `self.price_history` from leaking into the mutation
+        // of `self.price_alerts` further down.
+        let mut alerts: Vec<PriceAlert> = {
+            let mut by_coin: std::collections::HashMap<&str, Vec<&crate::data::PriceEntry>> =
+                std::collections::HashMap::new();
+            for entry in &self.price_history {
+                by_coin
+                    .entry(entry.commodity.as_str())
+                    .or_default()
+                    .push(entry);
+            }
 
-            let current = prices.last().map(|e| e.price_eur);
-            let prev = prices
-                .iter()
-                .rev()
-                .find(|e| e.date <= yesterday)
-                .map(|e| e.price_eur);
+            let mut out = Vec::new();
+            for h in &self.holdings {
+                let coin = h.commodity.as_str();
+                let prices = match by_coin.get(coin) {
+                    Some(p) if !p.is_empty() => p,
+                    _ => continue,
+                };
 
-            if let (Some(cur), Some(old)) = (current, prev) {
-                if old > 0.0 {
-                    let change = (cur - old) / old * 100.0;
-                    if change.abs() >= 2.0 {
-                        alerts.push(PriceAlert {
-                            coin: coin.clone(),
-                            change_pct: change,
-                        });
+                let current = prices.last().map(|e| e.price_eur);
+                // `price_history` is already sorted by date — binary search
+                // for the last entry with `date <= yesterday`.
+                let prev_idx = prices.partition_point(|e| e.date <= yesterday);
+                let prev = if prev_idx == 0 {
+                    None
+                } else {
+                    Some(prices[prev_idx - 1].price_eur)
+                };
+
+                if let (Some(cur), Some(old)) = (current, prev) {
+                    if old > 0.0 {
+                        let change = (cur - old) / old * 100.0;
+                        if change.abs() >= 2.0 {
+                            out.push(PriceAlert {
+                                coin: coin.to_string(),
+                                change_pct: change,
+                            });
+                        }
                     }
                 }
             }
-        }
+            out
+        };
 
         if !alerts.is_empty() {
             alerts.sort_by(|a, b| {

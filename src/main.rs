@@ -63,8 +63,9 @@ struct Cli {
 }
 
 fn parse_tab(s: &str) -> Result<String, String> {
-    match s {
-        "portfolio" | "accounts" | "monthly" => Ok(s.to_string()),
+    let lower = s.to_lowercase();
+    match lower.as_str() {
+        "portfolio" | "accounts" | "monthly" => Ok(lower),
         _ => Err(format!(
             "invalid tab '{s}' (expected: portfolio, accounts, monthly)"
         )),
@@ -119,11 +120,7 @@ fn find_journal(cli: &Cli, config: &config::Config) -> Result<PathBuf> {
         anyhow::bail!("Journal file from $LEDGER_FILE not found: {env_path}");
     }
 
-    let candidates = [
-        "tmp/Finance/all.journal",
-        "Finance/all.journal",
-        "all.journal",
-    ];
+    let candidates = ["Finance/all.journal", "all.journal"];
 
     for c in candidates {
         let p = PathBuf::from(c);
@@ -274,6 +271,7 @@ fn run(
 
     loop {
         app.check_refresh();
+        app.check_background();
         app.check_alert_timeout();
 
         terminal.draw(|f| ui::render(f, &mut app))?;

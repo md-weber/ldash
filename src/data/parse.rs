@@ -38,9 +38,28 @@ pub(super) fn parse_amount_str(s: &str) -> Option<(f64, String)> {
 }
 
 pub(super) fn parse_balance_csv(text: &str) -> Result<Vec<super::AccountBalance>> {
-    let mut result = Vec::new();
+    if text.trim().is_empty() {
+        return Ok(Vec::new());
+    }
+
     let mut rdr = csv::ReaderBuilder::new().from_reader(text.as_bytes());
 
+    // Validate header up front instead of relying on a "row count + first line
+    // sniff" heuristic at the end. Expected hledger `balance -O csv` header:
+    // first column is `account`, the rest are balance columns.
+    let headers = rdr
+        .headers()
+        .map_err(|e| anyhow::anyhow!("hledger CSV: cannot read header: {e}"))?
+        .clone();
+    if headers.is_empty() || !headers[0].eq_ignore_ascii_case("account") {
+        let first_line = text.lines().next().unwrap_or("");
+        return Err(anyhow::anyhow!(
+            "Unexpected hledger CSV format: {:?}",
+            first_line
+        ));
+    }
+
+    let mut result = Vec::new();
     for row in rdr.records() {
         let row = match row {
             Ok(r) => r,
@@ -62,16 +81,6 @@ pub(super) fn parse_balance_csv(text: &str) -> Result<Vec<super::AccountBalance>
                     commodity,
                 });
             }
-        }
-    }
-
-    if result.is_empty() && text.len() > 20 {
-        let first_line = text.lines().next().unwrap_or("");
-        if !first_line.contains("account") {
-            return Err(anyhow::anyhow!(
-                "Unexpected hledger CSV format: {:?}",
-                first_line
-            ));
         }
     }
 
@@ -166,22 +175,37 @@ pub(super) fn parse_monthly_csv(
     Ok(MonthlyData { months, selected })
 }
 
+/// Calendar month names indexed 0..=11 (January = 0).
+///
+/// Single source of truth — used by `month_name`, `month_index`, the cash flow
+/// forecast, the combined-months rebuild and the period formatter.
+pub(crate) const MONTH_NAMES: [&str; 12] = [
+    "January",
+    "February",
+    "March",
+    "April",
+    "May",
+    "June",
+    "July",
+    "August",
+    "September",
+    "October",
+    "November",
+    "December",
+];
+
 pub(crate) fn month_name(m: usize) -> &'static str {
-    match m {
-        1 => "January",
-        2 => "February",
-        3 => "March",
-        4 => "April",
-        5 => "May",
-        6 => "June",
-        7 => "July",
-        8 => "August",
-        9 => "September",
-        10 => "October",
-        11 => "November",
-        12 => "December",
-        _ => "Unknown",
+    if (1..=12).contains(&m) {
+        MONTH_NAMES[m - 1]
+    } else {
+        "Unknown"
     }
+}
+
+/// Returns the 1-based month number (1..=12) for `name`, matching exact case
+/// (e.g. "January" → Some(1)).
+pub(crate) fn month_index(name: &str) -> Option<usize> {
+    MONTH_NAMES.iter().position(|&n| n == name).map(|i| i + 1)
 }
 
 #[cfg(test)]

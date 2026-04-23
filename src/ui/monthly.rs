@@ -5,6 +5,21 @@ use ratatui::style::Modifier;
 use super::{expense_color, render_detail_with_title, Theme};
 use crate::app::{budget_matches, budget_spent, App, MonthlyFocus};
 
+/// BarChart bar width (chars per bar). Shared between render and mouse hit-test.
+pub(crate) const MONTHLY_BAR_WIDTH: u16 = 3;
+/// BarChart bar gap (chars between two bars within a group). Shared.
+pub(crate) const MONTHLY_BAR_GAP: u16 = 0;
+/// BarChart group gap (chars between adjacent month groups). Shared.
+pub(crate) const MONTHLY_GROUP_GAP: u16 = 2;
+/// Number of bars per month group (income + expense).
+pub(crate) const MONTHLY_BARS_PER_GROUP: u16 = 2;
+/// Total horizontal cells per month group; `on_monthly_chart_click` divides
+/// the click x by this to map a column back to a month index. MUST stay in
+/// sync with the `BarChart` builder below.
+pub(crate) const MONTHLY_GROUP_WIDTH: u16 = MONTHLY_BARS_PER_GROUP * MONTHLY_BAR_WIDTH
+    + MONTHLY_BAR_GAP
+    + MONTHLY_GROUP_GAP;
+
 pub(super) fn render_monthly(f: &mut Frame, app: &mut App, area: Rect, theme: &Theme) {
     let narrow = area.width < 100;
     let very_narrow = area.width < 80;
@@ -24,11 +39,11 @@ pub(super) fn render_monthly(f: &mut Frame, app: &mut App, area: Rect, theme: &T
             Constraint::Percentage(45),
         ])
         .split(chunks[0]);
-        app.monthly_chart_area = top[0];
+        app.geometry.monthly_chart_area = top[0];
         render_monthly_chart(f, app, top[0], theme);
         render_forecast_chart(f, app, top[1], theme);
     } else {
-        app.monthly_chart_area = chunks[0];
+        app.geometry.monthly_chart_area = chunks[0];
         render_monthly_chart(f, app, chunks[0], theme);
     }
     render_monthly_summary(f, app, chunks[1], theme);
@@ -155,9 +170,9 @@ fn render_monthly_chart(f: &mut Frame, app: &App, area: Rect, theme: &Theme) {
                 .border_style(Style::default().fg(theme.muted))
                 .padding(Padding::new(1, 1, 1, 0)),
         )
-        .bar_width(3)
-        .bar_gap(0)
-        .group_gap(2)
+        .bar_width(MONTHLY_BAR_WIDTH)
+        .bar_gap(MONTHLY_BAR_GAP)
+        .group_gap(MONTHLY_GROUP_GAP)
         .bar_style(Style::default().fg(theme.positive));
 
     for g in groups {
@@ -579,7 +594,7 @@ fn render_monthly_income(f: &mut Frame, app: &mut App, area: Rect, theme: &Theme
                 .border_style(Style::default().fg(border_color)),
         );
 
-    app.income_table_area = area;
+    app.geometry.income_table_area = area;
     f.render_stateful_widget(table, area, &mut app.income_state);
 }
 
@@ -714,7 +729,7 @@ fn render_monthly_expenses(f: &mut Frame, app: &mut App, area: Rect, theme: &The
                 })),
         );
 
-    app.expense_table_area = area;
+    app.geometry.expense_table_area = area;
     f.render_stateful_widget(table, area, &mut app.expense_state);
 }
 

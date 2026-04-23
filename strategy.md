@@ -72,81 +72,63 @@ Move overlay renderers (`render_search_overlay`, `render_help_popup`, `render_lo
 
 ## 2. Refactor (Behaviour-Preserving)
 
-1. **`apply_refresh` boilerplate**. 9 nearly-identical `match TabData<T>` arms. Extract a macro:
+1. **`apply_refresh` boilerplate** — ✅ DONE. `apply_field!` / `apply_field_silent!` macros in `src/app/refresh.rs` collapse the 9 near-identical `match TabData<T>` arms.
 
-   ```rust
-   macro_rules! apply_field { ($field:expr, $src:expr, $errs:expr) => {
-       match $src {
-           TabData::Ok(v) => $field = v,
-           TabData::Err(e) => $errs.push(e),
-           TabData::NotRequested => {}
-       }
-   }}
-   ```
+2. **`load_all_data` 8-tuple thread join** — ✅ DONE. Replaced with `LoadHandles` struct + `spawn_all` + `into_tab_data` helper. Adding a new source = one field, one spawn line, one mapping.
 
-2. **`load_all_data` 8-tuple thread join**. Replace ad-hoc tuple with `LoadHandles` struct (or per-tab loader function returning a `RefreshResult` slice). Easier to extend when adding a new data source.
+3. **Group `App` fields** — ⚠️ PARTIAL. `geometry: Geometry` extracted (all `Rect`/`Vec<Rect>` fields written by the render pass). Remaining substructs (`monthly_view`, `accounts_view`, `portfolio_view`, `overlay`, `data`) deferred to a follow-up PR per the PR-ordering guidance below — touches every render call site, best done as its own dedicated change.
 
-3. **Group `App` fields**. Currently ~50 flat fields. Group into:
-   - `monthly_view: MonthlyViewState` — focus, year_offset, combined_months/selected, all `*_detail`/`detail_*_name` fields
-   - `accounts_view: AccountsViewState` — filter state, table state, detail
-   - `portfolio_view: PortfolioViewState` — selected_holding, range, scroll_offset, chart_stacked
-   - `overlay: OverlayState` — search, help, export prompt, alerts
-   - `geometry: Geometry` — all `Rect` fields written by render pass
-   - `data: AppData` — holdings, balances, monthly, forecasts, price history
+4. **Deduplicate `MONTH_NAMES`** — ✅ DONE. Single `pub(crate) const MONTH_NAMES: [&str; 12]` in `src/data/parse.rs` plus `month_index(name) -> Option<usize>`. `month_name`, `rebuild_combined_months`, `cash_flow_forecast` and `month_name_to_period` all consume the shared const.
 
-4. **Deduplicate `MONTH_NAMES`**. Defined 3× (`rebuild_combined_months`, `cash_flow_forecast`, mirrored by `data::month_name`). Single `pub(crate) const MONTH_NAMES: [&str; 12]` plus `month_index(name) -> Option<usize>` to replace the 12-arm match in `month_name_to_period`.
+5. **Test fixtures fragility** — ✅ DONE. `impl Default for App` lives in `src/app/mod.rs`; `fixture_empty` now uses `..Self::default()` with only the test-mode overrides spelled out.
 
-5. **Test fixtures fragility**. `fixture_empty` enumerates every field — breaks on each new `App` field. Either implement `Default for App` and use `..Default::default()` in fixtures, or build via `App::new` + targeted overrides.
+6. **`Tab::index()` array indexing** — ✅ DONE. `[bool; 3]` replaced with `TabFlags { portfolio, accounts, monthly }` (named accessors + `get`/`set`/`any` helpers). `Tab::index()` removed.
 
-6. **`Tab::index()` array indexing**. Replace `[bool; 3]` indexed by enum with `EnumMap<Tab, bool>` (via `enum-map` crate) or a typed `TabFlags { portfolio, accounts, monthly }` struct with named accessors. Removes a class of off-by-index bugs.
+7. **`chart_stacked: bool`** — ✅ DONE. Promoted to `enum ChartMode { Stacked, Unstacked }` with `from_config`, `toggle`, `label`, `is_stacked` helpers.
 
-7. **`chart_stacked: bool`**. Promote to `enum ChartMode { Stacked, Unstacked }` to match the config string and the toggle key.
+8. **Per-tab dispatch repetition** — ✅ DONE. `src/app/scroll.rs` collapsed via private `FocusedList` enum + `current_selected` / `current_len` / `set_current_selected` / `current_page_size` helpers. The 8+ near-identical `match self.tab` blocks are now one-line bodies.
 
-8. **Per-tab dispatch repetition**. The `match self.tab { Tab::Portfolio => ..., Tab::Accounts => ..., Tab::Monthly => ... }` block appears 8+ times in scroll/mouse code. Consider a per-tab state struct with a small trait (`fn scroll_up(&mut self)`, `fn page_size(&self, area: Rect) -> usize`).
-
-9. **Style helper**. Frequent `Style::default().fg(theme.muted)` etc. — a tiny helper or macro `fg!(theme.muted)` reduces noise in render code.
+9. **Style helper** — ✅ DONE. `fg!`, `bg!`, `fg_bg!` macros added in `src/ui/style_macros.rs` (with optional `, bold` suffix). Available crate-wide via `#[macro_export]`.
 
 ---
 
-## 3. Hardening (Bugs & Risks)
+## 3. Hardening (Bugs & Risks) — ✅ DONE
 
-1. **HTML export XSS**. `render_html` interpolates account names, coin commodities, month names raw. An account named `<script>alert(1)</script>` executes in the browser. Add an `html_escape` helper (replace `& < > " '`).
+1. **HTML export XSS** — ✅ DONE. `html_escape` helper in `src/app/export.rs` (covers `& < > " '`); `render_html` runs every interpolated string (account names, coin commodities, month names, currency symbol) through it.
 
-2. **JSON export incomplete escape**. `json_str` only escapes `\` and `"`. Newlines, tabs, control chars (< 0x20) and unicode outside BMP all break parsers. Replace with `serde_json` (add the dep — you already use `serde`).
+2. **JSON export incomplete escape** — ✅ DONE. `serde_json = "1"` added to `Cargo.toml`; `render_json` now builds a `serde_json::Value` tree and serialises via `to_string_pretty`. All escaping (control chars, unicode, `\` etc.) handled by the library.
 
-3. **Thread join `.unwrap()`**. Both `load_all_data` and `load_all_coin_chart_series` call `.join().unwrap()`. A panicked worker takes the whole app down. Wrap with `.unwrap_or(Err(anyhow::anyhow!("worker panicked")))` or propagate as `TabData::Err`.
+3. **Thread join `.unwrap()`** — ✅ DONE. `join_or_panic_err` helper in `src/app/refresh.rs` and an inline equivalent in `load_all_coin_chart_series` (`src/data/portfolio.rs`) downgrade panics to `Err(anyhow!("worker panicked"))`.
 
-4. **Stale candidate path in `find_journal`**. `main.rs:121` lists `"tmp/Finance/all.journal"` — a personal-machine leftover. Drop it.
+4. **Stale candidate path in `find_journal`** — ✅ DONE. `tmp/Finance/all.journal` removed from the candidate list in `src/main.rs`.
 
-5. **`run_hledger` lossy decode**. `String::from_utf8_lossy(&output.stdout)` silently substitutes U+FFFD for invalid bytes. Fine for normal hledger output, but worth surfacing as an error if it ever happens.
+5. **`run_hledger` lossy decode** — ✅ DONE. Replaced `String::from_utf8_lossy` with `String::from_utf8` and surface invalid bytes as a clear error including the offset.
 
-6. **`parse_balance_csv` error heuristic**. Returns `Err` only when `text.len() > 20 && result empty && !first_line.contains("account")`. Fragile — parse the header explicitly and bail with a clear error.
+6. **`parse_balance_csv` error heuristic** — ✅ DONE. Header is now read explicitly via `csv::Reader::headers` and validated case-insensitively (`"account"` first column). Bails immediately with a clear error otherwise.
 
-7. **`watcher.rs`**:
-   - Watching the parent dir with `RecursiveMode::Recursive` is noisy on big home dirs. Switch to `NonRecursive`.
-   - Debounce uses `last_event` captured by `move` — works because `EventHandler` is `FnMut` in notify v7, but worth a comment.
+7. **`watcher.rs`** — ✅ DONE. Switched to `RecursiveMode::NonRecursive`; added a comment documenting why `last_event` mutation in the `FnMut` handler is sound under notify v7.
 
-8. **`compute_price_alerts` is O(N×M)**. Walks `price_history` per coin per refresh. Pre-index by commodity once (already sorted by date) and binary-search.
+8. **`compute_price_alerts` O(N×M)** — ✅ DONE. Single pre-pass buckets `price_history` by commodity into a `HashMap`; per-coin "previous price" lookup uses `partition_point` on the already-sorted slice (O(log M)).
 
-9. **Detail loads block the UI**. `open_account_detail`, `open_expense_detail`, `open_income_detail` call hledger synchronously on the event thread. The loading spinner never shows. Move to the same background-thread pattern as `start_refresh_tabs`.
+9. **Detail loads block the UI** — ✅ DONE. `open_account_detail`, `open_expense_detail`, `open_income_detail` now spawn a worker via `spawn_detail_load`; results land via per-kind `Option<mpsc::Receiver<DetailLoad>>` channels drained by the new `App::check_background()` helper.
 
-10. **`reload_monthly_year` and `reload_net_worth` block the UI** for the same reason. Make them async via the existing refresh channel.
+10. **`reload_monthly_year` / `reload_net_worth` block the UI** — ✅ DONE. Both functions spawn workers and send `MonthlyYearLoad` / `NetWorthLoad` messages; results are applied by `check_background` (with a stale-result guard for `monthly_year_offset`).
 
-11. **Refresh requests dropped while one is in flight**. Pressing `r` during a refresh is silently ignored. Add a `pending_refresh: Option<[bool; 3]>` flag and re-fire on completion.
+11. **Refresh requests dropped while one is in flight** — ✅ DONE. Added `pending_refresh: Option<TabFlags>`. `start_refresh_tabs` merges into the pending request when busy; `check_refresh` re-fires it after `apply_refresh`.
 
-12. **Hardcoded year cycle limit**. `cycle_year_back` clamps `monthly_year_offset > -3`. No real reason for the limit — remove or make configurable.
+12. **Hardcoded year cycle limit** — ✅ DONE. `cycle_year_back` no longer clamps to `> -3`.
 
-13. **`tabs_loaded[i] = true` set even on `TabData::Err`** in `apply_refresh`. Means a tab that errored never auto-retries. Only mark loaded on `Ok`.
+13. **`tabs_loaded` set on `TabData::Err`** — ✅ DONE. `apply_refresh` captures per-tab `Ok` status before consuming the `TabData` and only flips `tabs_loaded` for tabs whose primary source returned `Ok`.
 
-14. **CLI `parse_tab` is case-sensitive**. `--tab Portfolio` fails with a confusing message. Lowercase before match.
+14. **CLI `parse_tab` case-sensitive** — ✅ DONE. `parse_tab` lowercases the input before matching.
 
-15. **Mouse hit-test desync risk**. `on_monthly_chart_click` hardcodes `group_width = 8u16`, computed from `bar_width(3) + bar_gap(0) + group_gap(2) + 2 bars`. If render config changes, click positions silently desync. Move to a shared const used by both render and hit-test.
+15. **Mouse hit-test desync risk** — ✅ DONE. `MONTHLY_BAR_WIDTH`, `MONTHLY_BAR_GAP`, `MONTHLY_GROUP_GAP`, `MONTHLY_BARS_PER_GROUP` and `MONTHLY_GROUP_WIDTH` consts in `src/ui/monthly.rs` are the single source of truth; `BarChart` builder and `on_monthly_chart_click` both consume them via `crate::ui::MONTHLY_GROUP_WIDTH`.
 
-16. **`load_recent_transactions` / `search_transactions` parse-then-truncate**. `split_off(len - n)` after parsing every record. For large journals this is wasted memory. Stream into a `VecDeque` with a cap.
+16. **`load_recent_transactions` / `search_transactions` parse-then-truncate** — ✅ DONE. Both stream into a `VecDeque` capped via the new `push_capped` helper (`SEARCH_RESULTS_CAP = 100`, caller-supplied `n` for register).
 
-17. **`Config::refresh_interval = 0`** silently falls back to 300s (`refresh_duration`). Add a validation warning at load time.
+17. **`Config::refresh_interval = 0` silently falls back** — ✅ DONE. Added `Config::validate()`; `Config::load` extends its warnings with the result, surfacing the bogus value at startup before the silent 300s fallback kicks in.
 
-18. **`pl_pct` clamp/format**. `portfolio.rs:152–162` clamps to ±9999% but separately tests `pct.abs() > 9999.0` to switch format. Logic is redundant — simplify.
+18. **`pl_pct` clamp/format redundancy** — ✅ DONE. Single `pct.abs() > 9999.0` branch in `src/ui/portfolio.rs`; clamping happens only inside that branch.
 
 ---
 

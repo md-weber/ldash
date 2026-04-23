@@ -1,8 +1,10 @@
+use std::sync::mpsc;
+
 use chrono::{Datelike, Local, NaiveDate};
 
 use crate::data::{self, load_net_worth_breakdown, load_net_worth_history, SingleMonth};
 
-use super::{App, MonthlyFocus, PortfolioRange};
+use super::{App, MonthlyFocus, MonthlyYearLoad, NetWorthLoad, PortfolioRange};
 
 impl App {
     pub fn current_month(&self) -> Option<&SingleMonth> {
@@ -18,10 +20,8 @@ impl App {
     }
 
     pub fn cycle_year_back(&mut self) {
-        if self.monthly_year_offset > -3 {
-            self.monthly_year_offset -= 1;
-            self.reload_monthly_year();
-        }
+        self.monthly_year_offset -= 1;
+        self.reload_monthly_year();
     }
 
     pub fn cycle_year_forward(&mut self) {
@@ -31,18 +31,32 @@ impl App {
         }
     }
 
+    /// Kick off an async reload of the year's monthly data. The result is
+    /// applied by `App::check_background()` from the main loop, keeping the
+    /// loading spinner live while hledger runs.
     fn reload_monthly_year(&mut self) {
-        let year = Local::now().date_naive().year() + self.monthly_year_offset;
-        let period = format!("monthly in {year}");
-        match data::load_monthly_for_period(
-            &self.journal_path,
-            &period,
-            &self.config.currency_symbol,
-        ) {
-            Ok(m) => self.monthly = m,
-            Err(e) => self.status_msg = format!("Error loading {year} data: {e}"),
+        if self.monthly_year_rx.is_some() {
+            return;
         }
-        self.rebuild_combined_months();
+        let offset = self.monthly_year_offset;
+        let year = Local::now().date_naive().year() + offset;
+        let period = format!("monthly in {year}");
+        let jp = self.journal_path.clone();
+        let currency = self.config.currency_symbol.clone();
+
+        let (tx, rx) = mpsc::channel();
+        self.monthly_year_rx = Some(rx);
+        self.loading = true;
+        self.status_msg = format!("Loading {year}…");
+
+        std::thread::spawn(move || {
+            let result = data::load_monthly_for_period(&jp, &period, &currency)
+                .map_err(|e| e.to_string());
+            let _ = tx.send(MonthlyYearLoad {
+                year_offset: offset,
+                result,
+            });
+        });
     }
 
     pub fn displayed_year(&self) -> i32 {
@@ -100,17 +114,29 @@ impl App {
         self.portfolio_range = self.portfolio_range.next();
     }
 
+    /// Kick off an async reload of the net-worth history + breakdown for the
+    /// current `nw_range`. Both queries run on a single worker thread (one
+    /// reload = one channel send) so the UI applies them atomically.
     pub(super) fn reload_net_worth(&mut self) {
+        if self.net_worth_rx.is_some() {
+            return;
+        }
         let period = self.nw_range.period_arg();
-        match load_net_worth_history(&self.journal_path, &period, &self.config.currency_symbol) {
-            Ok(series) => self.net_worth_history = series,
-            Err(e) => self.status_msg = format!("Error loading net worth: {e}"),
-        }
-        if let Ok(bd) =
-            load_net_worth_breakdown(&self.journal_path, &period, &self.config.currency_symbol)
-        {
-            self.net_worth_breakdown = bd;
-        }
+        let jp = self.journal_path.clone();
+        let currency = self.config.currency_symbol.clone();
+
+        let (tx, rx) = mpsc::channel();
+        self.net_worth_rx = Some(rx);
+        self.loading = true;
+        self.status_msg = "Loading net worth…".to_string();
+
+        std::thread::spawn(move || {
+            let history = load_net_worth_history(&jp, &period, &currency)
+                .map_err(|e| e.to_string());
+            // Breakdown is non-fatal: chart simply omits the layer if it fails.
+            let breakdown = load_net_worth_breakdown(&jp, &period, &currency).ok();
+            let _ = tx.send(NetWorthLoad { history, breakdown });
+        });
     }
 
     /// Rebuild `combined_months` from the current `monthly` (actuals) and
@@ -120,16 +146,11 @@ impl App {
     /// only added when viewing the current year (`monthly_year_offset == 0`).
     /// The previous selection is preserved by month name when possible.
     pub(super) fn rebuild_combined_months(&mut self) {
-        const MONTH_NAMES: [&str; 12] = [
-            "January", "February", "March", "April", "May", "June",
-            "July", "August", "September", "October", "November", "December",
-        ];
-
         let actual_names: std::collections::HashSet<&str> =
             self.monthly.months.iter().map(|m| m.month_name.as_str()).collect();
 
         let mut combined: Vec<(SingleMonth, bool)> = Vec::new();
-        for name in &MONTH_NAMES {
+        for name in &crate::data::MONTH_NAMES {
             if let Some(m) = self.monthly.months.iter().find(|m| m.month_name.as_str() == *name) {
                 combined.push((m.clone(), false));
             } else if self.monthly_year_offset == 0 {

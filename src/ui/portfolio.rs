@@ -149,16 +149,18 @@ fn render_holdings_table(f: &mut Frame, app: &mut App, area: Rect, theme: &Theme
                             };
                             let abs_prefix = if pl_abs >= 0.0 { "+" } else { "" };
                             let pct = pl_abs / basis * 100.0;
-                            let pct_clamped = pct.clamp(-9999.0, 9999.0);
                             let (prefix, color) = if pct >= 0.0 {
                                 ("+", theme.positive)
                             } else {
                                 ("", theme.negative)
                             };
+                            // Above ±9999% the signed prefix + 4-digit integer
+                            // saturates a typical 7-char column; drop the decimal.
                             let pct_str = if pct.abs() > 9999.0 {
-                                format!("{prefix}{:.0}%", pct_clamped)
+                                let pct_clamped = pct.clamp(-9999.0, 9999.0);
+                                format!("{prefix}{pct_clamped:.0}%")
                             } else {
-                                format!("{prefix}{:.1}%", pct)
+                                format!("{prefix}{pct:.1}%")
                             };
                             (
                                 pct_str,
@@ -336,7 +338,7 @@ fn render_holdings_table(f: &mut Frame, app: &mut App, area: Rect, theme: &Theme
                 .border_style(Style::default().fg(theme.muted)),
         );
 
-    app.table_area = area;
+    app.geometry.table_area = area;
     f.render_widget(table, area);
 
     let hint_area = Rect {
@@ -423,11 +425,7 @@ fn render_price_chart(f: &mut Frame, app: &App, area: Rect, theme: &Theme) {
     let selected_coin = app.selected_coin().unwrap_or("SOL");
     let range_label = app.portfolio_range.label();
 
-    let mode_label = if app.chart_stacked {
-        "stacked"
-    } else {
-        "unstacked"
-    };
+    let mode_label = app.chart_mode.label();
     let block = Block::default()
         .title(Span::styled(
             format!(
@@ -490,7 +488,7 @@ fn render_price_chart(f: &mut Frame, app: &App, area: Rect, theme: &Theme) {
         .collect();
 
     type ChartLines<'a> = (Vec<(f64, f64)>, Vec<(f64, f64)>, &'a str, &'a str);
-    let (line2_data, line3_data, line2_name, line3_name): ChartLines<'_> = if app.chart_stacked {
+    let (line2_data, line3_data, line2_name, line3_name): ChartLines<'_> = if app.chart_mode.is_stacked() {
         let purchased: Vec<(f64, f64)> = filtered_inv
             .iter()
             .zip(filtered_price.iter())

@@ -33,7 +33,7 @@ impl App {
             return;
         }
 
-        let tab_rects = self.tab_rects.clone();
+        let tab_rects = self.geometry.tab_rects.clone();
         for (i, rect) in tab_rects.iter().enumerate() {
             if rect_contains(*rect, col, row) {
                 self.select_tab(i);
@@ -41,7 +41,7 @@ impl App {
             }
         }
 
-        let range_rects = self.range_selector_rects.clone();
+        let range_rects = self.geometry.range_selector_rects.clone();
         for (i, rect) in range_rects.iter().enumerate() {
             if rect_contains(*rect, col, row) {
                 self.select_range(i);
@@ -49,19 +49,19 @@ impl App {
             }
         }
 
-        if self.tab == Tab::Monthly && rect_contains(self.monthly_chart_area, col, row) {
+        if self.tab == Tab::Monthly && rect_contains(self.geometry.monthly_chart_area, col, row) {
             self.on_monthly_chart_click(col);
             return;
         }
 
         match self.tab {
             Tab::Monthly => {
-                if rect_contains(self.income_table_area, col, row) {
+                if rect_contains(self.geometry.income_table_area, col, row) {
                     if self.monthly_focus != MonthlyFocus::Income {
                         self.monthly_focus = MonthlyFocus::Income;
                     }
                     self.on_table_click(col, row);
-                } else if rect_contains(self.expense_table_area, col, row) {
+                } else if rect_contains(self.geometry.expense_table_area, col, row) {
                     if self.monthly_focus != MonthlyFocus::Expenses {
                         self.monthly_focus = MonthlyFocus::Expenses;
                     }
@@ -69,7 +69,7 @@ impl App {
                 }
             }
             _ => {
-                if rect_contains(self.table_area, col, row) {
+                if rect_contains(self.geometry.table_area, col, row) {
                     self.on_table_click(col, row);
                 }
             }
@@ -79,10 +79,10 @@ impl App {
     fn on_table_click(&mut self, _col: u16, row: u16) {
         let area = match self.tab {
             Tab::Monthly => match self.monthly_focus {
-                MonthlyFocus::Income => self.income_table_area,
-                MonthlyFocus::Expenses => self.expense_table_area,
+                MonthlyFocus::Income => self.geometry.income_table_area,
+                MonthlyFocus::Expenses => self.geometry.expense_table_area,
             },
-            _ => self.table_area,
+            _ => self.geometry.table_area,
         };
         // border (1) + header row (1) + header bottom_margin (1) = 3 rows before data
         let content_y = area.y + 3;
@@ -127,15 +127,16 @@ impl App {
     }
 
     fn on_monthly_chart_click(&mut self, col: u16) {
-        let area = self.monthly_chart_area;
+        let area = self.geometry.monthly_chart_area;
         // inner x: border (1) + left padding (1) = +2
         let inner_x = area.x + 2;
         if col < inner_x {
             return;
         }
-        // each group: 2 bars × bar_width(3) + bar_gap(0) + group_gap(2) = 8 chars
-        let group_width = 8u16;
-        let slot = (col - inner_x) / group_width;
+        // Each group spans `MONTHLY_GROUP_WIDTH` chars — shared with the
+        // BarChart builder in `ui::monthly` so render and hit-test stay in
+        // sync if the bar/group dimensions ever change.
+        let slot = (col - inner_x) / crate::ui::MONTHLY_GROUP_WIDTH;
         if (slot as usize) < self.combined_months.len() {
             self.combined_selected = slot as usize;
         }

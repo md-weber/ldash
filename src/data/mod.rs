@@ -20,7 +20,7 @@ pub use monthly::{
 #[allow(unused_imports)]
 pub use parse::parse_eu_number;
 #[allow(unused_imports)]
-pub(crate) use parse::month_name;
+pub(crate) use parse::{month_index, month_name, MONTH_NAMES};
 pub use portfolio::{compute_portfolio, load_all_coin_chart_series};
 pub use prices::{latest_prices, load_price_history};
 pub use transactions::{load_recent_transactions, search_transactions};
@@ -132,5 +132,13 @@ pub(crate) fn run_hledger(args: &[&str]) -> Result<String> {
         return Err(anyhow::anyhow!(msg));
     }
 
-    Ok(String::from_utf8_lossy(&output.stdout).into_owned())
+    // Surface non-UTF-8 stdout as an error rather than silently substituting
+    // U+FFFD — invalid bytes here usually mean a corrupted journal or a
+    // platform-encoding mismatch we want to know about.
+    String::from_utf8(output.stdout).map_err(|e| {
+        anyhow::anyhow!(
+            "hledger produced non-UTF-8 output (invalid byte at offset {})",
+            e.utf8_error().valid_up_to()
+        )
+    })
 }

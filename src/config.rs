@@ -167,6 +167,7 @@ impl Config {
                 Config::default()
             }
         };
+        warnings.extend(config.validate());
         (config, warnings)
     }
 
@@ -176,6 +177,21 @@ impl Config {
             .map_err(|e| anyhow::anyhow!("Cannot read config {}: {}", path.display(), e))?;
         toml::from_str(&content)
             .map_err(|e| anyhow::anyhow!("Config parse error in {}: {}", path.display(), e))
+    }
+
+    /// Sanity-check semantically-loose fields (those that parse but make no
+    /// sense). Returns a list of human-readable warnings; an empty Vec means
+    /// the config is internally consistent.
+    fn validate(&self) -> Vec<String> {
+        let mut out = Vec::new();
+        if self.refresh_interval == 0 {
+            out.push(
+                "refresh_interval = 0 is invalid; falling back to 300s. \
+                 Set a positive value or remove the key."
+                    .to_string(),
+            );
+        }
+        out
     }
 
     /// Hot-reload safe fields from disk. Skips startup-only settings

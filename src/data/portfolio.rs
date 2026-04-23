@@ -113,11 +113,13 @@ pub fn load_all_coin_chart_series(
         let t_cost = s.spawn(|| run_register_full(journal_path, &["assets:crypto", "--cost"]));
         let t_asset = s.spawn(|| run_register_full(journal_path, &["assets:crypto"]));
         let t_income = s.spawn(|| run_register_full(journal_path, &["income"]));
-        (
-            t_cost.join().unwrap(),
-            t_asset.join().unwrap(),
-            t_income.join().unwrap(),
-        )
+        // Downgrade panics into `Err` so a crashing register call can't take
+        // the whole refresh down with it.
+        let join = |h: std::thread::ScopedJoinHandle<'_, Result<Vec<RegisterEntry>>>| -> Result<Vec<RegisterEntry>> {
+            h.join()
+                .unwrap_or_else(|_| Err(anyhow::anyhow!("register worker panicked")))
+        };
+        (join(t_cost), join(t_asset), join(t_income))
     });
     let cost_entries = cost_res?;
     let asset_entries = asset_res?;

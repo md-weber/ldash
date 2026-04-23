@@ -2,7 +2,7 @@ use std::collections::HashMap;
 
 use super::*;
 
-fn empty_refresh_result(tabs: [bool; 3]) -> RefreshResult {
+fn empty_refresh_result(tabs: TabFlags) -> RefreshResult {
     RefreshResult {
         tabs,
         price_history: Vec::new(),
@@ -24,7 +24,7 @@ fn apply_refresh_err_keeps_stale_data_and_sets_status() {
     let mut app = App::fixture_with_accounts();
     let stale = app.account_balances.clone();
 
-    let mut r = empty_refresh_result([false, true, false]);
+    let mut r = empty_refresh_result(TabFlags { portfolio: false, accounts: true, monthly: false });
     r.account_balances = TabData::Err("hledger: parse error line 42".to_string());
 
     app.apply_refresh(r);
@@ -45,7 +45,7 @@ fn apply_refresh_err_keeps_stale_data_and_sets_status() {
 #[test]
 fn apply_refresh_ok_overwrites_stale_data() {
     let mut app = App::fixture_with_accounts();
-    let mut r = empty_refresh_result([false, true, false]);
+    let mut r = empty_refresh_result(TabFlags { portfolio: false, accounts: true, monthly: false });
     r.account_balances = TabData::Ok(vec![crate::data::AccountBalance {
         account: "assets:new".to_string(),
         amount: 1.0,
@@ -62,7 +62,7 @@ fn apply_refresh_ok_overwrites_stale_data() {
 fn auto_refresh_missing_journal_sets_status_no_refresh() {
     let mut app = App::fixture_empty();
     app.journal_path = std::path::PathBuf::from("/tmp/does_not_exist_xyz.journal");
-    app.tabs_loaded = [false; 3];
+    app.tabs_loaded = TabFlags::none();
 
     app.auto_refresh();
 

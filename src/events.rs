@@ -181,7 +181,7 @@ fn handle_normal_key(app: &mut App, key: KeyEvent) -> Action {
             }
         }
         KeyCode::Char('e') => app.open_export_prompt(),
-        KeyCode::Char('s') => app.chart_stacked = !app.chart_stacked,
+        KeyCode::Char('s') => app.chart_mode = app.chart_mode.toggle(),
         KeyCode::Char('c') => app.expense_colors = !app.expense_colors,
         KeyCode::Char('r') => app.start_refresh(),
         KeyCode::Char(c)

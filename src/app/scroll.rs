@@ -2,155 +2,105 @@ use ratatui::layout::Rect;
 
 use super::{App, MonthlyFocus, Tab};
 
+/// Identifies which scrollable list is currently in focus, taking the
+/// monthly tab's income/expenses sub-focus into account.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+enum FocusedList {
+    Portfolio,
+    Accounts,
+    MonthlyIncome,
+    MonthlyExpenses,
+}
+
 impl App {
-    pub fn scroll_up(&mut self) {
+    fn focused_list(&self) -> FocusedList {
         match self.tab {
-            Tab::Portfolio => {
-                self.selected_holding = self.selected_holding.saturating_sub(1);
-            }
-            Tab::Accounts => {
-                let i = self.account_state.selected().unwrap_or(0);
-                self.account_state.select(Some(i.saturating_sub(1)));
-            }
+            Tab::Portfolio => FocusedList::Portfolio,
+            Tab::Accounts => FocusedList::Accounts,
             Tab::Monthly => match self.monthly_focus {
-                MonthlyFocus::Income => {
-                    let i = self.income_state.selected().unwrap_or(0);
-                    self.income_state.select(Some(i.saturating_sub(1)));
-                }
-                MonthlyFocus::Expenses => {
-                    let i = self.expense_state.selected().unwrap_or(0);
-                    self.expense_state.select(Some(i.saturating_sub(1)));
-                }
+                MonthlyFocus::Income => FocusedList::MonthlyIncome,
+                MonthlyFocus::Expenses => FocusedList::MonthlyExpenses,
             },
         }
+    }
+
+    fn current_selected(&self) -> usize {
+        match self.focused_list() {
+            FocusedList::Portfolio => self.selected_holding,
+            FocusedList::Accounts => self.account_state.selected().unwrap_or(0),
+            FocusedList::MonthlyIncome => self.income_state.selected().unwrap_or(0),
+            FocusedList::MonthlyExpenses => self.expense_state.selected().unwrap_or(0),
+        }
+    }
+
+    fn current_len(&self) -> usize {
+        match self.focused_list() {
+            FocusedList::Portfolio => self.holdings.len(),
+            FocusedList::Accounts => self.filtered_accounts().len(),
+            FocusedList::MonthlyIncome => self.current_month().map(|m| m.income.len()).unwrap_or(0),
+            FocusedList::MonthlyExpenses => {
+                self.current_month().map(|m| m.expenses.len()).unwrap_or(0)
+            }
+        }
+    }
+
+    fn set_current_selected(&mut self, i: usize) {
+        match self.focused_list() {
+            FocusedList::Portfolio => self.selected_holding = i,
+            FocusedList::Accounts => self.account_state.select(Some(i)),
+            FocusedList::MonthlyIncome => self.income_state.select(Some(i)),
+            FocusedList::MonthlyExpenses => self.expense_state.select(Some(i)),
+        }
+    }
+
+    /// Visible data rows in the current focused list's table area: subtract
+    /// borders (2) + header (1) + header margin (1) = 4.
+    fn current_page_size(&self) -> usize {
+        let area = match self.focused_list() {
+            FocusedList::Portfolio | FocusedList::Accounts => self.geometry.table_area,
+            FocusedList::MonthlyIncome => self.geometry.income_table_area,
+            FocusedList::MonthlyExpenses => self.geometry.expense_table_area,
+        };
+        page_size_for(area).max(1)
+    }
+
+    pub fn scroll_up(&mut self) {
+        let i = self.current_selected();
+        self.set_current_selected(i.saturating_sub(1));
     }
 
     pub fn scroll_down(&mut self) {
-        match self.tab {
-            Tab::Portfolio => {
-                if self.selected_holding + 1 < self.holdings.len() {
-                    self.selected_holding += 1;
-                }
-            }
-            Tab::Accounts => {
-                let i = self.account_state.selected().unwrap_or(0);
-                let len = self.filtered_accounts().len();
-                if i + 1 < len {
-                    self.account_state.select(Some(i + 1));
-                }
-            }
-            Tab::Monthly => match self.monthly_focus {
-                MonthlyFocus::Income => {
-                    let i = self.income_state.selected().unwrap_or(0);
-                    let len = self.current_month().map(|m| m.income.len()).unwrap_or(0);
-                    if i + 1 < len {
-                        self.income_state.select(Some(i + 1));
-                    }
-                }
-                MonthlyFocus::Expenses => {
-                    let i = self.expense_state.selected().unwrap_or(0);
-                    let len = self.current_month().map(|m| m.expenses.len()).unwrap_or(0);
-                    if i + 1 < len {
-                        self.expense_state.select(Some(i + 1));
-                    }
-                }
-            },
+        let i = self.current_selected();
+        let len = self.current_len();
+        if i + 1 < len {
+            self.set_current_selected(i + 1);
         }
-    }
-
-    /// Visible data rows in a table area: subtract borders (2) + header (1) + header margin (1).
-    fn page_size_for(&self, area: Rect) -> usize {
-        (area.height.saturating_sub(4)) as usize
     }
 
     pub fn scroll_page_up(&mut self) {
-        match self.tab {
-            Tab::Portfolio => {
-                let n = self.page_size_for(self.table_area).max(1);
-                self.selected_holding = self.selected_holding.saturating_sub(n);
-            }
-            Tab::Accounts => {
-                let n = self.page_size_for(self.table_area).max(1);
-                let i = self.account_state.selected().unwrap_or(0);
-                self.account_state.select(Some(i.saturating_sub(n)));
-            }
-            Tab::Monthly => match self.monthly_focus {
-                MonthlyFocus::Income => {
-                    let n = self.page_size_for(self.income_table_area).max(1);
-                    let i = self.income_state.selected().unwrap_or(0);
-                    self.income_state.select(Some(i.saturating_sub(n)));
-                }
-                MonthlyFocus::Expenses => {
-                    let n = self.page_size_for(self.expense_table_area).max(1);
-                    let i = self.expense_state.selected().unwrap_or(0);
-                    self.expense_state.select(Some(i.saturating_sub(n)));
-                }
-            },
-        }
+        let n = self.current_page_size();
+        let i = self.current_selected();
+        self.set_current_selected(i.saturating_sub(n));
     }
 
     pub fn scroll_page_down(&mut self) {
-        match self.tab {
-            Tab::Portfolio => {
-                let n = self.page_size_for(self.table_area).max(1);
-                let new = (self.selected_holding + n).min(self.holdings.len().saturating_sub(1));
-                self.selected_holding = new;
-            }
-            Tab::Accounts => {
-                let n = self.page_size_for(self.table_area).max(1);
-                let i = self.account_state.selected().unwrap_or(0);
-                let new = (i + n).min(self.filtered_accounts().len().saturating_sub(1));
-                self.account_state.select(Some(new));
-            }
-            Tab::Monthly => match self.monthly_focus {
-                MonthlyFocus::Income => {
-                    let n = self.page_size_for(self.income_table_area).max(1);
-                    let i = self.income_state.selected().unwrap_or(0);
-                    let len = self.current_month().map(|m| m.income.len()).unwrap_or(0);
-                    self.income_state
-                        .select(Some((i + n).min(len.saturating_sub(1))));
-                }
-                MonthlyFocus::Expenses => {
-                    let n = self.page_size_for(self.expense_table_area).max(1);
-                    let i = self.expense_state.selected().unwrap_or(0);
-                    let len = self.current_month().map(|m| m.expenses.len()).unwrap_or(0);
-                    self.expense_state
-                        .select(Some((i + n).min(len.saturating_sub(1))));
-                }
-            },
-        }
+        let n = self.current_page_size();
+        let i = self.current_selected();
+        let len = self.current_len();
+        let new = (i + n).min(len.saturating_sub(1));
+        self.set_current_selected(new);
     }
 
     pub fn scroll_home(&mut self) {
-        match self.tab {
-            Tab::Portfolio => self.selected_holding = 0,
-            Tab::Accounts => self.account_state.select(Some(0)),
-            Tab::Monthly => match self.monthly_focus {
-                MonthlyFocus::Income => self.income_state.select(Some(0)),
-                MonthlyFocus::Expenses => self.expense_state.select(Some(0)),
-            },
-        }
+        self.set_current_selected(0);
     }
 
     pub fn scroll_end(&mut self) {
-        match self.tab {
-            Tab::Portfolio => {
-                self.selected_holding = self.holdings.len().saturating_sub(1);
-            }
-            Tab::Accounts => {
-                self.account_state
-                    .select(Some(self.filtered_accounts().len().saturating_sub(1)));
-            }
-            Tab::Monthly => match self.monthly_focus {
-                MonthlyFocus::Income => {
-                    let len = self.current_month().map(|m| m.income.len()).unwrap_or(0);
-                    self.income_state.select(Some(len.saturating_sub(1)));
-                }
-                MonthlyFocus::Expenses => {
-                    let len = self.current_month().map(|m| m.expenses.len()).unwrap_or(0);
-                    self.expense_state.select(Some(len.saturating_sub(1)));
-                }
-            },
-        }
+        let len = self.current_len();
+        self.set_current_selected(len.saturating_sub(1));
     }
+}
+
+fn page_size_for(area: Rect) -> usize {
+    (area.height.saturating_sub(4)) as usize
 }

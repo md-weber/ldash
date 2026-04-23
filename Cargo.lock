@@ -575,6 +575,7 @@ dependencies = [
  "notify",
  "ratatui",
  "serde",
+ "serde_json",
  "toml",
 ]
 

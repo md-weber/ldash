@@ -1,9 +1,25 @@
 use anyhow::Result;
 use chrono::NaiveDate;
+use std::collections::VecDeque;
 use std::path::Path;
 
 use super::parse::parse_amount_str;
 use super::{run_hledger, Transaction};
+
+/// Push `txn` into a bounded ring buffer keeping only the last `cap` entries.
+/// Used by the loaders below to avoid materialising the full register history
+/// when only the tail is needed.
+fn push_capped(buf: &mut VecDeque<Transaction>, cap: usize, txn: Transaction) {
+    if cap == 0 {
+        return;
+    }
+    if buf.len() == cap {
+        buf.pop_front();
+    }
+    buf.push_back(txn);
+}
+
+const SEARCH_RESULTS_CAP: usize = 100;
 
 pub fn load_recent_transactions(
     journal_path: &Path,
@@ -21,7 +37,7 @@ pub fn load_recent_transactions(
     let text = run_hledger(&args)?;
     let mut rdr = csv::ReaderBuilder::new().from_reader(text.as_bytes());
 
-    let mut txns = Vec::new();
+    let mut txns: VecDeque<Transaction> = VecDeque::with_capacity(n);
     for row in rdr.records() {
         let fields = match row {
             Ok(r) => r,
@@ -43,19 +59,19 @@ pub fn load_recent_transactions(
             .map(|(a, _)| a)
             .unwrap_or(0.0);
 
-        txns.push(Transaction {
-            date,
-            description,
-            amount,
-            running_total,
-        });
+        push_capped(
+            &mut txns,
+            n,
+            Transaction {
+                date,
+                description,
+                amount,
+                running_total,
+            },
+        );
     }
 
-    if txns.len() > n {
-        txns = txns.split_off(txns.len() - n);
-    }
-
-    Ok(txns)
+    Ok(txns.into_iter().collect())
 }
 
 pub fn search_transactions(journal_path: &Path, query: &str) -> Result<Vec<Transaction>> {
@@ -64,7 +80,7 @@ pub fn search_transactions(journal_path: &Path, query: &str) -> Result<Vec<Trans
     let text = run_hledger(&["-f", jp, "register", "-O", "csv", &query_arg])?;
     let mut rdr = csv::ReaderBuilder::new().from_reader(text.as_bytes());
 
-    let mut txns = Vec::new();
+    let mut txns: VecDeque<Transaction> = VecDeque::with_capacity(SEARCH_RESULTS_CAP);
     for row in rdr.records() {
         let fields = match row {
             Ok(r) => r,
@@ -87,17 +103,17 @@ pub fn search_transactions(journal_path: &Path, query: &str) -> Result<Vec<Trans
             .map(|(a, _)| a)
             .unwrap_or(0.0);
 
-        txns.push(Transaction {
-            date,
-            description: format!("{} ({})", description, account),
-            amount,
-            running_total,
-        });
+        push_capped(
+            &mut txns,
+            SEARCH_RESULTS_CAP,
+            Transaction {
+                date,
+                description: format!("{} ({})", description, account),
+                amount,
+                running_total,
+            },
+        );
     }
 
-    if txns.len() > 100 {
-        txns = txns.split_off(txns.len() - 100);
-    }
-
-    Ok(txns)
+    Ok(txns.into_iter().collect())
 }

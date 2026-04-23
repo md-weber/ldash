@@ -1,8 +1,35 @@
+use std::sync::mpsc;
+
 use ratatui::widgets::TableState;
 
 use crate::data::{self, load_recent_transactions, AccountBalance};
 
-use super::{month_name_to_period, App, Tab};
+use super::{month_name_to_period, App, DetailLoad, Tab};
+
+/// Spawn a background hledger register call. Sends a `DetailLoad` over `tx`
+/// when done. Used by `open_account_detail`, `open_expense_detail` and
+/// `open_income_detail` so the UI thread keeps rendering (loading spinner
+/// stays visible) while hledger churns.
+fn spawn_detail_load(
+    tx: mpsc::Sender<DetailLoad>,
+    journal_path: std::path::PathBuf,
+    name: String,
+    n: usize,
+    period: Option<String>,
+    currency_symbol: String,
+) {
+    std::thread::spawn(move || {
+        let result = load_recent_transactions(
+            &journal_path,
+            &name,
+            n,
+            period.as_deref(),
+            &currency_symbol,
+        )
+        .map_err(|e| e.to_string());
+        let _ = tx.send(DetailLoad { name, result });
+    });
+}
 
 impl App {
     pub fn has_open_detail(&self) -> bool {
@@ -31,23 +58,28 @@ impl App {
     }
 
     pub fn open_account_detail(&mut self) {
-        if self.tab != Tab::Accounts || self.account_detail.is_some() {
+        if self.tab != Tab::Accounts
+            || self.account_detail.is_some()
+            || self.account_detail_rx.is_some()
+        {
             return;
         }
         let sel = self.account_state.selected().unwrap_or(0);
-        let account = self.filtered_accounts().get(sel).map(|b| b.account.clone());
-        if let Some(account) = account {
-            match load_recent_transactions(&self.journal_path, &account, 30, None, &self.config.currency_symbol) {
-                Ok(txns) => {
-                    self.detail_account_name = Some(account);
-                    self.account_detail = Some(txns);
-                    self.detail_state = TableState::default().with_selected(0);
-                }
-                Err(e) => {
-                    self.status_msg = format!("Error loading transactions: {e}");
-                }
-            }
-        }
+        let account = match self.filtered_accounts().get(sel).map(|b| b.account.clone()) {
+            Some(a) => a,
+            None => return,
+        };
+        let (tx, rx) = mpsc::channel();
+        self.account_detail_rx = Some(rx);
+        self.status_msg = format!("Loading {account}…");
+        spawn_detail_load(
+            tx,
+            self.journal_path.clone(),
+            account,
+            30,
+            None,
+            self.config.currency_symbol.clone(),
+        );
     }
 
     pub fn close_account_detail(&mut self) {
@@ -56,7 +88,11 @@ impl App {
     }
 
     pub fn open_expense_detail(&mut self) {
-        if self.tab != Tab::Monthly || self.expense_detail.is_some() || self.current_month_is_forecast() {
+        if self.tab != Tab::Monthly
+            || self.expense_detail.is_some()
+            || self.expense_detail_rx.is_some()
+            || self.current_month_is_forecast()
+        {
             return;
         }
         let sel = self.expense_state.selected().unwrap_or(0);
@@ -70,16 +106,17 @@ impl App {
             },
             None => return,
         };
-        match load_recent_transactions(&self.journal_path, &category, 50, Some(&period), &self.config.currency_symbol) {
-            Ok(txns) => {
-                self.detail_expense_name = Some(category);
-                self.expense_detail = Some(txns);
-                self.detail_state = TableState::default().with_selected(0);
-            }
-            Err(e) => {
-                self.status_msg = format!("Error loading transactions: {e}");
-            }
-        }
+        let (tx, rx) = mpsc::channel();
+        self.expense_detail_rx = Some(rx);
+        self.status_msg = format!("Loading {category}…");
+        spawn_detail_load(
+            tx,
+            self.journal_path.clone(),
+            category,
+            50,
+            Some(period),
+            self.config.currency_symbol.clone(),
+        );
     }
 
     pub fn close_expense_detail(&mut self) {
@@ -88,7 +125,11 @@ impl App {
     }
 
     pub fn open_income_detail(&mut self) {
-        if self.tab != Tab::Monthly || self.income_detail.is_some() || self.current_month_is_forecast() {
+        if self.tab != Tab::Monthly
+            || self.income_detail.is_some()
+            || self.income_detail_rx.is_some()
+            || self.current_month_is_forecast()
+        {
             return;
         }
         let sel = self.income_state.selected().unwrap_or(0);
@@ -102,14 +143,17 @@ impl App {
             },
             None => return,
         };
-        match load_recent_transactions(&self.journal_path, &category, 50, Some(&period), &self.config.currency_symbol) {
-            Ok(txns) => {
-                self.detail_income_name = Some(category);
-                self.income_detail = Some(txns);
-                self.detail_state = TableState::default().with_selected(0);
-            }
-            Err(e) => self.status_msg = format!("Error loading transactions: {e}"),
-        }
+        let (tx, rx) = mpsc::channel();
+        self.income_detail_rx = Some(rx);
+        self.status_msg = format!("Loading {category}…");
+        spawn_detail_load(
+            tx,
+            self.journal_path.clone(),
+            category,
+            50,
+            Some(period),
+            self.config.currency_symbol.clone(),
+        );
     }
 
     pub fn close_income_detail(&mut self) {
