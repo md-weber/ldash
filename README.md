@@ -10,13 +10,6 @@ Built with [Ratatui](https://ratatui.rs) and Rust.
 |:---------:|:--------:|:-------:|
 | ![Portfolio tab](screenshots/portfolio.png) | ![Accounts tab](screenshots/accounts.png) | ![Monthly tab](screenshots/monthly.png) |
 
-<!--
-  Add your screenshots to the screenshots/ directory:
-    screenshots/portfolio.png
-    screenshots/accounts.png
-    screenshots/monthly.png
--->
-
 ## Features
 
 - **Crypto Portfolio** — Holdings table with price, value, allocation %, and P/L tracking (invested vs price gain vs staking rewards)
@@ -39,19 +32,26 @@ Built with [Ratatui](https://ratatui.rs) and Rust.
 
 ## Installation
 
+### Homebrew (macOS / Linux)
+
+```bash
+brew tap md-weber/ldash
+brew install ldash
+```
+
+### From source
+
 ```bash
 git clone https://codeberg.org/md-weber/ldash.git
 cd ldash
 cargo install --path .
 ```
 
-Homebrew tap support is planned for a `1.0.x` patch release. For now, install from source (above), AUR, or Nix.
-
 ## Usage
 
 ```bash
 # Pass journal path directly
-ldash /path/to/all.journal
+ldash -f /path/to/all.journal
 
 # Or set the environment variable
 export LEDGER_FILE=/path/to/all.journal
