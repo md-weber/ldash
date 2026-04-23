@@ -53,7 +53,7 @@ src/data/
   prices.rs       load_price_history, latest_prices
 ```
 
-### 1.3 `src/main.rs` event handler (lines ~290–465)
+### 1.3 `src/main.rs` event handler (lines ~290–465) ✅ DONE
 
 The nested key-handling match is unmaintainable. Extract `src/events.rs`:
 
@@ -64,7 +64,7 @@ pub fn handle_key(app: &mut App, key: KeyEvent) -> Action { ... }
 
 Sub-functions per modal mode (`handle_export_prompt_key`, `handle_search_key`, `handle_help_key`, `handle_filter_key`, `handle_normal_key`).
 
-### 1.4 `src/ui/mod.rs` (687 lines)
+### 1.4 `src/ui/mod.rs` (687 lines) - ✅ DONE
 
 Move overlay renderers (`render_search_overlay`, `render_help_popup`, `render_loading_overlay`, `render_price_alerts`, `render_status`) into `src/ui/overlays.rs`. Keep theme + entry point + tab/title/content dispatch in `mod.rs`.
 
@@ -73,6 +73,7 @@ Move overlay renderers (`render_search_overlay`, `render_help_popup`, `render_lo
 ## 2. Refactor (Behaviour-Preserving)
 
 1. **`apply_refresh` boilerplate**. 9 nearly-identical `match TabData<T>` arms. Extract a macro:
+
    ```rust
    macro_rules! apply_field { ($field:expr, $src:expr, $errs:expr) => {
        match $src {

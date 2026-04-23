@@ -1,6 +1,7 @@
 mod app;
 mod config;
 mod data;
+mod events;
 mod ui;
 mod watcher;
 
@@ -8,12 +9,13 @@ use anyhow::{Context, Result};
 use app::App;
 use clap::Parser;
 use crossterm::{
-    event::{self, DisableMouseCapture, EnableMouseCapture, Event, KeyCode, KeyEventKind},
+    event::{self, DisableMouseCapture, EnableMouseCapture, Event},
     terminal::{
         disable_raw_mode, enable_raw_mode, EnterAlternateScreen, LeaveAlternateScreen, SetTitle,
     },
     ExecutableCommand,
 };
+use events::{handle_key, Action};
 use ratatui::prelude::*;
 use std::{
     io,
@@ -73,7 +75,7 @@ const EXIT_OK: u8 = 0;
 const EXIT_CONFIG: u8 = 1;
 const EXIT_NO_HLEDGER: u8 = 2;
 
-fn copy_to_clipboard(text: &str) -> Result<()> {
+pub(crate) fn copy_to_clipboard(text: &str) -> Result<()> {
     #[cfg(target_os = "macos")]
     let mut cmd = std::process::Command::new("pbcopy");
     #[cfg(not(target_os = "macos"))]
@@ -288,181 +290,8 @@ fn run(
             }
 
             if let Event::Key(key) = ev {
-                if key.kind == KeyEventKind::Press {
-                    if app.export_prompt_active {
-                        match key.code {
-                            KeyCode::Esc => app.cancel_export_prompt(),
-                            KeyCode::Enter => {
-                                let path = app.export_prompt_path.clone();
-                                app.export_prompt_active = false;
-                                match app.export_to_file(&path) {
-                                    Ok(written) => app.status_msg = format!("Exported → {written}"),
-                                    Err(e) => app.status_msg = format!("Export error: {e}"),
-                                }
-                            }
-                            KeyCode::Backspace => {
-                                app.export_prompt_path.pop();
-                            }
-                            KeyCode::Char(c) => app.export_prompt_path.push(c),
-                            _ => {}
-                        }
-                    } else if app.search_active {
-                        match key.code {
-                            KeyCode::Esc => app.close_search(),
-                            KeyCode::Enter => app.execute_search(),
-                            KeyCode::Backspace => {
-                                app.search_query.pop();
-                            }
-                            KeyCode::Char(c) => app.search_query.push(c),
-                            KeyCode::Up => app.search_scroll_up(),
-                            KeyCode::Down => app.search_scroll_down(),
-                            _ => {}
-                        }
-                    } else if app.show_alerts {
-                        app.show_alerts = false;
-                        app.alert_dismissed = true;
-                        continue;
-                    } else if app.show_help {
-                        match key.code {
-                            KeyCode::Char('?') | KeyCode::Char('q') | KeyCode::Esc => {
-                                app.show_help = false;
-                            }
-                            _ => {}
-                        }
-                    } else if app.account_filter_active {
-                        match key.code {
-                            KeyCode::Esc => {
-                                if app.account_detail.is_some() {
-                                    app.close_account_detail();
-                                } else {
-                                    app.close_account_filter();
-                                }
-                            }
-                            KeyCode::Backspace => app.account_filter_backspace(),
-                            KeyCode::Up | KeyCode::Char('k') => {
-                                if app.has_open_detail() {
-                                    app.detail_scroll_up();
-                                } else {
-                                    app.scroll_up();
-                                }
-                            }
-                            KeyCode::Down | KeyCode::Char('j') => {
-                                if app.has_open_detail() {
-                                    app.detail_scroll_down();
-                                } else {
-                                    app.scroll_down();
-                                }
-                            }
-                            KeyCode::Enter => app.open_account_detail(),
-                            KeyCode::Char(c) => app.account_filter_push(c),
-                            _ => {}
-                        }
-                    } else {
-                        match key.code {
-                            KeyCode::Char('q') => break,
-                            KeyCode::Esc => {
-                                if app.account_detail.is_some() {
-                                    app.close_account_detail();
-                                } else if app.income_detail.is_some() {
-                                    app.close_income_detail();
-                                } else if app.expense_detail.is_some() {
-                                    app.close_expense_detail();
-                                } else if !app.account_filter.is_empty() {
-                                    app.close_account_filter();
-                                } else {
-                                    break;
-                                }
-                            }
-                            KeyCode::Enter => match app.tab {
-                                app::Tab::Accounts => app.open_account_detail(),
-                                app::Tab::Monthly => match app.monthly_focus {
-                                    app::MonthlyFocus::Income => app.open_income_detail(),
-                                    app::MonthlyFocus::Expenses => app.open_expense_detail(),
-                                },
-                                _ => {}
-                            },
-                            KeyCode::Char('i') if app.tab == app::Tab::Monthly => {
-                                app.toggle_monthly_focus()
-                            }
-                            KeyCode::Char('/') => app.open_search(),
-                            KeyCode::Char('?') => app.show_help = true,
-                            KeyCode::Tab => app.next_tab(),
-                            KeyCode::BackTab => app.prev_tab(),
-                            KeyCode::Char('1') => app.select_tab(0),
-                            KeyCode::Char('2') => app.select_tab(1),
-                            KeyCode::Char('3') => app.select_tab(2),
-                            KeyCode::Up | KeyCode::Char('k') => {
-                                if app.has_open_detail() {
-                                    app.detail_scroll_up();
-                                } else {
-                                    app.scroll_up();
-                                }
-                            }
-                            KeyCode::Down | KeyCode::Char('j') => {
-                                if app.has_open_detail() {
-                                    app.detail_scroll_down();
-                                } else {
-                                    app.scroll_down();
-                                }
-                            }
-                            KeyCode::PageUp => app.scroll_page_up(),
-                            KeyCode::PageDown => app.scroll_page_down(),
-                            KeyCode::Home => app.scroll_home(),
-                            KeyCode::End => app.scroll_end(),
-                            KeyCode::Left | KeyCode::Char('h') => match app.tab {
-                                app::Tab::Portfolio => app.portfolio_range_left(),
-                                app::Tab::Accounts => app.nw_range_left(),
-                                app::Tab::Monthly => app.month_left(),
-                            },
-                            KeyCode::Right | KeyCode::Char('l') => match app.tab {
-                                app::Tab::Portfolio => app.portfolio_range_right(),
-                                app::Tab::Accounts => app.nw_range_right(),
-                                app::Tab::Monthly => app.month_right(),
-                            },
-                            KeyCode::Char('y') if app.tab == app::Tab::Monthly => {
-                                app.cycle_year_back();
-                            }
-                            KeyCode::Char('Y') => {
-                                if app.tab == app::Tab::Monthly {
-                                    app.cycle_year_forward();
-                                } else {
-                                    let data = app.export_current_view();
-                                    match copy_to_clipboard(&data) {
-                                        Ok(()) => {
-                                            app.status_msg = "Copied to clipboard".to_string()
-                                        }
-                                        Err(e) => app.status_msg = format!("Clipboard error: {e}"),
-                                    }
-                                }
-                            }
-                            KeyCode::Char('e') => app.open_export_prompt(),
-                            KeyCode::Char('s') => app.chart_stacked = !app.chart_stacked,
-                            KeyCode::Char('c') => app.expense_colors = !app.expense_colors,
-                            KeyCode::Char('r') => app.start_refresh(),
-                            KeyCode::Char(c)
-                                if app.tab == app::Tab::Accounts
-                                    && !matches!(
-                                        c,
-                                        'q' | '/'
-                                            | '?'
-                                            | 'r'
-                                            | 's'
-                                            | 'c'
-                                            | 'y'
-                                            | 'Y'
-                                            | 'e'
-                                            | '1'
-                                            | '2'
-                                            | '3'
-                                    ) =>
-                            {
-                                app.account_filter_active = true;
-                                app.account_filter.push(c);
-                                app.account_state.select(Some(0));
-                            }
-                            _ => {}
-                        }
-                    }
+                if let Action::Quit = handle_key(&mut app, key) {
+                    break;
                 }
             }
         }
