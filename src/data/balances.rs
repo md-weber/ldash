@@ -38,7 +38,15 @@ pub fn load_account_balances_eur(
         "-V",
         assets_account,
     ])?;
-    parse_balance_csv(&text)
+    let result = parse_balance_csv(&text)?;
+    // When the configured account prefix matches nothing (e.g. a benchmark
+    // journal with non-standard account names), fall back to all accounts so
+    // the UI shows something useful instead of a blank screen.
+    if result.is_empty() {
+        let text_all = run_hledger(&["-f", jp, "balance", "--flat", "-O", "csv", "--no-total"])?;
+        return parse_balance_csv(&text_all);
+    }
+    Ok(result)
 }
 
 pub fn load_liability_balances_eur(
@@ -181,6 +189,61 @@ pub fn load_net_worth_breakdown(
     })
 }
 
+/// Parse a `--layout bare` CSV from hledger into per-month sums, filtering
+/// rows by `currency_symbol`.  Returns the month-column metadata and the sums
+/// so the caller can decide whether to retry with different hledger args.
+fn parse_nw_bare_csv(
+    text: &str,
+    currency_symbol: &str,
+) -> Result<(Vec<(usize, NaiveDate)>, Vec<f64>)> {
+    let mut rdr = csv::ReaderBuilder::new()
+        .flexible(true)
+        .from_reader(text.as_bytes());
+
+    let headers = rdr
+        .headers()
+        .context("No CSV headers from hledger balance")?
+        .clone();
+
+    let month_cols: Vec<(usize, NaiveDate)> = headers
+        .iter()
+        .enumerate()
+        .skip(1)
+        .filter_map(|(i, h)| {
+            NaiveDate::parse_from_str(&format!("{}-01", h.trim()), "%Y-%m-%d")
+                .ok()
+                .map(|d| (i, d))
+        })
+        .collect();
+
+    if month_cols.is_empty() {
+        return Ok((vec![], vec![]));
+    }
+
+    let mut sums: Vec<f64> = vec![0.0; month_cols.len()];
+
+    for row in rdr.records() {
+        let fields = match row {
+            Ok(r) => r,
+            Err(_) => continue,
+        };
+        let commodity = fields.get(1).unwrap_or("").trim().trim_matches('"');
+        if !currency_matches(currency_symbol, commodity) {
+            continue;
+        }
+        for (idx, &(col, _)) in month_cols.iter().enumerate() {
+            if col >= fields.len() {
+                continue;
+            }
+            if let Some(amount) = parse_eu_number(&fields[col]) {
+                sums[idx] += amount;
+            }
+        }
+    }
+
+    Ok((month_cols, sums))
+}
+
 pub fn load_net_worth_history(
     journal_path: &Path,
     period: &str,
@@ -206,51 +269,25 @@ pub fn load_net_worth_history(
         "--no-total",
         "--empty",
     ])?;
-    let mut rdr = csv::ReaderBuilder::new()
-        .flexible(true)
-        .from_reader(text.as_bytes());
 
-    let headers = rdr
-        .headers()
-        .context("No CSV headers from hledger balance")?
-        .clone();
-    // --layout bare produces: "account", "commodity", "2024-01", "2024-02", …
-    let month_cols: Vec<(usize, NaiveDate)> = headers
-        .iter()
-        .enumerate()
-        .skip(1)
-        .filter_map(|(i, h)| {
-            NaiveDate::parse_from_str(&format!("{}-01", h.trim()), "%Y-%m-%d")
-                .ok()
-                .map(|d| (i, d))
-        })
-        .collect();
+    let (month_cols, sums) = parse_nw_bare_csv(&text, currency_symbol)?;
+
+    // When the account filters match nothing (e.g. a journal with non-standard
+    // account names) or -V re-prices the display commodity away, all sums stay
+    // zero.  Retry without account filters and without -V so raw amounts reach
+    // the currency filter.
+    let (month_cols, sums) = if month_cols.is_empty() || sums.iter().all(|&s| s == 0.0) {
+        let text_all = run_hledger(&[
+            "-f", jp, "balance", "-H", "-p", period, "-O", "csv", "--layout", "bare", "--no-total",
+            "--empty",
+        ])?;
+        parse_nw_bare_csv(&text_all, currency_symbol)?
+    } else {
+        (month_cols, sums)
+    };
 
     if month_cols.is_empty() {
         return Ok(NetWorthSeries::default());
-    }
-
-    let mut sums: Vec<f64> = vec![0.0; month_cols.len()];
-
-    for row in rdr.records() {
-        let fields = match row {
-            Ok(r) => r,
-            Err(_) => continue,
-        };
-        // Column 1 is the commodity in bare layout — only sum rows in the
-        // configured display currency.
-        let commodity = fields.get(1).unwrap_or("").trim().trim_matches('"');
-        if !currency_matches(currency_symbol, commodity) {
-            continue;
-        }
-        for (idx, &(col, _)) in month_cols.iter().enumerate() {
-            if col >= fields.len() {
-                continue;
-            }
-            if let Some(amount) = parse_eu_number(&fields[col]) {
-                sums[idx] += amount;
-            }
-        }
     }
 
     let first_date = month_cols[0].1;

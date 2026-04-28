@@ -19,7 +19,79 @@ pub(crate) const MONTHLY_BARS_PER_GROUP: u16 = 2;
 pub(crate) const MONTHLY_GROUP_WIDTH: u16 =
     MONTHLY_BARS_PER_GROUP * MONTHLY_BAR_WIDTH + MONTHLY_BAR_GAP + MONTHLY_GROUP_GAP;
 
+fn render_monthly_no_data(f: &mut Frame, app: &App, area: Rect, theme: &Theme) {
+    let exp = &app.config.expenses_account;
+    let inc = &app.config.income_account;
+
+    let lines = vec![
+        Line::from(""),
+        Line::from(Span::styled(
+            "No income or expense data found",
+            Style::default().fg(theme.accent).bold(),
+        )),
+        Line::from(""),
+        Line::from(Span::styled(
+            format!("Looking for accounts under  \"{inc}\"  and  \"{exp}\""),
+            Style::default().fg(theme.fg),
+        )),
+        Line::from(""),
+        Line::from(Span::styled(
+            "To fix this, set the matching top-level account names in your config:",
+            Style::default().fg(theme.muted),
+        )),
+        Line::from(""),
+        Line::from(Span::styled(
+            "    ~/.config/ldash/config.toml",
+            Style::default().fg(theme.accent),
+        )),
+        Line::from(""),
+        Line::from(Span::styled(
+            "    income_account   = \"revenues\"   # or whatever your journal uses",
+            Style::default().fg(theme.muted),
+        )),
+        Line::from(Span::styled(
+            "    expenses_account = \"expenses\"",
+            Style::default().fg(theme.muted),
+        )),
+    ];
+
+    let block = Block::default()
+        .title(Span::styled(
+            " Monthly ",
+            Style::default().fg(theme.accent).bold(),
+        ))
+        .borders(Borders::ALL)
+        .border_type(BorderType::Rounded)
+        .border_style(Style::default().fg(theme.muted))
+        .style(Style::default().bg(theme.background));
+
+    let inner = block.inner(area);
+    f.render_widget(block, area);
+
+    // Vertically centre the message inside the block.
+    let msg_height = lines.len() as u16;
+    let top_pad = inner.height.saturating_sub(msg_height) / 2;
+    let msg_area = Rect {
+        y: inner.y + top_pad,
+        height: msg_height.min(inner.height),
+        ..inner
+    };
+
+    f.render_widget(
+        Paragraph::new(lines).alignment(Alignment::Center),
+        msg_area,
+    );
+}
+
 pub(super) fn render_monthly(f: &mut Frame, app: &mut App, area: Rect, theme: &Theme) {
+    // Data finished loading but nothing came back — the journal likely has no
+    // income/expense accounts under the configured prefixes.  Show a
+    // configuration hint instead of a blank screen.
+    if app.tabs_loaded.monthly && !app.loading && app.combined_months.is_empty() {
+        render_monthly_no_data(f, app, area, theme);
+        return;
+    }
+
     let narrow = area.width < 100;
     let very_narrow = area.width < 80;
     // Show forecast chart side-by-side only for the current year on wide screens.

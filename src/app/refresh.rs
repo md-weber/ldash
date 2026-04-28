@@ -417,6 +417,12 @@ impl App {
         apply_field_silent!(self.monthly_forecast, r.monthly_forecast);
         self.rebuild_combined_months();
 
+        // Current year has no data → jump to the last year with actual entries
+        // so the Monthly tab doesn't open on a blank screen.
+        if self.combined_months.is_empty() && self.monthly_year_offset == 0 && r.tabs.monthly {
+            self.jump_to_last_entry();
+        }
+
         if !self.holdings.is_empty() && self.selected_holding >= self.holdings.len() {
             self.selected_holding = self.holdings.len() - 1;
         }

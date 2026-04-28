@@ -22,7 +22,10 @@ pub fn parse_eu_number(s: &str) -> Option<f64> {
     Some(if negative { -val } else { val })
 }
 
-/// Parse an amount string like "4,40140000 SOL" or "1430,15 €" into (amount, commodity)
+/// Parse an amount string like "4,40140000 SOL" or "1430,15 €" into (amount, commodity).
+///
+/// Only handles a **single** commodity amount. For multi-commodity strings use
+/// `parse_first_amount_str`.
 pub(super) fn parse_amount_str(s: &str) -> Option<(f64, String)> {
     let s = s.trim().trim_matches('"');
     if s == "0" || s.is_empty() {
@@ -35,6 +38,26 @@ pub(super) fn parse_amount_str(s: &str) -> Option<(f64, String)> {
 
     let amount = parse_eu_number(num_str)?;
     Some((amount, commodity))
+}
+
+/// Parse the **first** valid amount from a balance string that may contain
+/// multiple comma-separated commodities, e.g. `"652.00 A, 601.00 C, -3.00 D"`.
+///
+/// Falls back to `parse_amount_str` for single-commodity strings so that the
+/// common path has no overhead.
+pub(super) fn parse_first_amount_str(s: &str) -> Option<(f64, String)> {
+    // Fast path: if there's no ", " separator the string holds a single
+    // commodity and the standard parser handles it correctly.
+    if !s.contains(", ") {
+        return parse_amount_str(s);
+    }
+    // Multi-commodity: try each part in order and return the first that parses.
+    for part in s.split(", ") {
+        if let Some(result) = parse_amount_str(part.trim()) {
+            return Some(result);
+        }
+    }
+    None
 }
 
 pub(super) fn parse_balance_csv(text: &str) -> Result<Vec<super::AccountBalance>> {
@@ -73,7 +96,7 @@ pub(super) fn parse_balance_csv(text: &str) -> Result<Vec<super::AccountBalance>
         if balance == "0" || balance.is_empty() {
             continue;
         }
-        if let Some((amount, commodity)) = parse_amount_str(balance) {
+        if let Some((amount, commodity)) = parse_first_amount_str(balance) {
             if amount.abs() > 1e-10 {
                 result.push(super::AccountBalance {
                     account,
@@ -350,6 +373,34 @@ mod tests {
         assert_eq!(com, "€");
     }
 
+    // ── parse_first_amount_str ────────────────────────────────────────────────
+
+    #[test]
+    fn first_amount_single_commodity() {
+        let (amt, com) = parse_first_amount_str("652.00 A").unwrap();
+        assert!((amt - 652.0).abs() < 1e-10);
+        assert_eq!(com, "A");
+    }
+
+    #[test]
+    fn first_amount_multi_commodity_takes_first() {
+        let (amt, com) = parse_first_amount_str("652.00 A, 601.00 C, 551.00 E").unwrap();
+        assert!((amt - 652.0).abs() < 1e-10);
+        assert_eq!(com, "A");
+    }
+
+    #[test]
+    fn first_amount_multi_commodity_negative() {
+        let (amt, com) = parse_first_amount_str("-651.00 A, -0.71 B").unwrap();
+        assert!((amt - (-651.0)).abs() < 1e-10);
+        assert_eq!(com, "A");
+    }
+
+    #[test]
+    fn first_amount_zero_string_returns_none() {
+        assert_eq!(parse_first_amount_str("0"), None);
+    }
+
     // ── parse_balance_csv ─────────────────────────────────────────────────────
 
     #[test]
@@ -395,6 +446,16 @@ mod tests {
     fn balance_csv_empty_input() {
         let result = parse_balance_csv("").unwrap();
         assert!(result.is_empty());
+    }
+
+    #[test]
+    fn balance_csv_multi_commodity_takes_first() {
+        let csv = "account,balance\n\"1\",\"652.00 A, 601.00 C, 551.00 E\"\n";
+        let result = parse_balance_csv(csv).unwrap();
+        assert_eq!(result.len(), 1);
+        assert_eq!(result[0].account, "1");
+        assert!((result[0].amount - 652.0).abs() < 1e-10);
+        assert_eq!(result[0].commodity, "A");
     }
 
     #[test]

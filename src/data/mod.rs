@@ -36,18 +36,29 @@ const KNOWN_FIAT: &[&str] = &[
 
 /// Detect the primary fiat currency used in a journal by running `hledger commodities`.
 ///
-/// Returns `None` when hledger fails, the journal has no transactions, or no
-/// recognised fiat commodity is found (e.g. crypto-only journals).
+/// Prefers known fiat currencies (EUR, USD, …). Falls back to the first
+/// commodity found so that non-standard journals (e.g. single-letter benchmark
+/// files) still get a usable display currency instead of silently defaulting to
+/// the config value and showing nothing.
+///
+/// Returns `None` when hledger fails or the journal has no commodities at all.
 pub fn detect_journal_currency(journal_path: &Path) -> Option<String> {
     let jp = journal_path.to_str()?;
     let output = run_hledger(&["-f", jp, "commodities"]).ok()?;
+    let mut first_commodity: Option<String> = None;
     for line in output.lines() {
         let c = canonical_currency(line.trim());
+        if c.is_empty() {
+            continue;
+        }
+        if first_commodity.is_none() {
+            first_commodity = Some(c.clone());
+        }
         if KNOWN_FIAT.contains(&c.as_str()) {
             return Some(c);
         }
     }
-    None
+    first_commodity
 }
 
 pub(crate) fn canonical_currency(raw: &str) -> String {
