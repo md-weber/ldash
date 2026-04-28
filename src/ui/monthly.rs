@@ -77,10 +77,7 @@ fn render_monthly_no_data(f: &mut Frame, app: &App, area: Rect, theme: &Theme) {
         ..inner
     };
 
-    f.render_widget(
-        Paragraph::new(lines).alignment(Alignment::Center),
-        msg_area,
-    );
+    f.render_widget(Paragraph::new(lines).alignment(Alignment::Center), msg_area);
 }
 
 pub(super) fn render_monthly(f: &mut Frame, app: &mut App, area: Rect, theme: &Theme) {
@@ -125,7 +122,9 @@ pub(super) fn render_monthly(f: &mut Frame, app: &mut App, area: Rect, theme: &T
 
     if let (Some(txns), Some(name)) = (&app.income_detail.clone(), &app.detail_income_name.clone())
     {
-        let short = app.config.strip_account_prefix(name, &app.config.income_account.clone());
+        let short = app
+            .config
+            .strip_account_prefix(name, &app.config.income_account.clone());
         let month = app
             .current_month()
             .map(|m| m.month_name.as_str())
@@ -148,7 +147,9 @@ pub(super) fn render_monthly(f: &mut Frame, app: &mut App, area: Rect, theme: &T
         &app.expense_detail.clone(),
         &app.detail_expense_name.clone(),
     ) {
-        let short = app.config.strip_account_prefix(name, &app.config.expenses_account.clone());
+        let short = app
+            .config
+            .strip_account_prefix(name, &app.config.expenses_account.clone());
         let month = app
             .current_month()
             .map(|m| m.month_name.as_str())
@@ -224,7 +225,10 @@ fn render_monthly_chart(f: &mut Frame, app: &App, area: Rect, theme: &Theme) {
     let chart_title = if app.monthly_year_offset == 0 {
         " Income vs Expenses  [G last entry] ".to_string()
     } else {
-        format!(" Income vs Expenses ({})  [y/Y]  [G last entry] ", app.displayed_year())
+        format!(
+            " Income vs Expenses ({})  [y/Y]  [G last entry] ",
+            app.displayed_year()
+        )
     };
 
     let mut chart = BarChart::default()
@@ -389,7 +393,9 @@ fn render_monthly_summary(f: &mut Frame, app: &App, area: Rect, theme: &Theme) {
                 ),
             ]));
             for b in &over {
-                let short = app.config.strip_account_prefix(&b.category, &app.config.expenses_account.clone());
+                let short = app
+                    .config
+                    .strip_account_prefix(&b.category, &app.config.expenses_account.clone());
                 text.push(Line::from(vec![
                     Span::styled(format!("    {short}: "), Style::default().fg(theme.fg)),
                     Span::styled(
@@ -599,14 +605,15 @@ fn render_monthly_income(f: &mut Frame, app: &mut App, area: Rect, theme: &Theme
         .income
         .iter()
         .map(|(name, amount)| {
-            let short = app.config.strip_account_prefix(name, &app.config.income_account.clone());
+            let short = app
+                .config
+                .strip_account_prefix(name, &app.config.income_account.clone());
             let override_color = income_color(short, app, theme);
             let name_color = override_color.unwrap_or(theme.fg);
             let amt_color = override_color.unwrap_or(theme.positive);
             let mut cells = vec![
                 Cell::from(short.to_string()).style(Style::default().fg(name_color)),
-                Cell::from(app.config.fmt_amount(*amount, 2))
-                    .style(Style::default().fg(amt_color)),
+                Cell::from(app.config.fmt_amount(*amount, 2)).style(Style::default().fg(amt_color)),
             ];
             if !narrow {
                 let bar_len = ((amount / max_val) * bar_width as f64) as usize;
@@ -684,7 +691,9 @@ fn render_monthly_expenses(f: &mut Frame, app: &mut App, area: Rect, theme: &The
         .expenses
         .iter()
         .map(|(name, amount)| {
-            let short = app.config.strip_account_prefix(name, &app.config.expenses_account.clone());
+            let short = app
+                .config
+                .strip_account_prefix(name, &app.config.expenses_account.clone());
             let color = if app.expense_colors {
                 expense_color(short, app, theme)
             } else {

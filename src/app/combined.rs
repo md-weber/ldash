@@ -135,12 +135,10 @@ impl App {
         self.status_msg = "Loading net worth…".to_string();
 
         std::thread::spawn(move || {
-            let history =
-                load_net_worth_history(&jp, &period, &currency, &assets, &liabilities)
-                    .map_err(|e| e.to_string());
+            let history = load_net_worth_history(&jp, &period, &currency, &assets, &liabilities)
+                .map_err(|e| e.to_string());
             // Breakdown is non-fatal: chart simply omits the layer if it fails.
-            let breakdown =
-                load_net_worth_breakdown(&jp, &period, &currency, &assets).ok();
+            let breakdown = load_net_worth_breakdown(&jp, &period, &currency, &assets).ok();
             let _ = tx.send(NetWorthLoad { history, breakdown });
         });
     }

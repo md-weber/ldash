@@ -2,7 +2,7 @@
 //! across the render code. Behaviour-preserving sugar: each macro expands to
 //! exactly the equivalent `Style::default()` chain.
 //!
-//! ```ignore
+//! ```text
 //! fg!(theme.muted)             // Style::default().fg(theme.muted)
 //! fg!(theme.muted, bold)       // Style::default().fg(theme.muted).bold()
 //! fg_bg!(theme.fg, theme.bg)   // Style::default().fg(...).bg(...)

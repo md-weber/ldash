@@ -187,8 +187,8 @@ pub fn last_journal_year(journal_path: &Path) -> Option<i32> {
         if trimmed.is_empty() {
             continue;
         }
-        let date_part = trimmed.split(|c: char| c == ' ' || c == '\t').next()?;
-        let year_str = date_part.split(|c: char| c == '-' || c == '/').next()?;
+        let date_part = trimmed.split([' ', '\t']).next()?;
+        let year_str = date_part.split(['-', '/']).next()?;
         if let Ok(y) = year_str.parse::<i32>() {
             return Some(y);
         }

@@ -289,7 +289,6 @@ pub struct CashFlowForecast {
     pub max_y: f64,
 }
 
-
 pub fn month_name_to_period(month_name: &str, year: i32) -> String {
     let month_num = crate::data::month_index(month_name).unwrap_or(1);
     format!("{year}-{month_num:02}")

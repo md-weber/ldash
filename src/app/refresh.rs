@@ -61,12 +61,7 @@ fn spawn_all(
         });
         let t_bd = want_accounts.then(|| {
             s.spawn(|| {
-                load_net_worth_breakdown(
-                    journal_path,
-                    nw_period,
-                    currency_symbol,
-                    assets_account,
-                )
+                load_net_worth_breakdown(journal_path, nw_period, currency_symbol, assets_account)
             })
         });
         let t_monthly =

@@ -153,16 +153,14 @@ fn integration_currency_alias_eur_symbol_loaders() {
         "expected monthly rows with EUR alias"
     );
 
-    let nw =
-        ldash::data::load_net_worth_history(&path, "monthly", "€", "assets", "liabilities")
-            .unwrap();
+    let nw = ldash::data::load_net_worth_history(&path, "monthly", "€", "assets", "liabilities")
+        .unwrap();
     assert!(
         !nw.points.is_empty(),
         "expected net worth points with EUR alias"
     );
 
-    let breakdown =
-        ldash::data::load_net_worth_breakdown(&path, "monthly", "€", "assets").unwrap();
+    let breakdown = ldash::data::load_net_worth_breakdown(&path, "monthly", "€", "assets").unwrap();
     assert!(
         !breakdown.layer_total.is_empty(),
         "expected breakdown rows with EUR alias"

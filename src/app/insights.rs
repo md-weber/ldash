@@ -3,7 +3,9 @@ use std::time::{Duration, Instant};
 
 use crate::data::commodity_key;
 
-use super::{App, BudgetItem, CashFlowForecast, GoalProgress, PriceAlert, RecurringExpense, YtdStats};
+use super::{
+    App, BudgetItem, CashFlowForecast, GoalProgress, PriceAlert, RecurringExpense, YtdStats,
+};
 
 impl App {
     pub fn ytd_stats(&self) -> YtdStats {
@@ -226,7 +228,7 @@ impl App {
                 actuals.push((x, net));
             } else if let Some(&net) = hledger_forecast_map.get(*name) {
                 projected.push((x, net));
-            } else if use_fallback && last_actual_idx.map_or(false, |last| i > last) {
+            } else if use_fallback && last_actual_idx.is_some_and(|last| i > last) {
                 projected.push((x, computed_avg_net));
             }
         }

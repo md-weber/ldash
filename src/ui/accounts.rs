@@ -95,7 +95,8 @@ fn render_breakdown_chart(f: &mut Frame, app: &App, area: Rect, theme: &Theme, r
         .border_style(Style::default().fg(theme.muted));
 
     let x_min = bd.layer_total.first().map(|p| p.0).unwrap_or(0.0);
-    let x_max = bd.layer_total
+    let x_max = bd
+        .layer_total
         .last()
         .map(|p| p.0)
         .unwrap_or(1.0)
@@ -319,7 +320,9 @@ fn render_accounts_table(f: &mut Frame, app: &mut App, area: Rect, theme: &Theme
 
                 let amount_str = format!("{:>15}", app.config.fmt_amount(*amount, 2));
 
-                let short = app.config.strip_account_prefix(account, &app.config.assets_account.clone());
+                let short = app
+                    .config
+                    .strip_account_prefix(account, &app.config.assets_account.clone());
                 let name = if narrow && short.len() > 30 {
                     format!("  {}…", &short[..29])
                 } else {
@@ -391,7 +394,9 @@ fn render_liabilities_table(f: &mut Frame, app: &App, area: Rect, theme: &Theme)
         .iter()
         .map(|b| {
             let amount_str = format!("{:>15}", app.config.fmt_amount(b.amount, 2));
-            let short = app.config.strip_account_prefix(&b.account, &app.config.liabilities_account.clone());
+            let short = app
+                .config
+                .strip_account_prefix(&b.account, &app.config.liabilities_account.clone());
             Row::new(vec![
                 Cell::from(format!("  {}", short)).style(Style::default().fg(theme.fg)),
                 Cell::from(amount_str).style(Style::default().fg(theme.negative)),

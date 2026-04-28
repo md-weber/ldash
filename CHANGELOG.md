@@ -7,6 +7,26 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [1.1.0] - 2026-04-28
+
+### Added
+
+- Cash flow forecast on monthly tab via `hledger --forecast`
+- Recurring/subscription expense detection on monthly tab
+- Stacked asset breakdown chart on accounts tab (toggle with `s`)
+- Auto-currency detection and configurable account roots
+- Monthly tab: jump-to-month navigation
+- Support for non-standard / large journals (e.g. 1k+ transactions, 100+ accounts)
+
+### Fixed
+
+- Price normalization for multi-currency portfolios
+- Alert threshold now configurable via config file
+
+### Changed
+
+- Refactored app, data, UI, and event modules into per-concern files for maintainability
+
 ## [1.0.0] - 2026-04-22
 
 ### Added
@@ -31,5 +51,6 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Forgejo CI workflow (lint, build, test)
 - Forgejo release workflow with cross-compilation via `cargo-zigbuild`
 
-[Unreleased]: https://codeberg.org/md-weber/ldash/compare/v1.0.0...HEAD
+[Unreleased]: https://codeberg.org/md-weber/ldash/compare/v1.1.0...HEAD
+[1.1.0]: https://codeberg.org/md-weber/ldash/compare/v1.0.0...v1.1.0
 [1.0.0]: https://codeberg.org/md-weber/ldash/compare/v0.1.0...v1.0.0

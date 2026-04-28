@@ -178,8 +178,7 @@ fn lookup_expense_color_override<'a>(
     let mut best: Option<(usize, &'a str)> = None;
     for (key, val) in map {
         let key_lower = key.to_lowercase();
-        let matches = cat_lower == key_lower
-            || cat_lower.starts_with(&format!("{key_lower}:"));
+        let matches = cat_lower == key_lower || cat_lower.starts_with(&format!("{key_lower}:"));
         if matches && best.is_none_or(|(len, _)| key_lower.len() > len) {
             best = Some((key_lower.len(), val.as_str()));
         }
@@ -192,8 +191,7 @@ fn lookup_expense_color_override<'a>(
 /// amount/bar → `theme.positive`). Same case-insensitive prefix matching
 /// as `expense_color`.
 pub(super) fn income_color(category: &str, app: &App, _theme: &Theme) -> Option<Color> {
-    lookup_expense_color_override(category, &app.config.colors.income)
-        .and_then(parse_color)
+    lookup_expense_color_override(category, &app.config.colors.income).and_then(parse_color)
 }
 
 pub(super) fn coin_color(commodity: &str, theme: &Theme) -> Color {
@@ -536,7 +534,10 @@ mod tests {
     fn income_color_returns_override() {
         use crate::app::App;
         let mut app = App::fixture_empty();
-        app.config.colors.income.insert("gehalt".to_string(), "cyan".to_string());
+        app.config
+            .colors
+            .income
+            .insert("gehalt".to_string(), "cyan".to_string());
         let theme = Theme::from_config(&app.config);
         assert_eq!(income_color("gehalt", &app, &theme), Some(Color::Cyan));
     }
@@ -545,9 +546,15 @@ mod tests {
     fn income_color_prefix_match() {
         use crate::app::App;
         let mut app = App::fixture_empty();
-        app.config.colors.income.insert("gehalt".to_string(), "cyan".to_string());
+        app.config
+            .colors
+            .income
+            .insert("gehalt".to_string(), "cyan".to_string());
         let theme = Theme::from_config(&app.config);
-        assert_eq!(income_color("gehalt:bonus", &app, &theme), Some(Color::Cyan));
+        assert_eq!(
+            income_color("gehalt:bonus", &app, &theme),
+            Some(Color::Cyan)
+        );
     }
 
     #[test]

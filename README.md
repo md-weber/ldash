@@ -15,9 +15,11 @@ Built with [Ratatui](https://ratatui.rs) and Rust.
 - **Crypto Portfolio** — Holdings table with price, value, allocation %, and P/L tracking (invested vs price gain vs staking rewards)
 - **Portfolio Chart** — Per-coin analysis with two modes: *stacked* (invested / purchased value / total value) or *unstacked* (invested / price gain / staking gain). Toggle with `s`.
 - **Net Worth History** — Interactive chart with selectable time ranges (YTD / 1Y / 2Y / 5Y / All)
-- **Account Balances** — All asset accounts with EUR valuations and visual bar indicators
+- **Account Balances** — All asset accounts with EUR valuations and visual bar indicators; stacked asset breakdown chart (toggle with `s`)
 - **Account Drill-Down** — Select any account and view its recent transactions
 - **Monthly Income & Expenses** — Bar chart overview with per-category breakdown, savings rate gauge, and year-over-year comparison
+- **Cash Flow Forecast** — Projected income/expenses for future months via `hledger --forecast`, overlaid on the monthly chart
+- **Recurring Expense Detection** — Automatically identifies subscription and recurring charges in your expense history
 - **Budget Tracking** — Set monthly limits per expense category; see progress bars inline and warnings when over budget
 - **Savings Goals** — Define target amounts for account prefixes; progress bars shown on the Accounts tab
 - **Background Refresh** — Non-blocking data loading with parallel hledger calls
@@ -70,10 +72,16 @@ cd ~/Finance && ldash
 | `↑` `k` / `↓` `j` | Scroll / select |
 | `PgUp` / `PgDn` | Page up / down |
 | `Home` / `End` | Jump to first / last row |
-| `←` `h` / `→` `l` | Month navigation / net worth range |
+| `←` `h` / `→` `l` | Month navigation (Monthly) / net worth range (Accounts/Portfolio) |
+| `y` / `Y` | Previous / next year (Monthly tab) |
+| `G` | Jump to latest month (Monthly tab) |
+| `i` | Toggle income / expense focus (Monthly tab) |
 | `Enter` | Drill into account / expense category |
 | `s` | Toggle chart mode (stacked / unstacked) |
 | `c` | Toggle expense category colors |
+| `/` | Filter accounts (Accounts tab) / search |
+| `e` | Export current view to file |
+| `Y` | Copy current view to clipboard (Portfolio / Accounts tab) |
 | `r` | Force refresh |
 | `?` | Toggle help overlay |
 | `Esc` | Back / close |

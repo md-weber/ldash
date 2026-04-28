@@ -112,7 +112,13 @@ pub(super) fn parse_balance_csv(text: &str) -> Result<Vec<super::AccountBalance>
 
 /// Map a 3-letter month abbreviation (case-insensitive) to a canonical full name.
 fn month_name_from_abbrev(h: &str) -> &'static str {
-    match h.trim().get(..3).unwrap_or("").to_ascii_lowercase().as_str() {
+    match h
+        .trim()
+        .get(..3)
+        .unwrap_or("")
+        .to_ascii_lowercase()
+        .as_str()
+    {
         "jan" => "January",
         "feb" => "February",
         "mar" => "March",
@@ -147,7 +153,7 @@ pub(super) fn parse_monthly_csv(text: &str, currency_symbol: &str) -> Result<Mon
     // Detect the two-row format by checking whether the month-position columns
     // in the CSV header are all empty, and if so consume the first data record
     // to obtain the real month names.
-    let headers = rdr.headers().map(|h| h.clone()).unwrap_or_default();
+    let headers = rdr.headers().cloned().unwrap_or_default();
     let num_cols = headers.len();
 
     let month_names_from_header: Vec<&'static str> = headers
@@ -163,7 +169,11 @@ pub(super) fn parse_monthly_csv(text: &str, currency_symbol: &str) -> Result<Mon
     let month_names: Vec<&'static str> = if all_unknown {
         // Two-row format: the first data record holds the real column headers.
         match records.next() {
-            Some(Ok(r)) => r.iter().skip(1).map(|h| month_name_from_abbrev(h)).collect(),
+            Some(Ok(r)) => r
+                .iter()
+                .skip(1)
+                .map(|h| month_name_from_abbrev(h))
+                .collect(),
             _ => return Ok(MonthlyData::default()),
         }
     } else {

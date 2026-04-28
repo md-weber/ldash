@@ -2,6 +2,8 @@ use anyhow::{Context, Result};
 use chrono::NaiveDate;
 use std::path::Path;
 
+type NetWorthPoints = (Vec<(usize, NaiveDate)>, Vec<f64>);
+
 use super::parse::{parse_balance_csv, parse_eu_number};
 use super::{
     currency_matches, run_hledger, AccountBalance, NetWorthBreakdownSeries, NetWorthSeries,
@@ -192,10 +194,7 @@ pub fn load_net_worth_breakdown(
 /// Parse a `--layout bare` CSV from hledger into per-month sums, filtering
 /// rows by `currency_symbol`.  Returns the month-column metadata and the sums
 /// so the caller can decide whether to retry with different hledger args.
-fn parse_nw_bare_csv(
-    text: &str,
-    currency_symbol: &str,
-) -> Result<(Vec<(usize, NaiveDate)>, Vec<f64>)> {
+fn parse_nw_bare_csv(text: &str, currency_symbol: &str) -> Result<NetWorthPoints> {
     let mut rdr = csv::ReaderBuilder::new()
         .flexible(true)
         .from_reader(text.as_bytes());
@@ -278,7 +277,17 @@ pub fn load_net_worth_history(
     // the currency filter.
     let (month_cols, sums) = if month_cols.is_empty() || sums.iter().all(|&s| s == 0.0) {
         let text_all = run_hledger(&[
-            "-f", jp, "balance", "-H", "-p", period, "-O", "csv", "--layout", "bare", "--no-total",
+            "-f",
+            jp,
+            "balance",
+            "-H",
+            "-p",
+            period,
+            "-O",
+            "csv",
+            "--layout",
+            "bare",
+            "--no-total",
             "--empty",
         ])?;
         parse_nw_bare_csv(&text_all, currency_symbol)?
