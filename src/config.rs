@@ -20,6 +20,15 @@ pub struct Config {
     pub chart_mode: String,
     pub price_alert_threshold_pct: f64,
     pub show_portfolio: Option<bool>,
+    /// Top-level account name for expenses (default "expenses").
+    /// Set to "Ausgaben", "Depenses", etc. for non-English journals.
+    pub expenses_account: String,
+    /// Top-level account name for income (default "income").
+    pub income_account: String,
+    /// Top-level account name for assets (default "assets").
+    pub assets_account: String,
+    /// Top-level account name for liabilities (default "liabilities").
+    pub liabilities_account: String,
     pub colors: ColorConfig,
     pub theme: ThemeConfig,
     pub budgets: HashMap<String, f64>,
@@ -67,6 +76,10 @@ impl Default for Config {
             chart_mode: "stacked".to_string(),
             price_alert_threshold_pct: 2.0,
             show_portfolio: None,
+            expenses_account: "expenses".to_string(),
+            income_account: "income".to_string(),
+            assets_account: "assets".to_string(),
+            liabilities_account: "liabilities".to_string(),
             colors: ColorConfig::default(),
             theme: ThemeConfig::default(),
             budgets: HashMap::new(),
@@ -94,6 +107,14 @@ const DEFAULT_CONFIG: &str = r##"# ldash configuration
 
 # Currency symbol shown in UI
 # currency_symbol = "€"
+
+# Top-level account names used in your journal.
+# Only needed when your journal uses non-English account names.
+# Matching is always case-insensitive ("Expenses" works without any change).
+# expenses_account = "expenses"   # e.g. "Ausgaben", "Depenses"
+# income_account   = "income"     # e.g. "Einnahmen", "Revenus"
+# assets_account   = "assets"     # e.g. "Aktiva",    "Actifs"
+# liabilities_account = "liabilities"  # e.g. "Verbindlichkeiten"
 
 # Force Portfolio tab visibility. Default: auto-detect from
 # presence of `assets:crypto` accounts.
@@ -216,6 +237,63 @@ impl Config {
         out
     }
 
+    /// Strip a root account prefix from a full account name for display.
+    ///
+    /// Matching is **case-insensitive** so both `"expenses:food"` and
+    /// `"Expenses:Food"` are stripped correctly when `root = "expenses"`.
+    /// Returns the original slice unchanged when the prefix is absent.
+    pub fn strip_account_prefix<'a>(&self, name: &'a str, root: &str) -> &'a str {
+        let prefix_len = root.len() + 1; // root + ":"
+        if name.len() > prefix_len
+            && name[..root.len()].eq_ignore_ascii_case(root)
+            && name.as_bytes().get(root.len()) == Some(&b':')
+        {
+            &name[prefix_len..]
+        } else {
+            name
+        }
+    }
+
+    /// Returns `true` when expense account `name` falls under budget `category`.
+    ///
+    /// The configured `expenses_account` root is prepended when the category
+    /// does not already start with it, so `"food"` and `"expenses:food"` (or
+    /// `"Ausgaben:food"` when `expenses_account = "ausgaben"`) all match the
+    /// same entries. Matching is case-insensitive.
+    pub fn budget_matches(&self, category: &str, name: &str) -> bool {
+        let root = self.expenses_account.to_lowercase();
+        let prefix = format!("{}:", root);
+        let cat_lower = category.to_lowercase();
+        let cat_full = if cat_lower.starts_with(&prefix) {
+            cat_lower
+        } else {
+            format!("{}{}", prefix, cat_lower)
+        };
+        let name_lower = name.to_lowercase();
+        name_lower == cat_full || name_lower.starts_with(&format!("{}:", cat_full))
+    }
+
+    /// Sum of expenses in `month_expenses` that match `category`.
+    ///
+    /// Only leaf accounts are counted (an account is a leaf when no child entry
+    /// is present in the same list) to avoid double-counting parent accounts
+    /// that hledger emits alongside their sub-accounts.
+    pub fn budget_spent(&self, category: &str, expenses: &[(String, f64)]) -> f64 {
+        expenses
+            .iter()
+            .filter(|(name, _)| self.budget_matches(category, name))
+            .filter(|(name, _)| {
+                let name_lower = name.to_lowercase();
+                !expenses.iter().any(|(other, _)| {
+                    other
+                        .to_lowercase()
+                        .starts_with(&format!("{}:", name_lower))
+                })
+            })
+            .map(|(_, amount)| *amount)
+            .sum()
+    }
+
     /// Hot-reload safe fields from disk. Skips startup-only settings
     /// (journal, default_tab) that would be confusing to change mid-session.
     pub fn hot_reload(&mut self) -> Option<String> {
@@ -227,8 +305,18 @@ impl Config {
         };
         self.refresh_interval = fresh.refresh_interval;
         self.number_format = fresh.number_format;
-        self.currency_symbol = fresh.currency_symbol;
+        // Only update currency_symbol when the user has explicitly set a
+        // non-default value in the config file. If the config still holds the
+        // default ("€"), the symbol was likely auto-detected at startup and
+        // must not be reverted.
+        if fresh.currency_symbol != Config::default().currency_symbol {
+            self.currency_symbol = fresh.currency_symbol;
+        }
         self.chart_mode = fresh.chart_mode;
+        self.expenses_account = fresh.expenses_account;
+        self.income_account = fresh.income_account;
+        self.assets_account = fresh.assets_account;
+        self.liabilities_account = fresh.liabilities_account;
         self.price_alert_threshold_pct = fresh.price_alert_threshold_pct;
         self.show_portfolio = fresh.show_portfolio;
         self.colors = fresh.colors;

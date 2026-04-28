@@ -255,12 +255,41 @@ fn run_tui(
 fn run(
     terminal: &mut Terminal<CrosstermBackend<io::Stdout>>,
     journal_path: PathBuf,
-    config: config::Config,
+    mut config: config::Config,
     config_warnings: Vec<String>,
 ) -> Result<()> {
+    // Auto-detect the journal's primary fiat currency. When the configured
+    // symbol doesn't match what the journal actually uses (e.g. default "€"
+    // against a USD journal), every parsed amount would be silently dropped.
+    // Detecting up-front keeps the app usable without requiring the user to
+    // touch their config for simple single-currency journals.
+    let currency_warning = if let Some(detected) = data::detect_journal_currency(&journal_path) {
+        if !data::currency_matches(&config.currency_symbol, &detected) {
+            let old = std::mem::replace(
+                &mut config.currency_symbol,
+                match detected.as_str() {
+                    "EUR" => "€".to_string(),
+                    "USD" => "$".to_string(),
+                    "GBP" => "£".to_string(),
+                    "JPY" => "¥".to_string(),
+                    other => other.to_string(),
+                },
+            );
+            Some(format!(
+                "Currency auto-detected: {} (was {}). Set currency_symbol in config to override.",
+                config.currency_symbol, old
+            ))
+        } else {
+            None
+        }
+    } else {
+        None
+    };
+
     let mut app = App::new(journal_path, config).context("Failed to initialize app")?;
-    if let Some(w) = config_warnings.last() {
-        app.status_msg = w.clone();
+    let startup_msg = currency_warning.or_else(|| config_warnings.last().cloned());
+    if let Some(w) = startup_msg {
+        app.status_msg = w;
     }
 
     terminal.draw(|f| ui::render(f, &mut app))?;

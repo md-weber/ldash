@@ -22,7 +22,10 @@ pub fn load_crypto_balances(journal_path: &Path) -> Result<Vec<AccountBalance>> 
     parse_balance_csv(&text)
 }
 
-pub fn load_account_balances_eur(journal_path: &Path) -> Result<Vec<AccountBalance>> {
+pub fn load_account_balances_eur(
+    journal_path: &Path,
+    assets_account: &str,
+) -> Result<Vec<AccountBalance>> {
     let jp = journal_path.to_str().unwrap_or("all.journal");
     let text = run_hledger(&[
         "-f",
@@ -33,12 +36,15 @@ pub fn load_account_balances_eur(journal_path: &Path) -> Result<Vec<AccountBalan
         "csv",
         "--no-total",
         "-V",
-        "assets",
+        assets_account,
     ])?;
     parse_balance_csv(&text)
 }
 
-pub fn load_liability_balances_eur(journal_path: &Path) -> Result<Vec<AccountBalance>> {
+pub fn load_liability_balances_eur(
+    journal_path: &Path,
+    liabilities_account: &str,
+) -> Result<Vec<AccountBalance>> {
     let jp = journal_path.to_str().unwrap_or("all.journal");
     let text = run_hledger(&[
         "-f",
@@ -49,19 +55,20 @@ pub fn load_liability_balances_eur(journal_path: &Path) -> Result<Vec<AccountBal
         "csv",
         "--no-total",
         "-V",
-        "liabilities",
+        liabilities_account,
     ])?;
     parse_balance_csv(&text)
 }
 
-fn breakdown_category(account: &str) -> &'static str {
+fn breakdown_category(account: &str, assets_root: &str) -> &'static str {
     let lower = account.to_lowercase();
-    if lower.starts_with("assets:bank")
-        || lower.starts_with("assets:cash")
-        || lower.starts_with("assets:checking")
+    let root = assets_root.to_lowercase();
+    if lower.starts_with(&format!("{root}:bank"))
+        || lower.starts_with(&format!("{root}:cash"))
+        || lower.starts_with(&format!("{root}:checking"))
     {
         "bank"
-    } else if lower.starts_with("assets:crypto") {
+    } else if lower.starts_with(&format!("{root}:crypto")) {
         "crypto"
     } else {
         "investments"
@@ -72,13 +79,14 @@ pub fn load_net_worth_breakdown(
     journal_path: &Path,
     period: &str,
     currency_symbol: &str,
+    assets_account: &str,
 ) -> Result<NetWorthBreakdownSeries> {
     let jp = journal_path.to_str().unwrap_or("all.journal");
     let text = run_hledger(&[
         "-f",
         jp,
         "balance",
-        "assets",
+        assets_account,
         "-H",
         "-p",
         period,
@@ -133,7 +141,7 @@ pub fn load_net_worth_breakdown(
         if !currency_matches(currency_symbol, commodity) {
             continue;
         }
-        let category = breakdown_category(account);
+        let category = breakdown_category(account, assets_account);
         for (idx, &(col, _)) in month_cols.iter().enumerate() {
             if col >= fields.len() {
                 continue;
@@ -177,14 +185,16 @@ pub fn load_net_worth_history(
     journal_path: &Path,
     period: &str,
     currency_symbol: &str,
+    assets_account: &str,
+    liabilities_account: &str,
 ) -> Result<NetWorthSeries> {
     let jp = journal_path.to_str().unwrap_or("all.journal");
     let text = run_hledger(&[
         "-f",
         jp,
         "balance",
-        "assets",
-        "liabilities",
+        assets_account,
+        liabilities_account,
         "-H",
         "-p",
         period,

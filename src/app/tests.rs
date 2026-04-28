@@ -104,47 +104,71 @@ fn auto_refresh_missing_journal_does_not_overwrite_message() {
 
 #[test]
 fn budget_matches_exact() {
-    assert!(budget_matches("expenses:food", "expenses:food"));
+    let cfg = crate::config::Config::default();
+    assert!(cfg.budget_matches("expenses:food", "expenses:food"));
 }
 
 #[test]
 fn budget_matches_child() {
-    assert!(budget_matches("expenses:food", "expenses:food:restaurants"));
+    let cfg = crate::config::Config::default();
+    assert!(cfg.budget_matches("expenses:food", "expenses:food:restaurants"));
 }
 
 #[test]
 fn budget_matches_without_prefix() {
-    assert!(budget_matches("food", "expenses:food"));
+    let cfg = crate::config::Config::default();
+    assert!(cfg.budget_matches("food", "expenses:food"));
 }
 
 #[test]
 fn budget_no_match_sibling() {
-    assert!(!budget_matches("expenses:food", "expenses:transport"));
+    let cfg = crate::config::Config::default();
+    assert!(!cfg.budget_matches("expenses:food", "expenses:transport"));
 }
 
 #[test]
 fn budget_no_match_partial_name() {
-    assert!(!budget_matches("expenses:foo", "expenses:food"));
+    let cfg = crate::config::Config::default();
+    assert!(!cfg.budget_matches("expenses:foo", "expenses:food"));
+}
+
+#[test]
+fn budget_matches_custom_root() {
+    let mut cfg = crate::config::Config::default();
+    cfg.expenses_account = "Ausgaben".to_string();
+    assert!(cfg.budget_matches("Ausgaben:Essen", "Ausgaben:Essen:Restaurant"));
+    assert!(cfg.budget_matches("Essen", "Ausgaben:Essen"));
+    assert!(!cfg.budget_matches("Essen", "expenses:food"));
+}
+
+#[test]
+fn budget_matches_case_insensitive_root() {
+    // "Expenses:Food" should match with default root "expenses"
+    let cfg = crate::config::Config::default();
+    assert!(cfg.budget_matches("expenses:food", "Expenses:Food"));
+    assert!(cfg.budget_matches("food", "Expenses:Food:Restaurant"));
 }
 
 #[test]
 fn budget_spent_sums_matching_leaves() {
+    let cfg = crate::config::Config::default();
     let expenses = vec![
         ("expenses:food:restaurants".to_string(), 120.0),
         ("expenses:food:groceries".to_string(), 80.0),
         ("expenses:transport".to_string(), 50.0),
     ];
-    let spent = budget_spent("expenses:food", &expenses);
+    let spent = cfg.budget_spent("expenses:food", &expenses);
     assert!((spent - 200.0).abs() < 0.01);
 }
 
 #[test]
 fn budget_spent_skips_parent_when_child_present() {
+    let cfg = crate::config::Config::default();
     let expenses = vec![
         ("expenses:food".to_string(), 200.0),
         ("expenses:food:groceries".to_string(), 80.0),
     ];
-    let spent = budget_spent("expenses:food", &expenses);
+    let spent = cfg.budget_spent("expenses:food", &expenses);
     assert!(
         (spent - 80.0).abs() < 0.01,
         "should only count leaf, got {spent}"
@@ -153,8 +177,9 @@ fn budget_spent_skips_parent_when_child_present() {
 
 #[test]
 fn budget_spent_zero_when_no_match() {
+    let cfg = crate::config::Config::default();
     let expenses = vec![("expenses:transport".to_string(), 50.0)];
-    let spent = budget_spent("expenses:food", &expenses);
+    let spent = cfg.budget_spent("expenses:food", &expenses);
     assert_eq!(spent, 0.0);
 }
 

@@ -124,7 +124,7 @@ fn integration_load_account_balances_checking() {
         return;
     }
     let path = fixture("simple.journal");
-    let balances = ldash::data::load_account_balances_eur(&path).unwrap();
+    let balances = ldash::data::load_account_balances_eur(&path, "assets").unwrap();
 
     let checking = balances
         .iter()
@@ -153,13 +153,16 @@ fn integration_currency_alias_eur_symbol_loaders() {
         "expected monthly rows with EUR alias"
     );
 
-    let nw = ldash::data::load_net_worth_history(&path, "monthly", "€").unwrap();
+    let nw =
+        ldash::data::load_net_worth_history(&path, "monthly", "€", "assets", "liabilities")
+            .unwrap();
     assert!(
         !nw.points.is_empty(),
         "expected net worth points with EUR alias"
     );
 
-    let breakdown = ldash::data::load_net_worth_breakdown(&path, "monthly", "€").unwrap();
+    let breakdown =
+        ldash::data::load_net_worth_breakdown(&path, "monthly", "€", "assets").unwrap();
     assert!(
         !breakdown.layer_total.is_empty(),
         "expected breakdown rows with EUR alias"

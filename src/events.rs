@@ -131,6 +131,7 @@ fn handle_normal_key(app: &mut App, key: KeyEvent) -> Action {
             _ => {}
         },
         KeyCode::Char('i') if app.tab == Tab::Monthly => app.toggle_monthly_focus(),
+        KeyCode::Char('G') if app.tab == Tab::Monthly => app.jump_to_last_entry(),
         KeyCode::Char('/') => app.open_search(),
         KeyCode::Char('?') => app.show_help = true,
         KeyCode::Tab => app.next_tab(),

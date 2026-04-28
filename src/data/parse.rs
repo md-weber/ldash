@@ -87,16 +87,70 @@ pub(super) fn parse_balance_csv(text: &str) -> Result<Vec<super::AccountBalance>
     Ok(result)
 }
 
+/// Map a 3-letter month abbreviation (case-insensitive) to a canonical full name.
+fn month_name_from_abbrev(h: &str) -> &'static str {
+    match h.trim().get(..3).unwrap_or("").to_ascii_lowercase().as_str() {
+        "jan" => "January",
+        "feb" => "February",
+        "mar" => "March",
+        "apr" => "April",
+        "may" => "May",
+        "jun" => "June",
+        "jul" => "July",
+        "aug" => "August",
+        "sep" => "September",
+        "oct" => "October",
+        "nov" => "November",
+        "dec" => "December",
+        _ => "Unknown",
+    }
+}
+
 pub(super) fn parse_monthly_csv(text: &str, currency_symbol: &str) -> Result<MonthlyData> {
     let mut rdr = csv::ReaderBuilder::new()
         .flexible(true)
         .from_reader(text.as_bytes());
 
-    let num_cols = rdr.headers().map(|h| h.len()).unwrap_or(2);
+    // hledger incomestatement CSV can have two header row formats:
+    //
+    //   Single-row (tests / simple cases):
+    //     "Monthly Income Statement,Jan 2024,Feb 2024"
+    //     month abbreviations are in the header row itself.
+    //
+    //   Two-row (real hledger output):
+    //     row 1 — "Monthly Income Statement 2024","","", ...  (month cols are empty)
+    //     row 2 — "Account","Jan","Feb", ...                  (actual month headers)
+    //
+    // Detect the two-row format by checking whether the month-position columns
+    // in the CSV header are all empty, and if so consume the first data record
+    // to obtain the real month names.
+    let headers = rdr.headers().map(|h| h.clone()).unwrap_or_default();
+    let num_cols = headers.len();
 
-    let mut months_data: Vec<SingleMonth> = (1..num_cols)
-        .map(|m| SingleMonth {
-            month_name: month_name(m).to_string(),
+    let month_names_from_header: Vec<&'static str> = headers
+        .iter()
+        .skip(1)
+        .map(|h| month_name_from_abbrev(h))
+        .collect();
+
+    let all_unknown = month_names_from_header.iter().all(|&n| n == "Unknown");
+
+    let mut records = rdr.records().peekable();
+
+    let month_names: Vec<&'static str> = if all_unknown {
+        // Two-row format: the first data record holds the real column headers.
+        match records.next() {
+            Some(Ok(r)) => r.iter().skip(1).map(|h| month_name_from_abbrev(h)).collect(),
+            _ => return Ok(MonthlyData::default()),
+        }
+    } else {
+        month_names_from_header
+    };
+
+    let mut months_data: Vec<SingleMonth> = month_names
+        .iter()
+        .map(|&name| SingleMonth {
+            month_name: name.to_string(),
             ..Default::default()
         })
         .collect();
@@ -104,7 +158,7 @@ pub(super) fn parse_monthly_csv(text: &str, currency_symbol: &str) -> Result<Mon
     let mut in_revenues = false;
     let mut in_expenses = false;
 
-    for row in rdr.records() {
+    for row in records {
         let fields = match row {
             Ok(r) => r,
             Err(_) => continue,
@@ -185,6 +239,7 @@ pub(crate) const MONTH_NAMES: [&str; 12] = [
     "December",
 ];
 
+#[allow(dead_code)]
 pub(crate) fn month_name(m: usize) -> &'static str {
     if (1..=12).contains(&m) {
         MONTH_NAMES[m - 1]

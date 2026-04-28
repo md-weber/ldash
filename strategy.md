@@ -9,40 +9,6 @@ Date: 2026-04-23
 - Ran `cargo clippy --all-targets --all-features` (1 style warning).
 - Reviewed data loading, parsing, refresh concurrency, UI state, export path.
 
-## Priority fixes (bugs / correctness)
-
-### P0 - Price parser breaks on extra whitespace in `prices.journal`
-
-- Location: `src/data/prices.rs`
-- Problem: parser uses `splitn(5, ' ')`. Multiple spaces/tabs create empty tokens and valid `P` lines can be skipped.
-- Impact: missing price history -> zero/incorrect portfolio valuation and empty charts.
-- Fix:
-  - replace parser with `split_whitespace()` or tokenizer that tolerates mixed spacing.
-  - add fixture-style unit tests for:
-    - single spaces
-    - multiple spaces
-    - tabs
-    - trailing comments
-
-### P0 - Currency matching too strict across loaders
-
-- Locations: `src/data/parse.rs`, `src/data/balances.rs`
-- Problem: code compares commodity with exact `currency_symbol` (`==`). Inputs like `EUR` vs `€` (or `USD` vs `$`) can silently drop rows.
-- Impact: empty/partial monthly and net-worth views for valid ledgers.
-- Fix:
-  - introduce normalized currency matcher (alias set per configured currency).
-  - reuse matcher in monthly parser and net-worth/breakdown loaders.
-  - add integration tests with mixed currency spellings.
-
-### P0 - Export CSV is not CSV-safe
-
-- Location: `src/app/export.rs`
-- Problem: CSV rows are assembled with `format!("{},...")`; account/category strings containing comma/quote/newline break output.
-- Impact: malformed export files and incorrect downstream import.
-- Fix:
-  - write CSV with `csv::Writer` (proper escaping).
-  - add tests for names containing comma, quote, and newline.
-
 ## Priority robustness improvements
 
 ### P1 - Silent failure on unreadable `prices.journal`

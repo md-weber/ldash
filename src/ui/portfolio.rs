@@ -513,7 +513,9 @@ fn render_price_chart(f: &mut Frame, app: &App, area: Rect, theme: &Theme) {
         };
 
     let x_min = min_x;
-    let x_max = today_x.max(filtered_inv.last().map(|p| p.0).unwrap_or(1.0));
+    let x_max = today_x
+        .max(filtered_inv.last().map(|p| p.0).unwrap_or(1.0))
+        .max(x_min + 1.0);
 
     let all_y = filtered_inv
         .iter()

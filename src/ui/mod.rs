@@ -239,7 +239,7 @@ pub(super) fn nice_y_axis(
     let range = (y_max_raw - y_min_raw).max(1.0);
     let step = nice_step(range, ticks);
     let lo = (y_min_raw / step).floor() * step;
-    let hi = (y_max_raw / step).ceil() * step;
+    let hi = ((y_max_raw / step).ceil() * step).max(lo + step);
     let n = ((hi - lo) / step).round() as usize;
     let labels = (0..=n)
         .map(|i| {

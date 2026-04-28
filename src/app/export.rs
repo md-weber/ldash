@@ -109,7 +109,10 @@ impl App {
             let jd = self.journal_dir.clone();
             let nw_period = self.nw_range.period_arg().to_string();
             let currency = self.config.currency_symbol.clone();
-            let result = load_all_data(&jp, &jd, &nw_period, &currency, need);
+            let assets = self.config.assets_account.clone();
+            let liabilities = self.config.liabilities_account.clone();
+            let result =
+                load_all_data(&jp, &jd, &nw_period, &currency, &assets, &liabilities, need);
             self.apply_refresh(result);
         }
     }

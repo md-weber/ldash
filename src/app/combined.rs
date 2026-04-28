@@ -36,7 +36,7 @@ impl App {
     /// Kick off an async reload of the year's monthly data. The result is
     /// applied by `App::check_background()` from the main loop, keeping the
     /// loading spinner live while hledger runs.
-    fn reload_monthly_year(&mut self) {
+    pub(super) fn reload_monthly_year(&mut self) {
         if self.monthly_year_rx.is_some() {
             return;
         }
@@ -126,6 +126,8 @@ impl App {
         let period = self.nw_range.period_arg();
         let jp = self.journal_path.clone();
         let currency = self.config.currency_symbol.clone();
+        let assets = self.config.assets_account.clone();
+        let liabilities = self.config.liabilities_account.clone();
 
         let (tx, rx) = mpsc::channel();
         self.net_worth_rx = Some(rx);
@@ -134,9 +136,11 @@ impl App {
 
         std::thread::spawn(move || {
             let history =
-                load_net_worth_history(&jp, &period, &currency).map_err(|e| e.to_string());
+                load_net_worth_history(&jp, &period, &currency, &assets, &liabilities)
+                    .map_err(|e| e.to_string());
             // Breakdown is non-fatal: chart simply omits the layer if it fails.
-            let breakdown = load_net_worth_breakdown(&jp, &period, &currency).ok();
+            let breakdown =
+                load_net_worth_breakdown(&jp, &period, &currency, &assets).ok();
             let _ = tx.send(NetWorthLoad { history, breakdown });
         });
     }
@@ -204,5 +208,29 @@ impl App {
             MonthlyFocus::Income => MonthlyFocus::Expenses,
             MonthlyFocus::Expenses => MonthlyFocus::Income,
         };
+    }
+
+    /// Jump to the last month that has actual data.
+    ///
+    /// When the current year already has months loaded, jump to the last one
+    /// in `combined_months`. When the current view is empty (e.g. a future
+    /// year selected, or a journal whose last entry is years in the past),
+    /// query hledger for the date of the last transaction and reload that year,
+    /// selecting its last month on completion.
+    pub fn jump_to_last_entry(&mut self) {
+        if !self.combined_months.is_empty() {
+            self.combined_selected = self.combined_months.len().saturating_sub(1);
+            return;
+        }
+
+        let jp = self.journal_path.clone();
+        if let Some(last_year) = crate::data::last_journal_year(&jp) {
+            let today_year = Local::now().date_naive().year();
+            let new_offset = last_year - today_year;
+            if new_offset != self.monthly_year_offset {
+                self.monthly_year_offset = new_offset;
+                self.reload_monthly_year();
+            }
+        }
     }
 }

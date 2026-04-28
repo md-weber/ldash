@@ -289,36 +289,6 @@ pub struct CashFlowForecast {
     pub max_y: f64,
 }
 
-/// Returns true if expense `name` (e.g. "expenses:abos:youtube premium")
-/// falls under budget `category` (e.g. "expenses:abos" or "abos").
-pub fn budget_matches(category: &str, name: &str) -> bool {
-    let cat_full = if category.starts_with("expenses:") {
-        category.to_lowercase()
-    } else {
-        format!("expenses:{}", category.to_lowercase())
-    };
-    let name_lower = name.to_lowercase();
-    name_lower == cat_full || name_lower.starts_with(&format!("{}:", cat_full))
-}
-
-/// Sum of all leaf expenses matching `category`. Leaf = no child entry present
-/// in `expenses`. Prevents double-counting when hledger emits both a parent
-/// account and its sub-accounts (both carry the same aggregated amount).
-pub fn budget_spent(category: &str, expenses: &[(String, f64)]) -> f64 {
-    expenses
-        .iter()
-        .filter(|(name, _)| budget_matches(category, name))
-        .filter(|(name, _)| {
-            let name_lower = name.to_lowercase();
-            !expenses.iter().any(|(other, _)| {
-                other
-                    .to_lowercase()
-                    .starts_with(&format!("{}:", name_lower))
-            })
-        })
-        .map(|(_, amount)| *amount)
-        .sum()
-}
 
 pub fn month_name_to_period(month_name: &str, year: i32) -> String {
     let month_num = crate::data::month_index(month_name).unwrap_or(1);

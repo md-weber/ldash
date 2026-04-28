@@ -3,7 +3,7 @@ use ratatui::style::Modifier;
 use ratatui::{prelude::*, widgets::*};
 
 use super::{expense_color, income_color, render_detail_with_title, Theme};
-use crate::app::{budget_matches, budget_spent, App, MonthlyFocus, RecurringExpense};
+use crate::app::{App, MonthlyFocus, RecurringExpense};
 
 /// BarChart bar width (chars per bar). Shared between render and mouse hit-test.
 pub(crate) const MONTHLY_BAR_WIDTH: u16 = 3;
@@ -53,7 +53,7 @@ pub(super) fn render_monthly(f: &mut Frame, app: &mut App, area: Rect, theme: &T
 
     if let (Some(txns), Some(name)) = (&app.income_detail.clone(), &app.detail_income_name.clone())
     {
-        let short = name.strip_prefix("income:").unwrap_or(name);
+        let short = app.config.strip_account_prefix(name, &app.config.income_account.clone());
         let month = app
             .current_month()
             .map(|m| m.month_name.as_str())
@@ -76,7 +76,7 @@ pub(super) fn render_monthly(f: &mut Frame, app: &mut App, area: Rect, theme: &T
         &app.expense_detail.clone(),
         &app.detail_expense_name.clone(),
     ) {
-        let short = name.strip_prefix("expenses:").unwrap_or(name);
+        let short = app.config.strip_account_prefix(name, &app.config.expenses_account.clone());
         let month = app
             .current_month()
             .map(|m| m.month_name.as_str())
@@ -150,9 +150,9 @@ fn render_monthly_chart(f: &mut Frame, app: &App, area: Rect, theme: &Theme) {
         .collect();
 
     let chart_title = if app.monthly_year_offset == 0 {
-        " Income vs Expenses ".to_string()
+        " Income vs Expenses  [G last entry] ".to_string()
     } else {
-        format!(" Income vs Expenses ({})  [y/Y] ", app.displayed_year())
+        format!(" Income vs Expenses ({})  [y/Y]  [G last entry] ", app.displayed_year())
     };
 
     let mut chart = BarChart::default()
@@ -317,7 +317,7 @@ fn render_monthly_summary(f: &mut Frame, app: &App, area: Rect, theme: &Theme) {
                 ),
             ]));
             for b in &over {
-                let short = b.category.strip_prefix("expenses:").unwrap_or(&b.category);
+                let short = app.config.strip_account_prefix(&b.category, &app.config.expenses_account.clone());
                 text.push(Line::from(vec![
                     Span::styled(format!("    {short}: "), Style::default().fg(theme.fg)),
                     Span::styled(
@@ -527,7 +527,7 @@ fn render_monthly_income(f: &mut Frame, app: &mut App, area: Rect, theme: &Theme
         .income
         .iter()
         .map(|(name, amount)| {
-            let short = name.strip_prefix("income:").unwrap_or(name);
+            let short = app.config.strip_account_prefix(name, &app.config.income_account.clone());
             let override_color = income_color(short, app, theme);
             let name_color = override_color.unwrap_or(theme.fg);
             let amt_color = override_color.unwrap_or(theme.positive);
@@ -612,7 +612,7 @@ fn render_monthly_expenses(f: &mut Frame, app: &mut App, area: Rect, theme: &The
         .expenses
         .iter()
         .map(|(name, amount)| {
-            let short = name.strip_prefix("expenses:").unwrap_or(name);
+            let short = app.config.strip_account_prefix(name, &app.config.expenses_account.clone());
             let color = if app.expense_colors {
                 expense_color(short, app, theme)
             } else {
@@ -639,9 +639,9 @@ fn render_monthly_expenses(f: &mut Frame, app: &mut App, area: Rect, theme: &The
                     .config
                     .budgets
                     .iter()
-                    .find(|(cat, _)| budget_matches(cat, name));
+                    .find(|(cat, _)| app.config.budget_matches(cat, name));
                 if let Some((cat, &limit)) = matched {
-                    let spent = budget_spent(cat, &m.expenses);
+                    let spent = app.config.budget_spent(cat, &m.expenses);
                     let pct = if limit > 0.0 {
                         spent / limit * 100.0
                     } else {

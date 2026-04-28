@@ -1,5 +1,6 @@
 use anyhow::{Context, Result};
 use chrono::NaiveDate;
+use std::path::Path;
 use std::process::Command;
 
 mod balances;
@@ -28,7 +29,28 @@ pub(crate) fn commodity_key(raw: &str) -> String {
     raw.trim().trim_matches('"').to_ascii_uppercase()
 }
 
-fn canonical_currency(raw: &str) -> String {
+/// Known fiat currencies (canonical uppercase forms), in detection priority order.
+const KNOWN_FIAT: &[&str] = &[
+    "EUR", "USD", "GBP", "JPY", "CHF", "CAD", "AUD", "NZD", "SEK", "NOK", "DKK",
+];
+
+/// Detect the primary fiat currency used in a journal by running `hledger commodities`.
+///
+/// Returns `None` when hledger fails, the journal has no transactions, or no
+/// recognised fiat commodity is found (e.g. crypto-only journals).
+pub fn detect_journal_currency(journal_path: &Path) -> Option<String> {
+    let jp = journal_path.to_str()?;
+    let output = run_hledger(&["-f", jp, "commodities"]).ok()?;
+    for line in output.lines() {
+        let c = canonical_currency(line.trim());
+        if KNOWN_FIAT.contains(&c.as_str()) {
+            return Some(c);
+        }
+    }
+    None
+}
+
+pub(crate) fn canonical_currency(raw: &str) -> String {
     let s = raw.trim();
     if s.is_empty() {
         return String::new();
@@ -140,6 +162,27 @@ impl CoinChartSeries {
     pub fn total_invested(&self) -> f64 {
         self.investment.last().map(|p| p.1).unwrap_or(0.0)
     }
+}
+
+/// Return the calendar year of the last transaction in the journal, or `None`
+/// when hledger fails or produces no output.
+pub fn last_journal_year(journal_path: &Path) -> Option<i32> {
+    let jp = journal_path.to_str()?;
+    let out = run_hledger(&["-f", jp, "print", "-1"]).ok()?;
+    // `hledger print -1` outputs the last transaction.  The first non-empty
+    // line starts with the date in YYYY-MM-DD or YYYY/MM/DD format.
+    for line in out.lines() {
+        let trimmed = line.trim();
+        if trimmed.is_empty() {
+            continue;
+        }
+        let date_part = trimmed.split(|c: char| c == ' ' || c == '\t').next()?;
+        let year_str = date_part.split(|c: char| c == '-' || c == '/').next()?;
+        if let Ok(y) = year_str.parse::<i32>() {
+            return Some(y);
+        }
+    }
+    None
 }
 
 /// Run hledger with the given args. Returns stdout on success.

@@ -95,7 +95,11 @@ fn render_breakdown_chart(f: &mut Frame, app: &App, area: Rect, theme: &Theme, r
         .border_style(Style::default().fg(theme.muted));
 
     let x_min = bd.layer_total.first().map(|p| p.0).unwrap_or(0.0);
-    let x_max = bd.layer_total.last().map(|p| p.0).unwrap_or(1.0);
+    let x_max = bd.layer_total
+        .last()
+        .map(|p| p.0)
+        .unwrap_or(1.0)
+        .max(x_min + 1.0);
 
     let y_max_raw = bd.layer_total.iter().map(|p| p.1).fold(0.0_f64, f64::max);
     let (y_min, y_max, y_labels) =
@@ -315,7 +319,7 @@ fn render_accounts_table(f: &mut Frame, app: &mut App, area: Rect, theme: &Theme
 
                 let amount_str = format!("{:>15}", app.config.fmt_amount(*amount, 2));
 
-                let short = account.strip_prefix("assets:").unwrap_or(account);
+                let short = app.config.strip_account_prefix(account, &app.config.assets_account.clone());
                 let name = if narrow && short.len() > 30 {
                     format!("  {}…", &short[..29])
                 } else {
@@ -387,7 +391,7 @@ fn render_liabilities_table(f: &mut Frame, app: &App, area: Rect, theme: &Theme)
         .iter()
         .map(|b| {
             let amount_str = format!("{:>15}", app.config.fmt_amount(b.amount, 2));
-            let short = b.account.strip_prefix("liabilities:").unwrap_or(&b.account);
+            let short = app.config.strip_account_prefix(&b.account, &app.config.liabilities_account.clone());
             Row::new(vec![
                 Cell::from(format!("  {}", short)).style(Style::default().fg(theme.fg)),
                 Cell::from(amount_str).style(Style::default().fg(theme.negative)),

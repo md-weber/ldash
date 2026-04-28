@@ -3,10 +3,7 @@ use std::time::{Duration, Instant};
 
 use crate::data::commodity_key;
 
-use super::{
-    budget_spent, App, BudgetItem, CashFlowForecast, GoalProgress, PriceAlert, RecurringExpense,
-    YtdStats,
-};
+use super::{App, BudgetItem, CashFlowForecast, GoalProgress, PriceAlert, RecurringExpense, YtdStats};
 
 impl App {
     pub fn ytd_stats(&self) -> YtdStats {
@@ -57,7 +54,7 @@ impl App {
             .budgets
             .iter()
             .map(|(category, &limit)| {
-                let spent = budget_spent(category, &m.expenses);
+                let spent = self.config.budget_spent(category, &m.expenses);
                 BudgetItem {
                     category: category.clone(),
                     limit,

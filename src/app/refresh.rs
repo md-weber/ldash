@@ -34,6 +34,8 @@ fn spawn_all(
     journal_path: &Path,
     nw_period: &str,
     currency_symbol: &str,
+    assets_account: &str,
+    liabilities_account: &str,
     tabs: TabFlags,
 ) -> LoadHandles {
     let want_portfolio = tabs.portfolio;
@@ -42,12 +44,30 @@ fn spawn_all(
 
     std::thread::scope(|s| {
         let t_crypto = want_portfolio.then(|| s.spawn(|| load_crypto_balances(journal_path)));
-        let t_accounts = want_accounts.then(|| s.spawn(|| load_account_balances_eur(journal_path)));
-        let t_liab = want_accounts.then(|| s.spawn(|| load_liability_balances_eur(journal_path)));
-        let t_nw = want_accounts
-            .then(|| s.spawn(|| load_net_worth_history(journal_path, nw_period, currency_symbol)));
+        let t_accounts = want_accounts
+            .then(|| s.spawn(|| load_account_balances_eur(journal_path, assets_account)));
+        let t_liab = want_accounts
+            .then(|| s.spawn(|| load_liability_balances_eur(journal_path, liabilities_account)));
+        let t_nw = want_accounts.then(|| {
+            s.spawn(|| {
+                load_net_worth_history(
+                    journal_path,
+                    nw_period,
+                    currency_symbol,
+                    assets_account,
+                    liabilities_account,
+                )
+            })
+        });
         let t_bd = want_accounts.then(|| {
-            s.spawn(|| load_net_worth_breakdown(journal_path, nw_period, currency_symbol))
+            s.spawn(|| {
+                load_net_worth_breakdown(
+                    journal_path,
+                    nw_period,
+                    currency_symbol,
+                    assets_account,
+                )
+            })
         });
         let t_monthly =
             want_monthly.then(|| s.spawn(|| load_monthly_data(journal_path, currency_symbol)));
@@ -95,12 +115,21 @@ pub(super) fn load_all_data(
     journal_dir: &Path,
     nw_period: &str,
     currency_symbol: &str,
+    assets_account: &str,
+    liabilities_account: &str,
     tabs: TabFlags,
 ) -> RefreshResult {
     let price_history = load_price_history(journal_dir);
     let lp = latest_prices(&price_history);
 
-    let h = spawn_all(journal_path, nw_period, currency_symbol, tabs);
+    let h = spawn_all(
+        journal_path,
+        nw_period,
+        currency_symbol,
+        assets_account,
+        liabilities_account,
+        tabs,
+    );
 
     let holdings: TabData<Vec<CryptoHolding>> = match h.crypto {
         None => TabData::NotRequested,
@@ -201,12 +230,15 @@ impl App {
         let jd = self.journal_dir.clone();
         let nw_period = self.nw_range.period_arg().to_string();
         let currency = self.config.currency_symbol.clone();
+        let assets = self.config.assets_account.clone();
+        let liabilities = self.config.liabilities_account.clone();
 
         let (tx, rx) = mpsc::channel();
         self.refresh_rx = Some(rx);
 
         std::thread::spawn(move || {
-            let result = load_all_data(&jp, &jd, &nw_period, &currency, tabs);
+            let result =
+                load_all_data(&jp, &jd, &nw_period, &currency, &assets, &liabilities, tabs);
             let _ = tx.send(result);
         });
     }
@@ -287,6 +319,11 @@ impl App {
                         }
                         Err(e) => self.status_msg = format!("Error loading year data: {e}"),
                     }
+                } else {
+                    // The user navigated to a different year while this load
+                    // was in flight. Kick off a fresh load for the current
+                    // offset so the screen doesn't stay empty.
+                    self.reload_monthly_year();
                 }
                 self.loading = self.any_bg_in_flight();
             }
