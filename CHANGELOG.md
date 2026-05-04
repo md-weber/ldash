@@ -7,6 +7,16 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [1.2.0] - 2026-05-04
+
+### Added
+
+- Portfolio tab always visible; centered empty-state screen when holdings are absent (mirrors Monthly tab pattern)
+- `Ctrl-O` opens an inline journal-switch prompt; validates path, reloads all tabs on confirm (session-only, config not written)
+- Tab-completion in the journal-switch prompt: expands `~/`, completes to longest common prefix, appends `/` for directories
+- `journals` config array for a persistent quick-switch list; `↑`/`↓` cycles entries in the prompt picker
+- Session history tracks switched-from/switched-to journals (max 10 entries); tip shown when `config.journals` is empty
+
 ## [1.1.0] - 2026-04-28
 
 ### Added
@@ -51,6 +61,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Forgejo CI workflow (lint, build, test)
 - Forgejo release workflow with cross-compilation via `cargo-zigbuild`
 
-[Unreleased]: https://codeberg.org/md-weber/ldash/compare/v1.1.0...HEAD
+[Unreleased]: https://codeberg.org/md-weber/ldash/compare/v1.2.0...HEAD
+[1.2.0]: https://codeberg.org/md-weber/ldash/compare/v1.1.0...v1.2.0
 [1.1.0]: https://codeberg.org/md-weber/ldash/compare/v1.0.0...v1.1.0
 [1.0.0]: https://codeberg.org/md-weber/ldash/compare/v0.1.0...v1.0.0
