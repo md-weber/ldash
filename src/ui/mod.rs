@@ -365,10 +365,6 @@ fn render_title(f: &mut Frame, area: Rect, theme: &Theme) {
         Span::raw("  "),
         Span::styled("⬡", Style::default().fg(theme.gold)),
         Span::styled(" Ledger Dashboard", Style::default().fg(theme.fg).bold()),
-        Span::styled(
-            format!(" v{}", env!("CARGO_PKG_VERSION")),
-            Style::default().fg(theme.muted),
-        ),
         Span::raw("  "),
     ]))
     .style(Style::default().bg(theme.background));
