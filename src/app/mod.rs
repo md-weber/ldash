@@ -79,6 +79,14 @@ pub struct App {
     pub search_query: String,
     pub export_prompt_active: bool,
     pub export_prompt_path: String,
+    pub file_prompt_active: bool,
+    pub file_prompt_path: String,
+    /// Selected index within the combined journal list when the picker is open.
+    pub file_prompt_journal_idx: Option<usize>,
+    /// Journals opened this session (most-recent first). Seeded with the
+    /// startup journal; extended by every successful `confirm_file_prompt`.
+    /// Session-only — never written to disk.
+    pub recent_journals: Vec<String>,
     pub search_results: Vec<Transaction>,
     pub search_state: TableState,
     pub price_alerts: Vec<PriceAlert>,
@@ -175,6 +183,10 @@ impl Default for App {
             search_query: String::new(),
             export_prompt_active: false,
             export_prompt_path: String::new(),
+            file_prompt_active: false,
+            file_prompt_path: String::new(),
+            file_prompt_journal_idx: None,
+            recent_journals: Vec::new(),
             search_results: Vec::new(),
             search_state: TableState::default(),
             price_alerts: Vec::new(),
@@ -217,7 +229,6 @@ impl App {
             _ => Tab::Accounts,
         };
         let chart_mode = ChartMode::from_config(&config.chart_mode);
-
         Ok(Self {
             journal_path,
             journal_dir,
@@ -263,6 +274,10 @@ impl App {
             search_query: String::new(),
             export_prompt_active: false,
             export_prompt_path: String::new(),
+            file_prompt_active: false,
+            file_prompt_path: String::new(),
+            file_prompt_journal_idx: None,
+            recent_journals: Vec::new(),
             search_results: Vec::new(),
             search_state: TableState::default(),
             price_alerts: Vec::new(),
@@ -288,14 +303,25 @@ impl App {
 
     pub fn visible_tabs(&self) -> Vec<Tab> {
         let mut v = vec![Tab::Accounts, Tab::Monthly];
-        if self.crypto_enabled() {
+        if self.portfolio_tab_visible() {
             v.push(Tab::Portfolio);
         }
         v
     }
 
+    /// Whether the Portfolio tab appears in the tab bar.
+    /// Defaults to `true` (always visible) — use `show_portfolio = false` in
+    /// config to explicitly hide it.
+    pub fn portfolio_tab_visible(&self) -> bool {
+        self.config.show_portfolio.unwrap_or(true)
+    }
+
+    /// Whether to actually load and display portfolio data (i.e. the tab is
+    /// visible AND we either have detected holdings or the user forced it on).
+    /// Used by the refresh plumbing to decide whether to spawn the crypto
+    /// data loaders.
     pub fn crypto_enabled(&self) -> bool {
-        self.config.show_portfolio.unwrap_or(self.has_crypto)
+        self.config.show_portfolio.unwrap_or(true)
     }
 
     pub fn next_tab(&mut self) {
@@ -328,6 +354,215 @@ impl App {
         }
     }
 
+    /// Combined ordered list shown in the journal picker.
+    /// Recent (session) journals come first, followed by any entries in
+    /// `config.journals` that aren't already in the recent list.
+    pub fn picker_journals(&self) -> Vec<String> {
+        let mut out = self.recent_journals.clone();
+        for j in &self.config.journals {
+            if !out.contains(j) {
+                out.push(j.clone());
+            }
+        }
+        out
+    }
+
+    pub fn open_file_prompt(&mut self) {
+        self.file_prompt_path.clear();
+        self.file_prompt_journal_idx = None;
+        self.file_prompt_active = true;
+    }
+
+    pub fn cancel_file_prompt(&mut self) {
+        self.file_prompt_active = false;
+        self.file_prompt_path.clear();
+        self.file_prompt_journal_idx = None;
+    }
+
+    /// Tab-complete the current `file_prompt_path` against the filesystem.
+    ///
+    /// Behaviour:
+    /// - If the path is empty and `config.journals` is non-empty, falls back
+    ///   to journal cycling (same as pressing ↓).
+    /// - Otherwise expands `~/` and lists the parent directory for entries
+    ///   whose name starts with the typed prefix:
+    ///   - 0 matches → no change.
+    ///   - 1 match   → completes the path; appends `/` for directories.
+    ///   - N matches → completes to the longest common prefix; appends `/`
+    ///     when that prefix is itself a directory.
+    pub fn file_prompt_tab_complete(&mut self) {
+        if self.file_prompt_path.is_empty() {
+            if !self.picker_journals().is_empty() {
+                self.file_prompt_next_journal();
+            }
+            return;
+        }
+
+        let expanded = expand_tilde(&self.file_prompt_path);
+
+        // Split into (dir, stem): for "/home/user/Fi" → ("/home/user", "Fi")
+        let path = std::path::Path::new(&expanded);
+        let (dir, stem): (std::path::PathBuf, String) = if expanded.ends_with('/') {
+            (path.to_path_buf(), String::new())
+        } else {
+            let parent = path
+                .parent()
+                .map(|p| p.to_path_buf())
+                .unwrap_or_else(|| std::path::PathBuf::from("."));
+            let file = path
+                .file_name()
+                .and_then(|s| s.to_str())
+                .unwrap_or("")
+                .to_string();
+            (parent, file)
+        };
+
+        let entries: Vec<(String, bool)> = match std::fs::read_dir(&dir) {
+            Ok(rd) => rd
+                .filter_map(|e| e.ok())
+                .filter(|e| {
+                    e.file_name()
+                        .to_str()
+                        .map(|n| n.starts_with(stem.as_str()))
+                        .unwrap_or(false)
+                })
+                .map(|e| {
+                    let is_dir = e.file_type().map(|t| t.is_dir()).unwrap_or(false);
+                    let name = e.file_name().to_string_lossy().to_string();
+                    (name, is_dir)
+                })
+                .collect(),
+            Err(_) => return,
+        };
+
+        if entries.is_empty() {
+            return;
+        }
+
+        let completed_name = if entries.len() == 1 {
+            let (name, is_dir) = &entries[0];
+            if *is_dir {
+                format!("{name}/")
+            } else {
+                name.clone()
+            }
+        } else {
+            // Longest common prefix of all matching names
+            let names: Vec<&str> = entries.iter().map(|(n, _)| n.as_str()).collect();
+            let prefix = longest_common_prefix(&names);
+            if prefix.len() <= stem.len() {
+                // No additional characters to add
+                return;
+            }
+            let completed_path = dir.join(prefix);
+            if completed_path.is_dir() && prefix == names[0] {
+                format!("{prefix}/")
+            } else {
+                prefix.to_string()
+            }
+        };
+
+        // Re-assemble: keep the original prefix style (tilde vs absolute)
+        let new_path = {
+            let dir_str = dir.to_string_lossy();
+            if dir_str == "." {
+                completed_name
+            } else {
+                format!("{}/{}", dir_str.trim_end_matches('/'), completed_name)
+            }
+        };
+
+        // Preserve tilde if the original input used it
+        let new_path = if self.file_prompt_path.starts_with("~/") || self.file_prompt_path == "~" {
+            if let Ok(home) = std::env::var("HOME") {
+                if new_path.starts_with(&home) {
+                    format!("~{}", &new_path[home.len()..])
+                } else {
+                    new_path
+                }
+            } else {
+                new_path
+            }
+        } else {
+            new_path
+        };
+
+        self.file_prompt_path = new_path;
+        self.file_prompt_journal_idx = None;
+    }
+
+    /// Cycle to the next journal in the picker list.
+    pub fn file_prompt_next_journal(&mut self) {
+        let list = self.picker_journals();
+        if list.is_empty() {
+            return;
+        }
+        let next = match self.file_prompt_journal_idx {
+            None => 0,
+            Some(i) => (i + 1) % list.len(),
+        };
+        self.file_prompt_journal_idx = Some(next);
+        self.file_prompt_path = list[next].clone();
+    }
+
+    /// Cycle to the previous journal in the picker list.
+    pub fn file_prompt_prev_journal(&mut self) {
+        let list = self.picker_journals();
+        if list.is_empty() {
+            return;
+        }
+        let prev = match self.file_prompt_journal_idx {
+            None => list.len() - 1,
+            Some(0) => list.len() - 1,
+            Some(i) => i - 1,
+        };
+        self.file_prompt_journal_idx = Some(prev);
+        self.file_prompt_path = list[prev].clone();
+    }
+
+    /// Attempt to switch to the path currently in `file_prompt_path`.
+    /// Expands `~/` to the home directory. Returns `Ok(())` on success or
+    /// an error message string on failure.  On success the journal path is
+    /// updated in-memory (session-only; config is not written) and a full
+    /// refresh is queued.
+    pub fn confirm_file_prompt(&mut self) {
+        let raw = self.file_prompt_path.trim().to_string();
+        self.file_prompt_active = false;
+        self.file_prompt_path.clear();
+
+        let expanded = expand_tilde(&raw);
+        let path = std::path::PathBuf::from(&expanded);
+
+        if !path.exists() {
+            self.status_msg = format!("File not found: {expanded}");
+            return;
+        }
+
+        let journal_dir = path
+            .parent()
+            .unwrap_or(std::path::Path::new("."))
+            .to_path_buf();
+
+        self.journal_path = path;
+        self.journal_dir = journal_dir;
+        self.tabs_loaded = TabFlags::none();
+        self.watcher = crate::watcher::JournalWatcher::new(&self.journal_path);
+
+        // Record in session history (most-recent first, no duplicates, max 10).
+        // Also save the journal being left so the user can switch back.
+        let previous = self.journal_path.to_string_lossy().to_string();
+        self.recent_journals
+            .retain(|j| j != &expanded && j != &previous);
+        self.recent_journals.insert(0, expanded.clone());
+        if previous != expanded {
+            self.recent_journals.insert(1, previous);
+        }
+        self.recent_journals.truncate(10);
+
+        self.start_refresh();
+        self.status_msg = format!("Switched to {expanded}");
+    }
+
     pub fn selected_coin(&self) -> Option<&str> {
         self.holdings
             .get(self.selected_holding)
@@ -343,4 +578,31 @@ impl App {
         let liabs: f64 = self.liabilities.iter().map(|b| b.amount).sum();
         assets + liabs
     }
+}
+
+fn expand_tilde(path: &str) -> String {
+    if path.starts_with("~/") || path == "~" {
+        if let Ok(home) = std::env::var("HOME") {
+            return path.replacen('~', &home, 1);
+        }
+    }
+    path.to_string()
+}
+
+fn longest_common_prefix<'a>(strs: &[&'a str]) -> &'a str {
+    if strs.is_empty() {
+        return "";
+    }
+    let first = strs[0];
+    let mut len = first.len();
+    for s in &strs[1..] {
+        len = len.min(
+            first
+                .chars()
+                .zip(s.chars())
+                .take_while(|(a, b)| a == b)
+                .count(),
+        );
+    }
+    &first[..len]
 }

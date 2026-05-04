@@ -56,6 +56,7 @@ pub(super) fn render_help_popup(f: &mut Frame, area: Rect, theme: &Theme) {
         ("a–z  Backspace", "Filter · clear char  (Accounts)"),
         ("", ""),
         ("§", "Data & view"),
+        ("Ctrl-O", "Open a different journal file"),
         ("e", "Export view to file"),
         ("Y", "Copy view to clipboard  (non-Monthly)"),
         ("s", "Toggle chart stacked / unstacked"),
@@ -255,6 +256,124 @@ pub(super) fn render_price_alerts(f: &mut Frame, app: &App, area: Rect, theme: &
     f.render_widget(Paragraph::new(Line::from(spans)).block(block), banner);
 }
 
+pub(super) fn render_file_prompt(f: &mut Frame, app: &App, area: Rect, theme: &Theme) {
+    let picker = app.picker_journals();
+    let has_config_journals = !app.config.journals.is_empty();
+
+    // Extra rows: header + one per journal + blank line (or tip line when empty)
+    let extra_rows = if picker.is_empty() {
+        4u16 // blank + 2 tip lines + blank
+    } else {
+        let tip_lines = if !has_config_journals { 4u16 } else { 1u16 }; // blank + 2 tip + blank, or just blank
+        picker.len() as u16 + 2 + tip_lines // header + entries + spacing
+    };
+    let base_h = 4u16;
+    let total_h = (base_h + extra_rows).min(area.height.saturating_sub(4));
+    let w = 72u16.min(area.width.saturating_sub(4));
+    let popup = Rect {
+        x: area.x + (area.width.saturating_sub(w)) / 2,
+        y: area.y + (area.height.saturating_sub(total_h)) / 2,
+        width: w,
+        height: total_h,
+    };
+    f.render_widget(Clear, popup);
+
+    let hint = if !picker.is_empty() {
+        "  [Tab] complete path  [↑↓] select  [Enter] open  [Esc] cancel"
+    } else {
+        "  [Tab] complete path  [Enter] open  [Esc] cancel"
+    };
+
+    let mut lines: Vec<Line> = vec![
+        Line::from(vec![
+            Span::styled("  Open: ", Style::default().fg(theme.gold).bold()),
+            Span::styled(&app.file_prompt_path, Style::default().fg(theme.fg)),
+            Span::styled("█", Style::default().fg(theme.accent)),
+        ]),
+        Line::from(""),
+    ];
+
+    if picker.is_empty() {
+        // No session history and no configured journals yet
+        lines.push(Line::from(Span::styled(
+            "  Tip: add journals = [\"~/path/a.journal\", …]",
+            Style::default().fg(theme.muted),
+        )));
+        lines.push(Line::from(Span::styled(
+            "  to your config for quick switching",
+            Style::default().fg(theme.muted),
+        )));
+        lines.push(Line::from(""));
+    } else {
+        // Determine where the session / config boundary falls
+        let recent_count = app.recent_journals.len();
+
+        lines.push(Line::from(Span::styled(
+            "  Recent:",
+            Style::default().fg(theme.muted),
+        )));
+        for (i, j) in picker.iter().enumerate() {
+            let selected = app.file_prompt_journal_idx == Some(i);
+            let is_config_only = i >= recent_count;
+
+            let label_style = if selected {
+                Style::default().fg(theme.accent).bold()
+            } else if is_config_only {
+                Style::default().fg(theme.gold)
+            } else {
+                Style::default().fg(theme.fg)
+            };
+            let prefix = if selected { "  ▶ " } else { "    " };
+
+            // Append a small "(config)" badge at the start of config-only entries
+            // and change the section label when we cross the boundary
+            if is_config_only && i == recent_count {
+                lines.push(Line::from(Span::styled(
+                    "  Configured:",
+                    Style::default().fg(theme.muted),
+                )));
+            }
+
+            lines.push(Line::from(vec![
+                Span::styled(prefix, label_style),
+                Span::styled(j.as_str(), label_style),
+            ]));
+        }
+
+        if !has_config_journals {
+            lines.push(Line::from(""));
+            lines.push(Line::from(Span::styled(
+                "  Tip: add journals = [\"…\"]",
+                Style::default().fg(theme.muted),
+            )));
+            lines.push(Line::from(Span::styled(
+                "  to your config to persist this list",
+                Style::default().fg(theme.muted),
+            )));
+            lines.push(Line::from(""));
+        } else {
+            lines.push(Line::from(""));
+        }
+    }
+
+    lines.push(Line::from(Span::styled(
+        hint,
+        Style::default().fg(theme.muted),
+    )));
+
+    let block = Block::default()
+        .title(Span::styled(
+            " Open Journal  (absolute path or ~/…) ",
+            Style::default().fg(theme.accent).bold(),
+        ))
+        .borders(Borders::ALL)
+        .border_type(BorderType::Rounded)
+        .border_style(Style::default().fg(theme.accent))
+        .style(Style::default().bg(theme.background));
+
+    f.render_widget(Paragraph::new(lines).block(block), popup);
+}
+
 pub(super) fn render_status(f: &mut Frame, app: &App, area: Rect, theme: &Theme) {
     if app.export_prompt_active {
         let text = Line::from(vec![
@@ -270,7 +389,7 @@ pub(super) fn render_status(f: &mut Frame, app: &App, area: Rect, theme: &Theme)
         return;
     }
 
-    let help = "  [1-3] tab  [↑↓/jk] navigate  [PgUp/PgDn/Home/End] scroll  [←→/hl] month/range  [r] refresh  [?] help  [q] quit";
+    let help = "  [1-3] tab  [↑↓/jk] navigate  [PgUp/PgDn/Home/End] scroll  [←→/hl] month/range  [^O] open file  [r] refresh  [?] help  [q] quit";
     let text = Line::from(vec![
         Span::styled(&app.status_msg, Style::default().fg(theme.accent)),
         Span::styled(help, Style::default().fg(theme.muted)),

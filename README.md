@@ -82,6 +82,7 @@ cd ~/Finance && ldash
 | `/` | Filter accounts (Accounts tab) / search |
 | `e` | Export current view to file |
 | `Y` | Copy current view to clipboard (Portfolio / Accounts tab) |
+| `Ctrl-O` | Open journal-switch prompt (session only) |
 | `r` | Force refresh |
 | `?` | Toggle help overlay |
 | `Esc` | Back / close |
@@ -114,6 +115,12 @@ On first launch, ldash creates a config file at `~/.config/ldash/config.toml` wi
 # Popup shows only coins with day-over-day move >= threshold.
 # Set 0.0 to show all daily moves.
 # price_alert_threshold_pct = 2.0
+
+# Quick-switch journal list — cycle through with ↑/↓ inside the Ctrl-O prompt.
+# journals = [
+#   "/path/to/personal.journal",
+#   "/path/to/work.journal",
+# ]
 
 # Expense category color overrides
 # Colors: red, green, blue, yellow, cyan, magenta, white, darkgray,

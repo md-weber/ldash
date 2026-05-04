@@ -63,7 +63,74 @@ fn holding_pl(
     }
 }
 
+fn render_portfolio_no_data(f: &mut Frame, app: &App, area: Rect, theme: &Theme) {
+    let assets = &app.config.assets_account;
+
+    let lines = vec![
+        Line::from(""),
+        Line::from(Span::styled(
+            "No portfolio data found",
+            Style::default().fg(theme.accent).bold(),
+        )),
+        Line::from(""),
+        Line::from(Span::styled(
+            format!("Looking for multi-commodity accounts under  \"{assets}\""),
+            Style::default().fg(theme.fg),
+        )),
+        Line::from(""),
+        Line::from(Span::styled(
+            "To enable this tab, hold non-base-currency assets under any sub-account:",
+            Style::default().fg(theme.muted),
+        )),
+        Line::from(Span::styled(
+            "    assets:crypto, assets:broker, assets:etf, …",
+            Style::default().fg(theme.muted),
+        )),
+        Line::from(""),
+        Line::from(Span::styled(
+            "Or force the tab on in your config:",
+            Style::default().fg(theme.muted),
+        )),
+        Line::from(Span::styled(
+            "    ~/.config/ldash/config.toml",
+            Style::default().fg(theme.accent),
+        )),
+        Line::from(Span::styled(
+            "    show_portfolio = true",
+            Style::default().fg(theme.muted),
+        )),
+    ];
+
+    let block = Block::default()
+        .title(Span::styled(
+            " Portfolio ",
+            Style::default().fg(theme.accent).bold(),
+        ))
+        .borders(Borders::ALL)
+        .border_type(BorderType::Rounded)
+        .border_style(Style::default().fg(theme.muted))
+        .style(Style::default().bg(theme.background));
+
+    let inner = block.inner(area);
+    f.render_widget(block, area);
+
+    let msg_height = lines.len() as u16;
+    let top_pad = inner.height.saturating_sub(msg_height) / 2;
+    let msg_area = Rect {
+        y: inner.y + top_pad,
+        height: msg_height.min(inner.height),
+        ..inner
+    };
+
+    f.render_widget(Paragraph::new(lines).alignment(Alignment::Center), msg_area);
+}
+
 pub(super) fn render_portfolio(f: &mut Frame, app: &mut App, area: Rect, theme: &Theme) {
+    if app.tabs_loaded.portfolio && !app.loading && app.holdings.is_empty() {
+        render_portfolio_no_data(f, app, area, theme);
+        return;
+    }
+
     if area.width < 100 {
         let chunks =
             Layout::vertical([Constraint::Percentage(45), Constraint::Percentage(55)]).split(area);

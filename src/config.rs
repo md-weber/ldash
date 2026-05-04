@@ -35,6 +35,8 @@ pub struct Config {
     pub goals: Vec<SavingsGoal>,
     pub export_dir: Option<String>,
     pub export_format: String,
+    /// Optional list of journal paths for quick switching (`:o` → Tab picker).
+    pub journals: Vec<String>,
 }
 
 #[derive(Debug, Deserialize, Clone)]
@@ -86,6 +88,7 @@ impl Default for Config {
             goals: Vec::new(),
             export_dir: None,
             export_format: "html".to_string(),
+            journals: Vec::new(),
         }
     }
 }
@@ -116,9 +119,9 @@ const DEFAULT_CONFIG: &str = r##"# ldash configuration
 # assets_account   = "assets"     # e.g. "Aktiva",    "Actifs"
 # liabilities_account = "liabilities"  # e.g. "Verbindlichkeiten"
 
-# Force Portfolio tab visibility. Default: auto-detect from
-# presence of `assets:crypto` accounts.
-# show_portfolio = true
+# Force Portfolio tab visibility. Default: true (always shown).
+# Set to false to hide the tab entirely.
+# show_portfolio = false
 
 # Portfolio chart mode: "stacked" or "unstacked"
 #   stacked   — lines show Invested / Purchased value / Total value
@@ -174,6 +177,13 @@ const DEFAULT_CONFIG: &str = r##"# ldash configuration
 
 # Seeds the path shown in the export prompt (e key). Default: ~/Downloads
 # export_dir = "~/Documents/ldash-exports"
+
+# Quick-switch journals — press Ctrl-O then ↑/↓ or Tab to cycle
+# journals = [
+#   "~/Finance/2024.journal",
+#   "~/Finance/2025.journal",
+#   "~/Finance/2026.journal",
+# ]
 
 # Savings goals — track progress toward financial targets
 # Each goal maps a target amount to an account prefix.
@@ -325,6 +335,7 @@ impl Config {
         self.goals = fresh.goals;
         self.export_dir = fresh.export_dir;
         self.export_format = fresh.export_format;
+        self.journals = fresh.journals;
         None
     }
 

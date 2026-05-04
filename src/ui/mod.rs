@@ -14,8 +14,8 @@ mod portfolio;
 pub(crate) use monthly::MONTHLY_GROUP_WIDTH;
 
 use overlays::{
-    render_help_popup, render_loading_overlay, render_price_alerts, render_search_overlay,
-    render_status,
+    render_file_prompt, render_help_popup, render_loading_overlay, render_price_alerts,
+    render_search_overlay, render_status,
 };
 
 // ── Theme ─────────────────────────────────────────────────────────────────────
@@ -334,6 +334,10 @@ pub fn render(f: &mut Frame, app: &mut App) {
     render_title(f, layout[0], &theme);
     render_tabs(f, app, layout[1], &theme);
     render_content(f, app, layout[2], &theme);
+
+    if app.file_prompt_active {
+        render_file_prompt(f, app, layout[2], &theme);
+    }
 
     if app.search_active {
         render_search_overlay(f, app, layout[2], &theme);

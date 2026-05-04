@@ -1,4 +1,4 @@
-use crossterm::event::{KeyCode, KeyEvent, KeyEventKind};
+use crossterm::event::{KeyCode, KeyEvent, KeyEventKind, KeyModifiers};
 
 use crate::app::{App, MonthlyFocus, Tab};
 use crate::copy_to_clipboard;
@@ -13,7 +13,9 @@ pub fn handle_key(app: &mut App, key: KeyEvent) -> Action {
         return Action::Continue;
     }
 
-    if app.export_prompt_active {
+    if app.file_prompt_active {
+        handle_file_prompt_key(app, key)
+    } else if app.export_prompt_active {
         handle_export_prompt_key(app, key)
     } else if app.search_active {
         handle_search_key(app, key)
@@ -28,6 +30,26 @@ pub fn handle_key(app: &mut App, key: KeyEvent) -> Action {
     } else {
         handle_normal_key(app, key)
     }
+}
+
+fn handle_file_prompt_key(app: &mut App, key: KeyEvent) -> Action {
+    match key.code {
+        KeyCode::Esc => app.cancel_file_prompt(),
+        KeyCode::Enter => app.confirm_file_prompt(),
+        KeyCode::Tab => app.file_prompt_tab_complete(),
+        KeyCode::Down => app.file_prompt_next_journal(),
+        KeyCode::BackTab | KeyCode::Up => app.file_prompt_prev_journal(),
+        KeyCode::Backspace => {
+            app.file_prompt_path.pop();
+            app.file_prompt_journal_idx = None;
+        }
+        KeyCode::Char(c) => {
+            app.file_prompt_path.push(c);
+            app.file_prompt_journal_idx = None;
+        }
+        _ => {}
+    }
+    Action::Continue
 }
 
 fn handle_export_prompt_key(app: &mut App, key: KeyEvent) -> Action {
@@ -180,6 +202,9 @@ fn handle_normal_key(app: &mut App, key: KeyEvent) -> Action {
                     Err(e) => app.status_msg = format!("Clipboard error: {e}"),
                 }
             }
+        }
+        KeyCode::Char('o') if key.modifiers.contains(KeyModifiers::CONTROL) => {
+            app.open_file_prompt();
         }
         KeyCode::Char('e') => app.open_export_prompt(),
         KeyCode::Char('s') => app.chart_mode = app.chart_mode.toggle(),
