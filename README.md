@@ -83,6 +83,7 @@ cd ~/Finance && ldash
 | `e` | Export current view to file |
 | `Y` | Copy current view to clipboard (Portfolio / Accounts tab) |
 | `Ctrl-O` | Open journal-switch prompt (session only) |
+| `Ctrl-S` | Save typed/active journal to config (inside `Ctrl-O` prompt) |
 | `r` | Force refresh |
 | `?` | Toggle help overlay |
 | `Esc` | Back / close |

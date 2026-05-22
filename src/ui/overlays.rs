@@ -57,6 +57,7 @@ pub(super) fn render_help_popup(f: &mut Frame, area: Rect, theme: &Theme) {
         ("", ""),
         ("§", "Data & view"),
         ("Ctrl-O", "Open a different journal file"),
+        ("Ctrl-S", "Save journal to config  (in Ctrl-O prompt)"),
         ("e", "Export view to file"),
         ("Y", "Copy view to clipboard  (non-Monthly)"),
         ("s", "Toggle chart stacked / unstacked"),
@@ -279,9 +280,9 @@ pub(super) fn render_file_prompt(f: &mut Frame, app: &App, area: Rect, theme: &T
     f.render_widget(Clear, popup);
 
     let hint = if !picker.is_empty() {
-        "  [Tab] complete path  [↑↓] select  [Enter] open  [Esc] cancel"
+        "  [Tab] complete  [↑↓] select  [Enter] open  [^S] save to config  [Esc] cancel"
     } else {
-        "  [Tab] complete path  [Enter] open  [Esc] cancel"
+        "  [Tab] complete  [Enter] open  [^S] save to config  [Esc] cancel"
     };
 
     let mut lines: Vec<Line> = vec![

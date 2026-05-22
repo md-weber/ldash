@@ -7,6 +7,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+
+- Persistent journal switch: press `Ctrl-S` inside the `Ctrl-O` prompt to write
+  the typed (or currently active) journal path to `~/.config/ldash/config.toml`
+  as the new `journal = "..."` key. Existing comments and unrelated keys are
+  preserved; the file is written atomically via a sibling temp file.
+
 ## [1.2.0] - 2026-05-04
 
 ### Added

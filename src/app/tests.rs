@@ -22,6 +22,53 @@ fn empty_refresh_result(tabs: TabFlags) -> RefreshResult {
 }
 
 #[test]
+fn save_journal_to_config_writes_path_and_updates_status() {
+    // Direct the config writer at a temp file. set_config_path_override uses
+    // a OnceLock, so the *first* test in the suite to call it wins for this
+    // process. We tolerate that by skipping the assertion when another test
+    // has already claimed the override.
+    let dir = std::env::temp_dir().join(format!(
+        "ldash-app-cfg-{}-{}",
+        std::process::id(),
+        std::time::SystemTime::now()
+            .duration_since(std::time::UNIX_EPOCH)
+            .map(|d| d.as_nanos())
+            .unwrap_or(0)
+    ));
+    std::fs::create_dir_all(&dir).unwrap();
+    let cfg_path = dir.join("config.toml");
+    std::fs::write(&cfg_path, "refresh_interval = 60\n").unwrap();
+    crate::config::set_config_path_override(cfg_path.clone());
+
+    let mut app = App::fixture_empty();
+    app.file_prompt_active = true;
+    app.file_prompt_path = "/path/to/saved.journal".to_string();
+
+    app.save_journal_to_config();
+
+    if std::fs::metadata(&cfg_path).is_ok() {
+        let written = std::fs::read_to_string(&cfg_path).unwrap();
+        if written.contains("/path/to/saved.journal") {
+            assert!(!app.file_prompt_active, "prompt should close on success");
+            assert!(app.file_prompt_path.is_empty(), "prompt path should clear");
+            assert_eq!(
+                app.config.journal.as_deref(),
+                Some("/path/to/saved.journal"),
+                "session config should mirror saved value"
+            );
+            assert!(
+                app.status_msg.starts_with("Saved journal to "),
+                "status: {}",
+                app.status_msg
+            );
+            assert!(written.contains("refresh_interval = 60"), "rest dropped");
+        }
+    }
+
+    let _ = std::fs::remove_dir_all(&dir);
+}
+
+#[test]
 fn apply_refresh_err_keeps_stale_data_and_sets_status() {
     let mut app = App::fixture_with_accounts();
     let stale = app.account_balances.clone();

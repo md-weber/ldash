@@ -346,6 +346,33 @@ impl Config {
         let _ = std::fs::write(path, DEFAULT_CONFIG);
     }
 
+    /// Persist `journal = "<path>"` to the user's config file.
+    ///
+    /// Preserves every other line, comment, and table — only the top-level
+    /// `journal` key is rewritten. Behaviour:
+    /// - Existing `journal = "..."` line → replaced in place.
+    /// - Existing commented `# journal = "..."` line → replaced (uncommented).
+    /// - Neither present → key is appended near the top of the file.
+    /// - File missing → seeded with the default template, then the key is set.
+    ///
+    /// Lines inside `[table]` sections are left alone — only the unsectioned
+    /// preamble is searched, matching the layout produced by the default
+    /// template.
+    pub fn persist_journal(journal: &str) -> std::io::Result<PathBuf> {
+        let path = config_path();
+        if let Some(parent) = path.parent() {
+            std::fs::create_dir_all(parent)?;
+        }
+        let original = match std::fs::read_to_string(&path) {
+            Ok(s) => s,
+            Err(e) if e.kind() == std::io::ErrorKind::NotFound => DEFAULT_CONFIG.to_string(),
+            Err(e) => return Err(e),
+        };
+        let updated = rewrite_journal_line(&original, journal);
+        atomic_write(&path, &updated)?;
+        Ok(path)
+    }
+
     pub fn config_mtime() -> Option<std::time::SystemTime> {
         std::fs::metadata(config_path())
             .and_then(|m| m.modified())
@@ -435,5 +462,235 @@ fn config_path() -> PathBuf {
         PathBuf::from(home).join(".config/ldash/config.toml")
     } else {
         PathBuf::from(".config/ldash/config.toml")
+    }
+}
+
+/// Rewrite the top-level `journal` key in `original`, returning the new file
+/// body. Pure function — exposed (crate-private) for unit tests.
+fn rewrite_journal_line(original: &str, journal: &str) -> String {
+    let new_line = format!("journal = \"{}\"", escape_toml_string(journal));
+    let mut out = String::with_capacity(original.len() + new_line.len());
+    let mut wrote_key = false;
+    let mut in_table = false;
+
+    for line in original.split_inclusive('\n') {
+        let trimmed = line.trim_start();
+
+        if !in_table {
+            let stripped = trimmed
+                .strip_prefix('#')
+                .map(|s| s.trim_start())
+                .unwrap_or(trimmed);
+            if stripped.starts_with("journal") && is_journal_assignment(stripped) {
+                if !wrote_key {
+                    out.push_str(&new_line);
+                    out.push('\n');
+                    wrote_key = true;
+                }
+                continue;
+            }
+        }
+
+        if trimmed.starts_with('[') {
+            in_table = true;
+        }
+        out.push_str(line);
+    }
+
+    if !wrote_key {
+        // No matching line — insert near the top, after any leading comment
+        // block, so the key shows up where users expect it.
+        let insert_at = find_insertion_offset(original);
+        let mut combined = String::with_capacity(original.len() + new_line.len() + 2);
+        combined.push_str(&original[..insert_at]);
+        if !combined.is_empty() && !combined.ends_with('\n') {
+            combined.push('\n');
+        }
+        combined.push_str(&new_line);
+        combined.push('\n');
+        combined.push_str(&original[insert_at..]);
+        return combined;
+    }
+
+    out
+}
+
+/// Returns `true` when the line looks like `journal[ ]*=[ ]*...`. Keeps us
+/// from accidentally rewriting a `journals = [...]` array.
+fn is_journal_assignment(stripped: &str) -> bool {
+    let rest = match stripped.strip_prefix("journal") {
+        Some(r) => r,
+        None => return false,
+    };
+    let rest = rest.trim_start();
+    rest.starts_with('=')
+}
+
+/// Pick the byte offset where a freshly-added `journal = "…"` line should
+/// land. Skips the file's leading comment / blank-line block so the key sits
+/// at the top of the configuration proper, but never crosses into the first
+/// `[table]` section.
+fn find_insertion_offset(original: &str) -> usize {
+    let mut offset = 0usize;
+    for line in original.split_inclusive('\n') {
+        let trimmed = line.trim_start();
+        if trimmed.starts_with('[') {
+            break;
+        }
+        if trimmed.starts_with('#') || trimmed.trim().is_empty() {
+            offset += line.len();
+            continue;
+        }
+        break;
+    }
+    offset
+}
+
+fn escape_toml_string(s: &str) -> String {
+    let mut out = String::with_capacity(s.len());
+    for c in s.chars() {
+        match c {
+            '\\' => out.push_str("\\\\"),
+            '"' => out.push_str("\\\""),
+            '\n' => out.push_str("\\n"),
+            '\r' => out.push_str("\\r"),
+            '\t' => out.push_str("\\t"),
+            _ => out.push(c),
+        }
+    }
+    out
+}
+
+/// Write `content` to `path` via a sibling temp file + rename, so a crash
+/// mid-write can never leave a half-written config behind.
+fn atomic_write(path: &std::path::Path, content: &str) -> std::io::Result<()> {
+    let tmp = match path.file_name() {
+        Some(name) => {
+            let mut tmp_name = std::ffi::OsString::from(".");
+            tmp_name.push(name);
+            tmp_name.push(".tmp");
+            path.with_file_name(tmp_name)
+        }
+        None => path.with_extension("tmp"),
+    };
+    std::fs::write(&tmp, content)?;
+    std::fs::rename(&tmp, path)?;
+    Ok(())
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn rewrites_existing_journal_line() {
+        let input = "journal = \"/old/path.journal\"\nrefresh_interval = 60\n";
+        let out = rewrite_journal_line(input, "/new/path.journal");
+        assert_eq!(
+            out,
+            "journal = \"/new/path.journal\"\nrefresh_interval = 60\n"
+        );
+    }
+
+    #[test]
+    fn uncomments_commented_journal_line() {
+        let input = "# journal = \"/path/old.journal\"\nrefresh_interval = 60\n";
+        let out = rewrite_journal_line(input, "/path/new.journal");
+        assert_eq!(
+            out,
+            "journal = \"/path/new.journal\"\nrefresh_interval = 60\n"
+        );
+    }
+
+    #[test]
+    fn appends_journal_when_missing() {
+        let input = "# ldash configuration\n# Some banner.\n\nrefresh_interval = 60\n";
+        let out = rewrite_journal_line(input, "/path/new.journal");
+        assert!(
+            out.contains("journal = \"/path/new.journal\""),
+            "expected journal key in output, got: {out}"
+        );
+        assert!(
+            out.contains("refresh_interval = 60"),
+            "rest of file dropped: {out}"
+        );
+    }
+
+    #[test]
+    fn does_not_touch_journals_array() {
+        let input = "journals = [\"~/a.journal\"]\n# journal = \"/x\"\n";
+        let out = rewrite_journal_line(input, "/new.journal");
+        // The `journals = [...]` array must survive unchanged.
+        assert!(out.contains("journals = [\"~/a.journal\"]"), "got: {out}");
+        // The commented `journal = ...` line should have been replaced.
+        assert!(out.contains("journal = \"/new.journal\""), "got: {out}");
+    }
+
+    #[test]
+    fn preserves_table_section_keys() {
+        let input = "\n[budgets]\n\"expenses:Essen\" = 400.0\n";
+        let out = rewrite_journal_line(input, "/new.journal");
+        // Inserted before the [budgets] table, after the leading blank line.
+        assert!(
+            out.contains("journal = \"/new.journal\""),
+            "expected journal key, got: {out}"
+        );
+        assert!(
+            out.contains("[budgets]\n\"expenses:Essen\" = 400.0\n"),
+            "table dropped: {out}"
+        );
+        // The journal line must precede the [budgets] header.
+        let j = out.find("journal = ").unwrap();
+        let b = out.find("[budgets]").unwrap();
+        assert!(j < b, "journal line should appear before [budgets]: {out}");
+    }
+
+    #[test]
+    fn escapes_special_characters() {
+        let out = rewrite_journal_line("", "/path with \"quotes\".journal");
+        assert!(
+            out.contains("journal = \"/path with \\\"quotes\\\".journal\""),
+            "got: {out}"
+        );
+    }
+
+    #[test]
+    fn replaces_only_first_journal_line() {
+        // Defensive: if a user duplicated the key, only one canonical line
+        // survives — duplicates are dropped.
+        let input = "journal = \"/a\"\njournal = \"/b\"\nrefresh_interval = 60\n";
+        let out = rewrite_journal_line(input, "/c");
+        let count = out.matches("journal = ").count();
+        assert_eq!(count, 1, "expected exactly one journal line, got: {out}");
+        assert!(out.contains("journal = \"/c\""), "got: {out}");
+    }
+
+    #[test]
+    fn persist_journal_round_trips_through_config_load() {
+        // End-to-end: write a config via persist_journal, then re-parse it
+        // with toml::from_str to confirm the journal key is recognised.
+        let dir = std::env::temp_dir().join(format!(
+            "ldash-config-test-{}-{}",
+            std::process::id(),
+            std::time::SystemTime::now()
+                .duration_since(std::time::UNIX_EPOCH)
+                .map(|d| d.as_nanos())
+                .unwrap_or(0)
+        ));
+        std::fs::create_dir_all(&dir).unwrap();
+        let path = dir.join("config.toml");
+        std::fs::write(&path, "refresh_interval = 60\n").unwrap();
+
+        // Drive the rewrite through the pure helper; persist_journal itself
+        // hits the global override which other tests may also touch.
+        let original = std::fs::read_to_string(&path).unwrap();
+        let updated = rewrite_journal_line(&original, "/path/to/x.journal");
+        std::fs::write(&path, &updated).unwrap();
+
+        let parsed: Config = toml::from_str(&std::fs::read_to_string(&path).unwrap()).unwrap();
+        assert_eq!(parsed.journal.as_deref(), Some("/path/to/x.journal"));
+        assert_eq!(parsed.refresh_interval, 60);
+
+        let _ = std::fs::remove_dir_all(&dir);
     }
 }

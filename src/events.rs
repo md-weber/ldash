@@ -39,6 +39,9 @@ fn handle_file_prompt_key(app: &mut App, key: KeyEvent) -> Action {
         KeyCode::Tab => app.file_prompt_tab_complete(),
         KeyCode::Down => app.file_prompt_next_journal(),
         KeyCode::BackTab | KeyCode::Up => app.file_prompt_prev_journal(),
+        KeyCode::Char('s') if key.modifiers.contains(KeyModifiers::CONTROL) => {
+            app.save_journal_to_config();
+        }
         KeyCode::Backspace => {
             app.file_prompt_path.pop();
             app.file_prompt_journal_idx = None;

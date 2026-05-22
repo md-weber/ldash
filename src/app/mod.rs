@@ -379,6 +379,45 @@ impl App {
         self.file_prompt_journal_idx = None;
     }
 
+    /// Persist the path currently typed in the journal-switch prompt to
+    /// `~/.config/ldash/config.toml` as the new `journal = "..."` value.
+    ///
+    /// If the prompt is empty, the *currently active* journal is saved so
+    /// `Ctrl-O` → `Ctrl-S` is a one-keystroke "remember this journal" action
+    /// after the file has already been opened.
+    ///
+    /// The session's in-memory `config.journal` is updated to match so
+    /// subsequent hot-reloads don't overwrite the value with stale state.
+    /// The actual journal switch is **not** performed here — call
+    /// `confirm_file_prompt` separately when the user wants to both save
+    /// and switch.
+    pub fn save_journal_to_config(&mut self) {
+        let raw = self.file_prompt_path.trim().to_string();
+        let target = if raw.is_empty() {
+            self.journal_path.to_string_lossy().to_string()
+        } else {
+            expand_tilde(&raw)
+        };
+
+        if target.is_empty() {
+            self.status_msg = "No journal to save".to_string();
+            return;
+        }
+
+        match crate::config::Config::persist_journal(&target) {
+            Ok(path) => {
+                self.config.journal = Some(target.clone());
+                self.file_prompt_active = false;
+                self.file_prompt_path.clear();
+                self.file_prompt_journal_idx = None;
+                self.status_msg = format!("Saved journal to {}", path.display());
+            }
+            Err(e) => {
+                self.status_msg = format!("Save error: {e}");
+            }
+        }
+    }
+
     /// Tab-complete the current `file_prompt_path` against the filesystem.
     ///
     /// Behaviour:
