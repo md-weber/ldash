@@ -25,7 +25,7 @@ pub(super) fn render_payee_analytics(f: &mut Frame, app: &mut App, area: Rect, t
         let msg = if app.loading {
             "Loading payee analytics…"
         } else {
-            "No payee data  (expenses may have no payee tags)"
+            "No payee data for this year"
         };
         let block = Block::default()
             .title(Span::styled(

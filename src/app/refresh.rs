@@ -176,11 +176,7 @@ pub(super) fn load_all_data(
     let monthly = into_tab_data(h.monthly);
     let last_year = into_tab_data(h.last_year);
     let monthly_forecast = into_tab_data(h.forecast);
-    // Payee errors are non-fatal — the sub-view just stays empty.
-    let payee_data: TabData<Vec<PayeeSummary>> = match h.payee {
-        None | Some(Err(_)) => TabData::NotRequested,
-        Some(Ok(v)) => TabData::Ok(v),
-    };
+    let payee_data: TabData<Vec<PayeeSummary>> = into_tab_data(h.payee);
 
     RefreshResult {
         tabs,
@@ -426,7 +422,7 @@ impl App {
         // Forecast errors are non-fatal: chart just omits the projected line
         // (user may not have periodic transaction rules).
         apply_field_silent!(self.monthly_forecast, r.monthly_forecast);
-        apply_field_silent!(self.payee_data, r.payee_data);
+        apply_field!(self.payee_data, r.payee_data, errors);
         self.rebuild_combined_months();
 
         // Current year has no data → jump to the last year with actual entries
