@@ -611,14 +611,13 @@ impl App {
             .unwrap_or(std::path::Path::new("."))
             .to_path_buf();
 
+        // Capture before overwriting so the old path lands in session history.
+        let previous = self.journal_path.to_string_lossy().to_string();
+
         self.journal_path = path;
         self.journal_dir = journal_dir;
         self.tabs_loaded = TabFlags::none();
         self.watcher = crate::watcher::JournalWatcher::new(&self.journal_path);
-
-        // Record in session history (most-recent first, no duplicates, max 10).
-        // Also save the journal being left so the user can switch back.
-        let previous = self.journal_path.to_string_lossy().to_string();
         self.recent_journals
             .retain(|j| j != &expanded && j != &previous);
         self.recent_journals.insert(0, expanded.clone());

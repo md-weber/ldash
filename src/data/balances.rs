@@ -209,9 +209,7 @@ pub fn load_liability_progress(
         };
 
         let pct_paid = if max_abs > 0.0 {
-            ((max_abs - current_balance.abs()) / max_abs * 100.0)
-                .max(0.0)
-                .min(100.0)
+            ((max_abs - current_balance.abs()) / max_abs * 100.0).clamp(0.0, 100.0)
         } else {
             100.0
         };

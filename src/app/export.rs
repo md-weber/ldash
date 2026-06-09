@@ -107,14 +107,14 @@ impl App {
         if need.any() {
             let jp = self.journal_path.clone();
             let jd = self.journal_dir.clone();
-            let nw_period = self.nw_range.period_arg().to_string();
-            let currency = self.config.currency_symbol.clone();
-            let assets = self.config.assets_account.clone();
-            let liabilities = self.config.liabilities_account.clone();
-            let expenses = self.config.expenses_account.clone();
-            let result = load_all_data(
-                &jp, &jd, &nw_period, &currency, &assets, &liabilities, &expenses, need,
-            );
+            let cfg = super::refresh::LoadConfig {
+                nw_period: self.nw_range.period_arg(),
+                currency_symbol: self.config.currency_symbol.clone(),
+                assets_account: self.config.assets_account.clone(),
+                liabilities_account: self.config.liabilities_account.clone(),
+                expenses_account: self.config.expenses_account.clone(),
+            };
+            let result = load_all_data(&jp, &jd, cfg, need);
             self.apply_refresh(result);
         }
     }

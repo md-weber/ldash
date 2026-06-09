@@ -16,6 +16,17 @@ use crate::data::{
 
 use super::{App, RefreshResult, Tab, TabData, TabFlags};
 
+/// Config-derived strings forwarded to every loader thread.
+/// Bundled to keep `load_all_data` and `spawn_all` below the 7-argument limit
+/// and to make extending the parameter set (e.g. date-range filter) cheap.
+pub(super) struct LoadConfig {
+    pub(super) nw_period: String,
+    pub(super) currency_symbol: String,
+    pub(super) assets_account: String,
+    pub(super) liabilities_account: String,
+    pub(super) expenses_account: String,
+}
+
 /// Joined results of every background loader thread. Each field is `None` when
 /// the corresponding tab was not requested, otherwise it carries the loader's
 /// `Result`. Splitting this out keeps `load_all_data` readable and makes it
@@ -33,55 +44,42 @@ struct LoadHandles {
     payee: Option<Result<Vec<PayeeSummary>, anyhow::Error>>,
 }
 
-fn spawn_all(
-    journal_path: &Path,
-    nw_period: &str,
-    currency_symbol: &str,
-    assets_account: &str,
-    liabilities_account: &str,
-    expenses_account: &str,
-    tabs: TabFlags,
-) -> LoadHandles {
+fn spawn_all(journal_path: &Path, cfg: &LoadConfig, tabs: TabFlags) -> LoadHandles {
     let want_portfolio = tabs.portfolio;
     let want_accounts = tabs.accounts;
     let want_monthly = tabs.monthly;
 
+    let nw_period = cfg.nw_period.as_str();
+    let currency = cfg.currency_symbol.as_str();
+    let assets = cfg.assets_account.as_str();
+    let liabilities = cfg.liabilities_account.as_str();
+    let expenses = cfg.expenses_account.as_str();
+
     std::thread::scope(|s| {
         let t_crypto = want_portfolio.then(|| s.spawn(|| load_crypto_balances(journal_path)));
-        let t_accounts = want_accounts
-            .then(|| s.spawn(|| load_account_balances_eur(journal_path, assets_account)));
+        let t_accounts =
+            want_accounts.then(|| s.spawn(|| load_account_balances_eur(journal_path, assets)));
         let t_liab = want_accounts
-            .then(|| s.spawn(|| load_liability_balances_eur(journal_path, liabilities_account)));
+            .then(|| s.spawn(|| load_liability_balances_eur(journal_path, liabilities)));
         let t_liab_progress = want_accounts.then(|| {
-            s.spawn(|| {
-                load_liability_progress(journal_path, liabilities_account, currency_symbol)
-            })
+            s.spawn(|| load_liability_progress(journal_path, liabilities, currency))
         });
         let t_nw = want_accounts.then(|| {
             s.spawn(|| {
-                load_net_worth_history(
-                    journal_path,
-                    nw_period,
-                    currency_symbol,
-                    assets_account,
-                    liabilities_account,
-                )
+                load_net_worth_history(journal_path, nw_period, currency, assets, liabilities)
             })
         });
         let t_bd = want_accounts.then(|| {
-            s.spawn(|| {
-                load_net_worth_breakdown(journal_path, nw_period, currency_symbol, assets_account)
-            })
+            s.spawn(|| load_net_worth_breakdown(journal_path, nw_period, currency, assets))
         });
         let t_monthly =
-            want_monthly.then(|| s.spawn(|| load_monthly_data(journal_path, currency_symbol)));
+            want_monthly.then(|| s.spawn(|| load_monthly_data(journal_path, currency)));
         let t_ly =
-            want_monthly.then(|| s.spawn(|| load_last_year_monthly(journal_path, currency_symbol)));
-        let t_fc = want_monthly
-            .then(|| s.spawn(|| load_monthly_with_forecast(journal_path, currency_symbol)));
-        let t_payee = want_monthly.then(|| {
-            s.spawn(|| load_payee_analytics(journal_path, expenses_account, currency_symbol))
-        });
+            want_monthly.then(|| s.spawn(|| load_last_year_monthly(journal_path, currency)));
+        let t_fc =
+            want_monthly.then(|| s.spawn(|| load_monthly_with_forecast(journal_path, currency)));
+        let t_payee = want_monthly
+            .then(|| s.spawn(|| load_payee_analytics(journal_path, expenses, currency)));
 
         LoadHandles {
             crypto: t_crypto.map(join_or_panic_err),
@@ -122,25 +120,13 @@ fn into_tab_data<T, E: std::fmt::Display>(opt: Option<Result<T, E>>) -> TabData<
 pub(super) fn load_all_data(
     journal_path: &Path,
     journal_dir: &Path,
-    nw_period: &str,
-    currency_symbol: &str,
-    assets_account: &str,
-    liabilities_account: &str,
-    expenses_account: &str,
+    cfg: LoadConfig,
     tabs: TabFlags,
 ) -> RefreshResult {
     let price_history = load_price_history(journal_dir);
     let lp = latest_prices(&price_history);
 
-    let h = spawn_all(
-        journal_path,
-        nw_period,
-        currency_symbol,
-        assets_account,
-        liabilities_account,
-        expenses_account,
-        tabs,
-    );
+    let h = spawn_all(journal_path, &cfg, tabs);
 
     let holdings: TabData<Vec<CryptoHolding>> = match h.crypto {
         None => TabData::NotRequested,
@@ -152,7 +138,7 @@ pub(super) fn load_all_data(
         holdings
     {
         let coins: Vec<String> = hs.iter().map(|holding| holding.commodity.clone()).collect();
-        match load_all_coin_chart_series(journal_path, &price_history, &coins, currency_symbol) {
+        match load_all_coin_chart_series(journal_path, &price_history, &coins, &cfg.currency_symbol) {
             Ok(cache) => TabData::Ok(cache),
             Err(e) => TabData::Err(e.to_string()),
         }
@@ -243,19 +229,19 @@ impl App {
 
         let jp = self.journal_path.clone();
         let jd = self.journal_dir.clone();
-        let nw_period = self.nw_range.period_arg().to_string();
-        let currency = self.config.currency_symbol.clone();
-        let assets = self.config.assets_account.clone();
-        let liabilities = self.config.liabilities_account.clone();
-        let expenses = self.config.expenses_account.clone();
+        let cfg = LoadConfig {
+            nw_period: self.nw_range.period_arg(),
+            currency_symbol: self.config.currency_symbol.clone(),
+            assets_account: self.config.assets_account.clone(),
+            liabilities_account: self.config.liabilities_account.clone(),
+            expenses_account: self.config.expenses_account.clone(),
+        };
 
         let (tx, rx) = mpsc::channel();
         self.refresh_rx = Some(rx);
 
         std::thread::spawn(move || {
-            let result = load_all_data(
-                &jp, &jd, &nw_period, &currency, &assets, &liabilities, &expenses, tabs,
-            );
+            let result = load_all_data(&jp, &jd, cfg, tabs);
             let _ = tx.send(result);
         });
     }
