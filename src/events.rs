@@ -174,6 +174,9 @@ fn handle_normal_key(app: &mut App, key: KeyEvent) -> Action {
         KeyCode::Char('p') if app.tab == Tab::Monthly => {
             app.payee_view = !app.payee_view;
         }
+        KeyCode::Char('C') if app.tab == Tab::Monthly => {
+            app.yoy_view = !app.yoy_view;
+        }
         KeyCode::Char('G') if app.tab == Tab::Monthly => app.jump_to_last_entry(),
         KeyCode::Char('/') => app.open_search(),
         KeyCode::Char('?') => app.show_help = true,

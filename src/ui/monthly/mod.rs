@@ -9,6 +9,7 @@ mod forecast;
 mod income;
 mod payee;
 mod summary;
+mod yoy;
 
 /// BarChart bar width (chars per bar). Shared between render and mouse hit-test.
 pub(crate) const MONTHLY_BAR_WIDTH: u16 = 3;
@@ -91,9 +92,8 @@ pub(super) fn render_monthly(f: &mut Frame, app: &mut App, area: Rect, theme: &T
 
     let narrow = area.width < 100;
     let very_narrow = area.width < 80;
-    // Show forecast chart side-by-side only for the current year on wide screens.
-    let show_forecast = area.width >= 115 && app.monthly_year_offset == 0;
 
+    // Common 3-chunk vertical layout shared by both modes.
     let chunks = Layout::vertical([
         Constraint::Length(12),
         Constraint::Length(if narrow { 20 } else { 14 }),
@@ -101,6 +101,9 @@ pub(super) fn render_monthly(f: &mut Frame, app: &mut App, area: Rect, theme: &T
     ])
     .split(area);
 
+    // Top row: main bar chart. Forecast appears side-by-side on wide screens
+    // for the current year, regardless of YoY mode.
+    let show_forecast = area.width >= 115 && app.monthly_year_offset == 0;
     if show_forecast {
         let top = Layout::horizontal([Constraint::Percentage(55), Constraint::Percentage(45)])
             .split(chunks[0]);
@@ -111,7 +114,14 @@ pub(super) fn render_monthly(f: &mut Frame, app: &mut App, area: Rect, theme: &T
         app.geometry.monthly_chart_area = chunks[0];
         chart::render_monthly_chart(f, app, chunks[0], theme);
     }
+
     summary::render_monthly_summary(f, app, chunks[1], theme);
+
+    // Bottom row: YoY comparison replaces income/expense panels when active.
+    if app.yoy_view {
+        yoy::render_yoy_comparison(f, app, chunks[2], theme);
+        return;
+    }
 
     // Payee analytics replaces the full income+expense area when active.
     if app.payee_view {

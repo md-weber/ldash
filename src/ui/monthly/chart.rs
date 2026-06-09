@@ -60,11 +60,12 @@ pub(super) fn render_monthly_chart(f: &mut Frame, app: &App, area: Rect, theme: 
         })
         .collect();
 
+    let yoy_hint = if app.yoy_view { "[C hide yoy]" } else { "[C yoy]" };
     let chart_title = if app.monthly_year_offset == 0 {
-        " Income vs Expenses  [G last entry] ".to_string()
+        format!(" Income vs Expenses  {yoy_hint}  [G last entry] ")
     } else {
         format!(
-            " Income vs Expenses ({})  [y/Y]  [G last entry] ",
+            " Income vs Expenses ({})  [y/Y]  {yoy_hint}  [G last entry] ",
             app.displayed_year()
         )
     };

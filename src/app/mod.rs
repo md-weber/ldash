@@ -97,6 +97,8 @@ pub struct App {
     pub search_state: TableState,
     /// Whether the payee analytics sub-view is active on the Monthly tab (`p`).
     pub payee_view: bool,
+    /// Whether the YoY comparison bar chart is shown below the monthly chart (`C`).
+    pub yoy_view: bool,
     pub payee_data: Vec<PayeeSummary>,
     pub payee_state: TableState,
     pub price_alerts: Vec<PriceAlert>,
@@ -203,6 +205,7 @@ impl Default for App {
             search_results: Vec::new(),
             search_state: TableState::default(),
             payee_view: false,
+            yoy_view: false,
             payee_data: Vec::new(),
             payee_state: TableState::default(),
             price_alerts: Vec::new(),
@@ -300,6 +303,7 @@ impl App {
             search_results: Vec::new(),
             search_state: TableState::default(),
             payee_view: false,
+            yoy_view: false,
             payee_data: Vec::new(),
             payee_state: TableState::default(),
             price_alerts: Vec::new(),
