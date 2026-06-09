@@ -153,6 +153,9 @@ fn handle_normal_key(app: &mut App, key: KeyEvent) -> Action {
                 app.close_income_detail();
             } else if app.expense_detail.is_some() {
                 app.close_expense_detail();
+            } else if app.liability_focus {
+                app.liability_focus = false;
+                app.liability_state.select(Some(0));
             } else if !app.account_filter.is_empty() {
                 app.close_account_filter();
             } else {

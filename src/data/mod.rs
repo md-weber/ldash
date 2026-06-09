@@ -13,7 +13,7 @@ mod transactions;
 
 pub use balances::{
     load_account_balances_eur, load_crypto_balances, load_liability_balances_eur,
-    load_net_worth_breakdown, load_net_worth_history,
+    load_liability_progress, load_net_worth_breakdown, load_net_worth_history, LiabilityProgress,
 };
 pub use monthly::{
     load_last_year_monthly, load_monthly_data, load_monthly_for_period, load_monthly_with_forecast,

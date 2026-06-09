@@ -388,7 +388,11 @@ fn render_accounts_table(f: &mut Frame, app: &mut App, area: Rect, theme: &Theme
     f.render_stateful_widget(table, table_area, &mut app.account_state);
 }
 
-fn render_liabilities_table(f: &mut Frame, app: &App, area: Rect, theme: &Theme) {
+fn render_liabilities_table(f: &mut Frame, app: &mut App, area: Rect, theme: &Theme) {
+    let narrow = area.width < 80;
+    let bar_width: usize = if narrow { 0 } else { 14 };
+    let show_payoff = !narrow && area.width >= 100;
+
     let rows: Vec<Row> = app
         .liabilities
         .iter()
@@ -397,27 +401,105 @@ fn render_liabilities_table(f: &mut Frame, app: &App, area: Rect, theme: &Theme)
             let short = app
                 .config
                 .strip_account_prefix(&b.account, &app.config.liabilities_account.clone());
-            Row::new(vec![
-                Cell::from(format!("  {}", short)).style(Style::default().fg(theme.fg)),
+            let name = format!("  {}", short);
+
+            // Look up payoff progress for this account.
+            let progress = app
+                .liability_progress
+                .iter()
+                .find(|p| p.account == b.account);
+
+            let mut cells = vec![
+                Cell::from(name).style(Style::default().fg(theme.fg)),
                 Cell::from(amount_str).style(Style::default().fg(theme.negative)),
-            ])
+            ];
+
+            if !narrow {
+                let bar_cell = if let Some(p) = progress {
+                    let filled = ((p.pct_paid / 100.0).clamp(0.0, 1.0) * bar_width as f64) as usize;
+                    let empty = bar_width - filled;
+                    let color = if p.pct_paid >= 80.0 {
+                        theme.positive
+                    } else if p.pct_paid >= 40.0 {
+                        theme.gold
+                    } else {
+                        theme.accent
+                    };
+                    let bar = format!("{}{} {:>3.0}%", "█".repeat(filled), "░".repeat(empty), p.pct_paid);
+                    Cell::from(bar).style(Style::default().fg(color))
+                } else {
+                    Cell::from("")
+                };
+                cells.push(bar_cell);
+            }
+
+            if show_payoff {
+                let payoff_cell = if let Some(p) = progress {
+                    let text = match p.months_to_payoff {
+                        Some(m) if m < 0.5 => "paid off".to_string(),
+                        Some(m) if m < 12.0 => format!("~{:.0}m", m),
+                        Some(m) => format!("~{:.0}y {:.0}m", (m / 12.0).floor(), m % 12.0),
+                        None => String::new(),
+                    };
+                    Cell::from(text).style(Style::default().fg(theme.muted))
+                } else {
+                    Cell::from("")
+                };
+                cells.push(payoff_cell);
+            }
+
+            Row::new(cells)
         })
         .collect();
 
-    let widths = [Constraint::Min(38), Constraint::Length(16)];
+    let widths: Vec<Constraint> = if narrow {
+        vec![Constraint::Min(25), Constraint::Length(16)]
+    } else if show_payoff {
+        vec![
+            Constraint::Min(25),
+            Constraint::Length(16),
+            Constraint::Length(20),
+            Constraint::Length(10),
+        ]
+    } else {
+        vec![
+            Constraint::Min(25),
+            Constraint::Length(16),
+            Constraint::Length(20),
+        ]
+    };
 
     let total_liab: f64 = app.liabilities.iter().map(|b| b.amount).sum();
-    let title = format!(" Liabilities  ({}) ", app.config.fmt_amount(total_liab, 2));
+    let title = format!(
+        " Liabilities  ({})  [↑/↓ navigate]  [Enter drill-down] ",
+        app.config.fmt_amount(total_liab, 2)
+    );
+
+    let border_style = if app.liability_focus {
+        Style::default().fg(theme.negative)
+    } else {
+        Style::default().fg(theme.muted)
+    };
+
+    let mut header_cells = vec![
+        "Account".to_string(),
+        format!("Balance ({})", app.config.currency_symbol),
+    ];
+    if !narrow {
+        header_cells.push("Payoff progress".to_string());
+    }
+    if show_payoff {
+        header_cells.push("Est. remaining".to_string());
+    }
 
     let table = Table::new(rows, widths)
         .header(
-            Row::new(vec![
-                "Account".to_string(),
-                format!("Balance ({})", app.config.currency_symbol),
-            ])
-            .style(Style::default().fg(theme.muted).bold())
-            .bottom_margin(1),
+            Row::new(header_cells)
+                .style(Style::default().fg(theme.muted).bold())
+                .bottom_margin(1),
         )
+        .row_highlight_style(Style::default().bg(theme.highlight_bg).bold())
+        .highlight_symbol("▶ ")
         .block(
             Block::default()
                 .title(Span::styled(
@@ -426,10 +508,11 @@ fn render_liabilities_table(f: &mut Frame, app: &App, area: Rect, theme: &Theme)
                 ))
                 .borders(Borders::ALL)
                 .border_type(BorderType::Rounded)
-                .border_style(Style::default().fg(theme.muted)),
+                .border_style(border_style),
         );
 
-    f.render_widget(table, area);
+    app.geometry.liability_table_area = area;
+    f.render_stateful_widget(table, area, &mut app.liability_state);
 }
 
 fn render_goals(f: &mut Frame, app: &App, area: Rect, theme: &Theme) {

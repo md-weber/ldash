@@ -13,6 +13,7 @@ fn empty_refresh_result(tabs: TabFlags) -> RefreshResult {
         coin_chart_cache: TabData::NotRequested,
         account_balances: TabData::NotRequested,
         liabilities: TabData::NotRequested,
+        liability_progress: TabData::NotRequested,
         net_worth_history: TabData::NotRequested,
         net_worth_breakdown: TabData::NotRequested,
         monthly: TabData::NotRequested,

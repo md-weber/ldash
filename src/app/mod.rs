@@ -23,8 +23,8 @@ use std::time::{Instant, SystemTime};
 
 use crate::config::Config;
 use crate::data::{
-    AccountBalance, CoinChartSeries, CryptoHolding, MonthlyData, NetWorthBreakdownSeries,
-    NetWorthSeries, PayeeSummary, PriceEntry, Transaction,
+    AccountBalance, CoinChartSeries, CryptoHolding, LiabilityProgress, MonthlyData,
+    NetWorthBreakdownSeries, NetWorthSeries, PayeeSummary, PriceEntry, Transaction,
 };
 use crate::watcher::JournalWatcher;
 
@@ -40,6 +40,9 @@ pub struct App {
     pub coin_chart_cache: HashMap<String, CoinChartSeries>,
     pub account_balances: Vec<AccountBalance>,
     pub liabilities: Vec<AccountBalance>,
+    /// Payoff-progress analytics, keyed by account name. Loaded in parallel
+    /// with `liabilities`; may lag one render cycle on first load.
+    pub liability_progress: Vec<LiabilityProgress>,
     pub net_worth_history: NetWorthSeries,
     pub net_worth_breakdown: NetWorthBreakdownSeries,
     pub nw_range: NetWorthRange,
@@ -58,6 +61,9 @@ pub struct App {
     pub selected_holding: usize,
     pub monthly_focus: MonthlyFocus,
     pub account_state: TableState,
+    pub liability_state: TableState,
+    /// Whether keyboard focus is on the liabilities table vs the assets table.
+    pub liability_focus: bool,
     pub expense_state: TableState,
     pub income_state: TableState,
     pub account_detail: Option<Vec<Transaction>>,
@@ -154,6 +160,7 @@ impl Default for App {
             coin_chart_cache: HashMap::new(),
             account_balances: Vec::new(),
             liabilities: Vec::new(),
+            liability_progress: Vec::new(),
             net_worth_history: NetWorthSeries::default(),
             net_worth_breakdown: NetWorthBreakdownSeries::default(),
             nw_range: NetWorthRange::All,
@@ -166,6 +173,8 @@ impl Default for App {
             selected_holding: 0,
             monthly_focus: MonthlyFocus::default(),
             account_state: TableState::default().with_selected(0),
+            liability_state: TableState::default().with_selected(0),
+            liability_focus: false,
             expense_state: TableState::default().with_selected(0),
             income_state: TableState::default().with_selected(0),
             account_detail: None,
@@ -248,6 +257,7 @@ impl App {
             coin_chart_cache: HashMap::new(),
             account_balances: Vec::new(),
             liabilities: Vec::new(),
+            liability_progress: Vec::new(),
             net_worth_history: NetWorthSeries::default(),
             net_worth_breakdown: NetWorthBreakdownSeries::default(),
             nw_range: NetWorthRange::All,
@@ -260,6 +270,8 @@ impl App {
             selected_holding: 0,
             monthly_focus: MonthlyFocus::default(),
             account_state: TableState::default().with_selected(0),
+            liability_state: TableState::default().with_selected(0),
+            liability_focus: false,
             expense_state: TableState::default().with_selected(0),
             income_state: TableState::default().with_selected(0),
             account_detail: None,
@@ -337,6 +349,7 @@ impl App {
     pub fn next_tab(&mut self) {
         if self.tab == Tab::Accounts {
             self.close_account_filter();
+            self.liability_focus = false;
         }
         let tabs = self.visible_tabs();
         let pos = tabs.iter().position(|&t| t == self.tab).unwrap_or(0);
@@ -347,6 +360,7 @@ impl App {
     pub fn prev_tab(&mut self) {
         if self.tab == Tab::Accounts {
             self.close_account_filter();
+            self.liability_focus = false;
         }
         let tabs = self.visible_tabs();
         let pos = tabs.iter().position(|&t| t == self.tab).unwrap_or(0);
@@ -357,6 +371,7 @@ impl App {
     pub fn select_tab(&mut self, idx: usize) {
         if self.tab == Tab::Accounts {
             self.close_account_filter();
+            self.liability_focus = false;
         }
         if let Some(&t) = self.visible_tabs().get(idx) {
             self.tab = t;

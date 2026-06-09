@@ -7,10 +7,11 @@ use std::time::Instant;
 use crate::config::Config;
 use crate::data::{
     compute_portfolio, latest_prices, load_account_balances_eur, load_all_coin_chart_series,
-    load_crypto_balances, load_last_year_monthly, load_liability_balances_eur, load_monthly_data,
-    load_monthly_with_forecast, load_net_worth_breakdown, load_net_worth_history,
-    load_payee_analytics, load_price_history, AccountBalance, CoinChartSeries, CryptoHolding,
-    MonthlyData, NetWorthBreakdownSeries, NetWorthSeries, PayeeSummary,
+    load_crypto_balances, load_last_year_monthly, load_liability_balances_eur,
+    load_liability_progress, load_monthly_data, load_monthly_with_forecast,
+    load_net_worth_breakdown, load_net_worth_history, load_payee_analytics, load_price_history,
+    AccountBalance, CoinChartSeries, CryptoHolding, LiabilityProgress, MonthlyData,
+    NetWorthBreakdownSeries, NetWorthSeries, PayeeSummary,
 };
 
 use super::{App, RefreshResult, Tab, TabData, TabFlags};
@@ -23,6 +24,7 @@ struct LoadHandles {
     crypto: Option<Result<Vec<AccountBalance>, anyhow::Error>>,
     accounts: Option<Result<Vec<AccountBalance>, anyhow::Error>>,
     liabilities: Option<Result<Vec<AccountBalance>, anyhow::Error>>,
+    liability_progress: Option<Result<Vec<LiabilityProgress>, anyhow::Error>>,
     net_worth: Option<Result<NetWorthSeries, anyhow::Error>>,
     breakdown: Option<Result<NetWorthBreakdownSeries, anyhow::Error>>,
     monthly: Option<Result<MonthlyData, anyhow::Error>>,
@@ -50,6 +52,11 @@ fn spawn_all(
             .then(|| s.spawn(|| load_account_balances_eur(journal_path, assets_account)));
         let t_liab = want_accounts
             .then(|| s.spawn(|| load_liability_balances_eur(journal_path, liabilities_account)));
+        let t_liab_progress = want_accounts.then(|| {
+            s.spawn(|| {
+                load_liability_progress(journal_path, liabilities_account, currency_symbol)
+            })
+        });
         let t_nw = want_accounts.then(|| {
             s.spawn(|| {
                 load_net_worth_history(
@@ -80,6 +87,7 @@ fn spawn_all(
             crypto: t_crypto.map(join_or_panic_err),
             accounts: t_accounts.map(join_or_panic_err),
             liabilities: t_liab.map(join_or_panic_err),
+            liability_progress: t_liab_progress.map(join_or_panic_err),
             net_worth: t_nw.map(join_or_panic_err),
             breakdown: t_bd.map(join_or_panic_err),
             monthly: t_monthly.map(join_or_panic_err),
@@ -166,6 +174,7 @@ pub(super) fn load_all_data(
     };
 
     let liabilities = into_tab_data(h.liabilities);
+    let liability_progress = into_tab_data(h.liability_progress);
     let net_worth_history = into_tab_data(h.net_worth);
     // Breakdown errors are non-fatal — surface as NotRequested so the chart
     // simply omits the layer instead of poisoning the status bar.
@@ -186,6 +195,7 @@ pub(super) fn load_all_data(
         coin_chart_cache,
         account_balances,
         liabilities,
+        liability_progress,
         net_worth_history,
         net_worth_breakdown,
         monthly,
@@ -415,6 +425,9 @@ impl App {
         apply_field!(self.coin_chart_cache, r.coin_chart_cache, errors);
         apply_field!(self.account_balances, r.account_balances, errors);
         apply_field!(self.liabilities, r.liabilities, errors);
+        // Liability-progress errors are non-fatal: the table just omits the
+        // progress bar and shows balances-only rather than failing entirely.
+        apply_field_silent!(self.liability_progress, r.liability_progress);
         apply_field!(self.net_worth_history, r.net_worth_history, errors);
         apply_field_silent!(self.net_worth_breakdown, r.net_worth_breakdown);
         apply_field!(self.monthly, r.monthly, errors);

@@ -59,11 +59,21 @@ impl App {
         {
             return;
         }
-        let sel = self.account_state.selected().unwrap_or(0);
-        let account = match self.filtered_accounts().get(sel).map(|b| b.account.clone()) {
-            Some(a) => a,
-            None => return,
+
+        let account = if self.liability_focus {
+            let sel = self.liability_state.selected().unwrap_or(0);
+            match self.liabilities.get(sel).map(|b| b.account.clone()) {
+                Some(a) => a,
+                None => return,
+            }
+        } else {
+            let sel = self.account_state.selected().unwrap_or(0);
+            match self.filtered_accounts().get(sel).map(|b| b.account.clone()) {
+                Some(a) => a,
+                None => return,
+            }
         };
+
         let (tx, rx) = mpsc::channel();
         self.account_detail_rx = Some(rx);
         self.status_msg = format!("Loading {account}…");

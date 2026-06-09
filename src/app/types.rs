@@ -2,8 +2,8 @@ use chrono::{Datelike, Local, NaiveDate};
 use std::collections::HashMap;
 
 use crate::data::{
-    AccountBalance, CoinChartSeries, CryptoHolding, MonthlyData, NetWorthBreakdownSeries,
-    NetWorthSeries, PayeeSummary, PriceEntry,
+    AccountBalance, CoinChartSeries, CryptoHolding, LiabilityProgress, MonthlyData,
+    NetWorthBreakdownSeries, NetWorthSeries, PayeeSummary, PriceEntry,
 };
 
 /// Per-tab load result. Distinguishes "not requested", "ok data", and "errored
@@ -22,6 +22,8 @@ pub struct RefreshResult {
     pub coin_chart_cache: TabData<HashMap<String, CoinChartSeries>>,
     pub account_balances: TabData<Vec<AccountBalance>>,
     pub liabilities: TabData<Vec<AccountBalance>>,
+    /// Payoff progress analytics for each liability account.
+    pub liability_progress: TabData<Vec<LiabilityProgress>>,
     pub net_worth_history: TabData<NetWorthSeries>,
     pub net_worth_breakdown: TabData<NetWorthBreakdownSeries>,
     pub monthly: TabData<MonthlyData>,
@@ -272,6 +274,7 @@ pub struct Geometry {
     pub tab_bar_area: ratatui::layout::Rect,
     pub tab_rects: Vec<ratatui::layout::Rect>,
     pub table_area: ratatui::layout::Rect,
+    pub liability_table_area: ratatui::layout::Rect,
     pub income_table_area: ratatui::layout::Rect,
     pub expense_table_area: ratatui::layout::Rect,
     pub monthly_chart_area: ratatui::layout::Rect,
