@@ -22,9 +22,9 @@ pub use monthly::{
 pub use parse::parse_eu_number;
 #[allow(unused_imports)]
 pub(crate) use parse::{month_index, month_name, MONTH_NAMES};
+pub use payee::{load_payee_analytics, PayeeSummary};
 pub use portfolio::{compute_portfolio, load_all_coin_chart_series};
 pub use prices::{latest_prices, load_price_history};
-pub use payee::{load_payee_analytics, PayeeSummary};
 pub use transactions::{load_recent_transactions, search_transactions};
 
 pub(crate) fn commodity_key(raw: &str) -> String {

@@ -37,7 +37,16 @@ pub fn load_payee_analytics(
     let jp = journal_path.to_str().unwrap_or("all.journal");
 
     // One call covers both YTD totals and monthly sparklines (last 6 buckets).
-    let ytd_text = run_hledger(&["-f", jp, "register", "type:x", "-p", "this year", "-O", "csv"])?;
+    let ytd_text = run_hledger(&[
+        "-f",
+        jp,
+        "register",
+        "type:x",
+        "-p",
+        "this year",
+        "-O",
+        "csv",
+    ])?;
     let ytd_map = aggregate_register_by_description(&ytd_text);
 
     if ytd_map.is_empty() {
@@ -189,9 +198,17 @@ mod tests {
                    \"674\",\"2026-01-02\",\"\",\"AXA | Kfz\",\"expenses:transport\",\"362,88 €\",\"4891,88 €\"\n\
                    \"675\",\"2026-01-02\",\"\",\"FAMILIENHOTEL |\",\"expenses:urlaub\",\"100,00 €\",\"4991,88 €\"\n";
         let map = aggregate_register_by_description(csv);
-        assert!(!map.is_empty(), "map must not be empty for EU-format amounts");
-        let hotel = map.get("FAMILIENHOTEL |").expect("FAMILIENHOTEL should be present");
-        assert!((hotel - 4629.0).abs() < 0.01, "FAMILIENHOTEL total: {hotel}");
+        assert!(
+            !map.is_empty(),
+            "map must not be empty for EU-format amounts"
+        );
+        let hotel = map
+            .get("FAMILIENHOTEL |")
+            .expect("FAMILIENHOTEL should be present");
+        assert!(
+            (hotel - 4629.0).abs() < 0.01,
+            "FAMILIENHOTEL total: {hotel}"
+        );
         let axa = map.get("AXA | Kfz").expect("AXA should be present");
         assert!((axa - 362.88).abs() < 0.01, "AXA total: {axa}");
     }

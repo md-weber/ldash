@@ -61,9 +61,8 @@ fn spawn_all(journal_path: &Path, cfg: &LoadConfig, tabs: TabFlags) -> LoadHandl
             want_accounts.then(|| s.spawn(|| load_account_balances_eur(journal_path, assets)));
         let t_liab = want_accounts
             .then(|| s.spawn(|| load_liability_balances_eur(journal_path, liabilities)));
-        let t_liab_progress = want_accounts.then(|| {
-            s.spawn(|| load_liability_progress(journal_path, liabilities, currency))
-        });
+        let t_liab_progress = want_accounts
+            .then(|| s.spawn(|| load_liability_progress(journal_path, liabilities, currency)));
         let t_nw = want_accounts.then(|| {
             s.spawn(|| {
                 load_net_worth_history(journal_path, nw_period, currency, assets, liabilities)
@@ -72,10 +71,8 @@ fn spawn_all(journal_path: &Path, cfg: &LoadConfig, tabs: TabFlags) -> LoadHandl
         let t_bd = want_accounts.then(|| {
             s.spawn(|| load_net_worth_breakdown(journal_path, nw_period, currency, assets))
         });
-        let t_monthly =
-            want_monthly.then(|| s.spawn(|| load_monthly_data(journal_path, currency)));
-        let t_ly =
-            want_monthly.then(|| s.spawn(|| load_last_year_monthly(journal_path, currency)));
+        let t_monthly = want_monthly.then(|| s.spawn(|| load_monthly_data(journal_path, currency)));
+        let t_ly = want_monthly.then(|| s.spawn(|| load_last_year_monthly(journal_path, currency)));
         let t_fc =
             want_monthly.then(|| s.spawn(|| load_monthly_with_forecast(journal_path, currency)));
         let t_payee = want_monthly
@@ -138,7 +135,8 @@ pub(super) fn load_all_data(
         holdings
     {
         let coins: Vec<String> = hs.iter().map(|holding| holding.commodity.clone()).collect();
-        match load_all_coin_chart_series(journal_path, &price_history, &coins, &cfg.currency_symbol) {
+        match load_all_coin_chart_series(journal_path, &price_history, &coins, &cfg.currency_symbol)
+        {
             Ok(cache) => TabData::Ok(cache),
             Err(e) => TabData::Err(e.to_string()),
         }

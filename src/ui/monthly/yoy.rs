@@ -100,14 +100,7 @@ enum Half {
     Expenses,
 }
 
-fn render_half(
-    f: &mut Frame,
-    app: &App,
-    area: Rect,
-    theme: &Theme,
-    half: Half,
-    last_year: i32,
-) {
+fn render_half(f: &mut Frame, app: &App, area: Rect, theme: &Theme, half: Half, last_year: i32) {
     use ratatui::widgets::{Bar, BarChart, BarGroup};
 
     let (base_color, get_val): (Color, fn(&SingleMonth) -> f64) = match half {
@@ -123,7 +116,9 @@ fn render_half(
     let prev_style = Style::default().fg(theme.muted);
     let curr_style = Style::default().fg(base_color);
     // For the selected month, bold both bars so the active comparison pops.
-    let prev_sel = Style::default().fg(theme.muted).add_modifier(Modifier::BOLD);
+    let prev_sel = Style::default()
+        .fg(theme.muted)
+        .add_modifier(Modifier::BOLD);
     let curr_sel = Style::default().fg(base_color).add_modifier(Modifier::BOLD);
 
     let groups: Vec<BarGroup> = app
@@ -139,8 +134,11 @@ fn render_half(
 
             let selected = i == app.combined_selected;
             let label_color = if selected { theme.accent } else { theme.muted };
-            let (ly_style, ty_style) =
-                if selected { (prev_sel, curr_sel) } else { (prev_style, curr_style) };
+            let (ly_style, ty_style) = if selected {
+                (prev_sel, curr_sel)
+            } else {
+                (prev_style, curr_style)
+            };
 
             Some(
                 BarGroup::default()
@@ -236,15 +234,27 @@ fn build_half_title(
 // ── Helpers ───────────────────────────────────────────────────────────────────
 
 fn pct_change(base: f64, diff: f64) -> f64 {
-    if base > 0.0 { diff / base * 100.0 } else { 0.0 }
+    if base > 0.0 {
+        diff / base * 100.0
+    } else {
+        0.0
+    }
 }
 
 /// Returns (arrow symbol, color). `higher_is_good = true` for income (up = green),
 /// `false` for expenses (up = red).
 fn signed_indicator(diff: f64, higher_is_good: bool, theme: &Theme) -> (&'static str, Color) {
-    let positive_outcome = if higher_is_good { diff >= 0.0 } else { diff <= 0.0 };
+    let positive_outcome = if higher_is_good {
+        diff >= 0.0
+    } else {
+        diff <= 0.0
+    };
     let arrow = if diff >= 0.0 { "↑" } else { "↓" };
-    let color = if positive_outcome { theme.positive } else { theme.negative };
+    let color = if positive_outcome {
+        theme.positive
+    } else {
+        theme.negative
+    };
     (arrow, color)
 }
 
@@ -276,7 +286,9 @@ mod tests {
         };
         app.combined_selected = 0;
 
-        let ly = app.last_year_match().expect("should find January in last_year");
+        let ly = app
+            .last_year_match()
+            .expect("should find January in last_year");
         assert_eq!(ly.month_name, "January");
         assert!((ly.total_income - 2800.0).abs() < f64::EPSILON);
     }

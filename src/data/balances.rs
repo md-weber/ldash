@@ -170,10 +170,16 @@ pub fn load_liability_progress(
         }
 
         // Split into historical (≤ today) and forecast (> today).
-        let historical: Vec<(NaiveDate, f64)> =
-            monthly.iter().filter(|(d, _)| *d <= today).cloned().collect();
-        let forecast: Vec<(NaiveDate, f64)> =
-            monthly.iter().filter(|(d, _)| *d > today).cloned().collect();
+        let historical: Vec<(NaiveDate, f64)> = monthly
+            .iter()
+            .filter(|(d, _)| *d <= today)
+            .cloned()
+            .collect();
+        let forecast: Vec<(NaiveDate, f64)> = monthly
+            .iter()
+            .filter(|(d, _)| *d > today)
+            .cloned()
+            .collect();
 
         // current_balance = last historical value (or last overall if no history).
         let current_balance = historical
@@ -232,15 +238,16 @@ pub fn load_liability_progress(
             }
         } else {
             // First occurrence of the minimum absolute balance in the forecast.
-            let (min_abs, min_date) = forecast
-                .iter()
-                .fold((f64::INFINITY, forecast[0].0), |(m_abs, m_date), &(d, b)| {
+            let (min_abs, min_date) = forecast.iter().fold(
+                (f64::INFINITY, forecast[0].0),
+                |(m_abs, m_date), &(d, b)| {
                     if b.abs() < m_abs {
                         (b.abs(), d)
                     } else {
                         (m_abs, m_date)
                     }
-                });
+                },
+            );
 
             let months_to_min = months_between(today, min_date);
 

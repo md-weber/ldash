@@ -1,9 +1,7 @@
 use ratatui::style::Modifier;
 use ratatui::{prelude::*, widgets::*};
 
-use super::{
-    MONTHLY_BAR_GAP, MONTHLY_BAR_WIDTH, MONTHLY_GROUP_GAP,
-};
+use super::{MONTHLY_BAR_GAP, MONTHLY_BAR_WIDTH, MONTHLY_GROUP_GAP};
 use crate::app::App;
 use crate::ui::Theme;
 
@@ -60,7 +58,11 @@ pub(super) fn render_monthly_chart(f: &mut Frame, app: &App, area: Rect, theme: 
         })
         .collect();
 
-    let yoy_hint = if app.yoy_view { "[C hide yoy]" } else { "[C yoy]" };
+    let yoy_hint = if app.yoy_view {
+        "[C hide yoy]"
+    } else {
+        "[C yoy]"
+    };
     let chart_title = if app.monthly_year_offset == 0 {
         format!(" Income vs Expenses  {yoy_hint}  [G last entry] ")
     } else {

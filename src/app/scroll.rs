@@ -106,9 +106,7 @@ impl App {
         let len = self.current_len();
         if i + 1 < len {
             self.set_current_selected(i + 1);
-        } else if self.tab == Tab::Accounts
-            && !self.liability_focus
-            && !self.liabilities.is_empty()
+        } else if self.tab == Tab::Accounts && !self.liability_focus && !self.liabilities.is_empty()
         {
             // Transfer focus to the liabilities table when scrolling past the
             // last asset row.

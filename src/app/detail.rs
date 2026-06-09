@@ -272,8 +272,8 @@ mod tests {
 
     #[test]
     fn search_navigate_closes_search_and_switches_tab() {
-        use chrono::NaiveDate;
         use crate::data::Transaction;
+        use chrono::NaiveDate;
 
         let mut app = App::fixture_empty();
         app.search_active = true;
@@ -291,13 +291,16 @@ mod tests {
 
         assert!(!app.search_active, "search should be closed");
         assert_eq!(app.tab, Tab::Accounts, "should switch to Accounts tab");
-        assert!(app.account_detail_rx.is_some(), "detail load should be spawned");
+        assert!(
+            app.account_detail_rx.is_some(),
+            "detail load should be spawned"
+        );
     }
 
     #[test]
     fn search_navigate_noop_when_no_account() {
-        use chrono::NaiveDate;
         use crate::data::Transaction;
+        use chrono::NaiveDate;
 
         let mut app = App::fixture_empty();
         app.search_active = true;

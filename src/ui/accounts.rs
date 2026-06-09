@@ -425,7 +425,12 @@ fn render_liabilities_table(f: &mut Frame, app: &mut App, area: Rect, theme: &Th
                     } else {
                         theme.accent
                     };
-                    let bar = format!("{}{} {:>3.0}%", "█".repeat(filled), "░".repeat(empty), p.pct_paid);
+                    let bar = format!(
+                        "{}{} {:>3.0}%",
+                        "█".repeat(filled),
+                        "░".repeat(empty),
+                        p.pct_paid
+                    );
                     Cell::from(bar).style(Style::default().fg(color))
                 } else {
                     Cell::from("")

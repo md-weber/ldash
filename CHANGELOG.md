@@ -7,12 +7,26 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [1.3.0] - 2026-06-09
+
 ### Added
 
 - Persistent journal switch: press `Ctrl-S` inside the `Ctrl-O` prompt to write
   the typed (or currently active) journal path to `~/.config/ldash/config.toml`
   as the new `journal = "..."` key. Existing comments and unrelated keys are
   preserved; the file is written atomically via a sibling temp file.
+- Year-over-year diagram on the monthly tab comparing earnings and expenses across recent years
+- Liability tracking screen with estimated time to repay based on current payment rates
+- Payee screen accessible with `p` in the monthly tab showing top contributors to payments
+- Global search with drill-down option to navigate directly to matching entries
+
+### Fixed
+
+- Removed version string from title bar
+
+### Changed
+
+- Refactored `monthly.rs` into per-section submodules for maintainability
 
 ## [1.2.0] - 2026-05-04
 
@@ -68,7 +82,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Forgejo CI workflow (lint, build, test)
 - Forgejo release workflow with cross-compilation via `cargo-zigbuild`
 
-[Unreleased]: https://codeberg.org/md-weber/ldash/compare/v1.2.0...HEAD
+[Unreleased]: https://codeberg.org/md-weber/ldash/compare/v1.3.0...HEAD
+[1.3.0]: https://codeberg.org/md-weber/ldash/compare/v1.2.0...v1.3.0
 [1.2.0]: https://codeberg.org/md-weber/ldash/compare/v1.1.0...v1.2.0
 [1.1.0]: https://codeberg.org/md-weber/ldash/compare/v1.0.0...v1.1.0
 [1.0.0]: https://codeberg.org/md-weber/ldash/compare/v0.1.0...v1.0.0
