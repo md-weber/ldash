@@ -78,11 +78,23 @@ fn handle_export_prompt_key(app: &mut App, key: KeyEvent) -> Action {
 fn handle_search_key(app: &mut App, key: KeyEvent) -> Action {
     match key.code {
         KeyCode::Esc => app.close_search(),
-        KeyCode::Enter => app.execute_search(),
+        KeyCode::Enter => {
+            // If results are showing and a row is selected → drill into account.
+            // Otherwise execute the search.
+            if !app.search_results.is_empty() && app.search_state.selected().is_some() {
+                app.search_navigate_to_account();
+            } else {
+                app.execute_search();
+            }
+        }
         KeyCode::Backspace => {
             app.search_query.pop();
+            app.execute_search();
         }
-        KeyCode::Char(c) => app.search_query.push(c),
+        KeyCode::Char(c) => {
+            app.search_query.push(c);
+            app.execute_search();
+        }
         KeyCode::Up => app.search_scroll_up(),
         KeyCode::Down => app.search_scroll_down(),
         _ => {}
@@ -156,6 +168,9 @@ fn handle_normal_key(app: &mut App, key: KeyEvent) -> Action {
             _ => {}
         },
         KeyCode::Char('i') if app.tab == Tab::Monthly => app.toggle_monthly_focus(),
+        KeyCode::Char('p') if app.tab == Tab::Monthly => {
+            app.payee_view = !app.payee_view;
+        }
         KeyCode::Char('G') if app.tab == Tab::Monthly => app.jump_to_last_entry(),
         KeyCode::Char('/') => app.open_search(),
         KeyCode::Char('?') => app.show_help = true,

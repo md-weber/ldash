@@ -10,6 +10,7 @@ enum FocusedList {
     Accounts,
     MonthlyIncome,
     MonthlyExpenses,
+    MonthlyPayee,
 }
 
 impl App {
@@ -17,10 +18,16 @@ impl App {
         match self.tab {
             Tab::Portfolio => FocusedList::Portfolio,
             Tab::Accounts => FocusedList::Accounts,
-            Tab::Monthly => match self.monthly_focus {
-                MonthlyFocus::Income => FocusedList::MonthlyIncome,
-                MonthlyFocus::Expenses => FocusedList::MonthlyExpenses,
-            },
+            Tab::Monthly => {
+                if self.payee_view {
+                    FocusedList::MonthlyPayee
+                } else {
+                    match self.monthly_focus {
+                        MonthlyFocus::Income => FocusedList::MonthlyIncome,
+                        MonthlyFocus::Expenses => FocusedList::MonthlyExpenses,
+                    }
+                }
+            }
         }
     }
 
@@ -30,6 +37,7 @@ impl App {
             FocusedList::Accounts => self.account_state.selected().unwrap_or(0),
             FocusedList::MonthlyIncome => self.income_state.selected().unwrap_or(0),
             FocusedList::MonthlyExpenses => self.expense_state.selected().unwrap_or(0),
+            FocusedList::MonthlyPayee => self.payee_state.selected().unwrap_or(0),
         }
     }
 
@@ -41,6 +49,7 @@ impl App {
             FocusedList::MonthlyExpenses => {
                 self.current_month().map(|m| m.expenses.len()).unwrap_or(0)
             }
+            FocusedList::MonthlyPayee => self.payee_data.len(),
         }
     }
 
@@ -50,6 +59,7 @@ impl App {
             FocusedList::Accounts => self.account_state.select(Some(i)),
             FocusedList::MonthlyIncome => self.income_state.select(Some(i)),
             FocusedList::MonthlyExpenses => self.expense_state.select(Some(i)),
+            FocusedList::MonthlyPayee => self.payee_state.select(Some(i)),
         }
     }
 
@@ -60,6 +70,7 @@ impl App {
             FocusedList::Portfolio | FocusedList::Accounts => self.geometry.table_area,
             FocusedList::MonthlyIncome => self.geometry.income_table_area,
             FocusedList::MonthlyExpenses => self.geometry.expense_table_area,
+            FocusedList::MonthlyPayee => self.geometry.payee_table_area,
         };
         page_size_for(area).max(1)
     }

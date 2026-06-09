@@ -53,6 +53,7 @@ pub(super) fn render_help_popup(f: &mut Frame, area: Rect, theme: &Theme) {
         ("y / Y", "Year back / forward  (Monthly)"),
         ("G", "Jump to last entry  (Monthly)"),
         ("i", "Income/expense focus  (Monthly)"),
+        ("p", "Payee analytics  (Monthly)"),
         ("a–z  Backspace", "Filter · clear char  (Accounts)"),
         ("", ""),
         ("§", "Data & view"),
@@ -161,7 +162,7 @@ pub(super) fn render_search_overlay(f: &mut Frame, app: &mut App, area: Rect, th
     let title = if result_count > 0 {
         format!(" {} results ", result_count)
     } else if app.search_query.is_empty() {
-        " Type query, Enter to search ".to_string()
+        " Type to search ".to_string()
     } else {
         " No results ".to_string()
     };
@@ -192,16 +193,15 @@ pub(super) fn render_search_overlay(f: &mut Frame, app: &mut App, area: Rect, th
 
     f.render_stateful_widget(table, chunks[1], &mut app.search_state);
 
-    let hint = Paragraph::new(Line::from(vec![
-        Span::styled(
-            "  [Enter] search  [↑↓] navigate  [Esc] close",
-            Style::default().fg(theme.muted),
-        ),
-        Span::styled(
-            "  Supports regex (e.g. \"grocery|supermarket\")",
-            Style::default().fg(theme.muted),
-        ),
-    ]));
+    let hint_text = if app.search_results.is_empty() {
+        "  [↑↓] navigate  [Esc] close  · regex ok (e.g. \"grocery|supermarket\")"
+    } else {
+        "  [Enter] open account  [↑↓] navigate  [Esc] close  · type to refine"
+    };
+    let hint = Paragraph::new(Line::from(Span::styled(
+        hint_text,
+        Style::default().fg(theme.muted),
+    )));
     f.render_widget(hint, chunks[2]);
 }
 

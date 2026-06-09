@@ -24,7 +24,7 @@ use std::time::{Instant, SystemTime};
 use crate::config::Config;
 use crate::data::{
     AccountBalance, CoinChartSeries, CryptoHolding, MonthlyData, NetWorthBreakdownSeries,
-    NetWorthSeries, PriceEntry, Transaction,
+    NetWorthSeries, PayeeSummary, PriceEntry, Transaction,
 };
 use crate::watcher::JournalWatcher;
 
@@ -89,6 +89,10 @@ pub struct App {
     pub recent_journals: Vec<String>,
     pub search_results: Vec<Transaction>,
     pub search_state: TableState,
+    /// Whether the payee analytics sub-view is active on the Monthly tab (`p`).
+    pub payee_view: bool,
+    pub payee_data: Vec<PayeeSummary>,
+    pub payee_state: TableState,
     pub price_alerts: Vec<PriceAlert>,
     pub show_alerts: bool,
     pub alert_dismissed: bool,
@@ -189,6 +193,9 @@ impl Default for App {
             recent_journals: Vec::new(),
             search_results: Vec::new(),
             search_state: TableState::default(),
+            payee_view: false,
+            payee_data: Vec::new(),
+            payee_state: TableState::default(),
             price_alerts: Vec::new(),
             show_alerts: false,
             alert_dismissed: false,
@@ -280,6 +287,9 @@ impl App {
             recent_journals: Vec::new(),
             search_results: Vec::new(),
             search_state: TableState::default(),
+            payee_view: false,
+            payee_data: Vec::new(),
+            payee_state: TableState::default(),
             price_alerts: Vec::new(),
             show_alerts: false,
             alert_dismissed: false,

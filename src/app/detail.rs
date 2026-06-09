@@ -225,4 +225,86 @@ impl App {
             self.search_state.select(Some(i + 1));
         }
     }
+
+    /// Navigate from search results to the account that owns the selected
+    /// transaction. Closes the search overlay, switches to the Accounts tab,
+    /// and opens the account's transaction detail asynchronously.
+    pub fn search_navigate_to_account(&mut self) {
+        let account = match self
+            .search_state
+            .selected()
+            .and_then(|i| self.search_results.get(i))
+            .and_then(|t| t.account.as_ref())
+        {
+            Some(a) => a.clone(),
+            None => return,
+        };
+
+        self.close_search();
+        self.tab = Tab::Accounts;
+        self.ensure_tab_loaded(Tab::Accounts);
+
+        // Close any existing detail to avoid stale state.
+        self.account_detail = None;
+        self.account_detail_rx = None;
+
+        let jp = self.journal_path.clone();
+        let currency = self.config.currency_symbol.clone();
+        let (tx, rx) = mpsc::channel();
+        self.account_detail_rx = Some(rx);
+        spawn_detail_load(tx, jp, account, 200, None, currency);
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn search_navigate_closes_search_and_switches_tab() {
+        use chrono::NaiveDate;
+        use crate::data::Transaction;
+
+        let mut app = App::fixture_empty();
+        app.search_active = true;
+        app.search_query = "test".to_string();
+        app.search_results = vec![Transaction {
+            date: NaiveDate::from_ymd_opt(2026, 1, 1).unwrap(),
+            description: "Test (expenses:food)".to_string(),
+            amount: -50.0,
+            running_total: -50.0,
+            account: Some("expenses:food".to_string()),
+        }];
+        app.search_state = ratatui::widgets::TableState::default().with_selected(0);
+
+        app.search_navigate_to_account();
+
+        assert!(!app.search_active, "search should be closed");
+        assert_eq!(app.tab, Tab::Accounts, "should switch to Accounts tab");
+        assert!(app.account_detail_rx.is_some(), "detail load should be spawned");
+    }
+
+    #[test]
+    fn search_navigate_noop_when_no_account() {
+        use chrono::NaiveDate;
+        use crate::data::Transaction;
+
+        let mut app = App::fixture_empty();
+        app.search_active = true;
+        app.tab = Tab::Monthly;
+        app.search_results = vec![Transaction {
+            date: NaiveDate::from_ymd_opt(2026, 1, 1).unwrap(),
+            description: "Test".to_string(),
+            amount: -50.0,
+            running_total: -50.0,
+            account: None,
+        }];
+        app.search_state = ratatui::widgets::TableState::default().with_selected(0);
+
+        app.search_navigate_to_account();
+
+        // No account → should not change tab or close search
+        assert!(app.search_active, "search should stay open when no account");
+        assert_eq!(app.tab, Tab::Monthly, "tab should not change");
+    }
 }

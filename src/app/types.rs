@@ -3,7 +3,7 @@ use std::collections::HashMap;
 
 use crate::data::{
     AccountBalance, CoinChartSeries, CryptoHolding, MonthlyData, NetWorthBreakdownSeries,
-    NetWorthSeries, PriceEntry,
+    NetWorthSeries, PayeeSummary, PriceEntry,
 };
 
 /// Per-tab load result. Distinguishes "not requested", "ok data", and "errored
@@ -29,6 +29,8 @@ pub struct RefreshResult {
     /// Full-year income statement with periodic-rule projections for future
     /// months, loaded via `hledger --forecast`.
     pub monthly_forecast: TabData<MonthlyData>,
+    /// Payee analytics for the Monthly tab's `p` sub-view.
+    pub payee_data: TabData<Vec<PayeeSummary>>,
 }
 
 /// How the portfolio analysis chart layers price-growth and staking on top of
@@ -274,6 +276,7 @@ pub struct Geometry {
     pub expense_table_area: ratatui::layout::Rect,
     pub monthly_chart_area: ratatui::layout::Rect,
     pub range_selector_rects: Vec<ratatui::layout::Rect>,
+    pub payee_table_area: ratatui::layout::Rect,
 }
 
 /// 12-month cash flow forecast for the current year.

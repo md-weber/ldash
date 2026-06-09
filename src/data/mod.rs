@@ -6,6 +6,7 @@ use std::process::Command;
 mod balances;
 mod monthly;
 mod parse;
+mod payee;
 mod portfolio;
 mod prices;
 mod transactions;
@@ -23,6 +24,7 @@ pub use parse::parse_eu_number;
 pub(crate) use parse::{month_index, month_name, MONTH_NAMES};
 pub use portfolio::{compute_portfolio, load_all_coin_chart_series};
 pub use prices::{latest_prices, load_price_history};
+pub use payee::{load_payee_analytics, PayeeSummary};
 pub use transactions::{load_recent_transactions, search_transactions};
 
 pub(crate) fn commodity_key(raw: &str) -> String {
@@ -154,6 +156,10 @@ pub struct Transaction {
     pub description: String,
     pub amount: f64,
     pub running_total: f64,
+    /// Account this posting belongs to. `None` for account/expense/income
+    /// detail loads (where the account is already implicit); `Some` for global
+    /// search results so drill-down can navigate to the owning account.
+    pub account: Option<String>,
 }
 
 /// Three EUR-denominated time series for the portfolio analysis chart.

@@ -9,8 +9,8 @@ use crate::data::{
     compute_portfolio, latest_prices, load_account_balances_eur, load_all_coin_chart_series,
     load_crypto_balances, load_last_year_monthly, load_liability_balances_eur, load_monthly_data,
     load_monthly_with_forecast, load_net_worth_breakdown, load_net_worth_history,
-    load_price_history, AccountBalance, CoinChartSeries, CryptoHolding, MonthlyData,
-    NetWorthBreakdownSeries, NetWorthSeries,
+    load_payee_analytics, load_price_history, AccountBalance, CoinChartSeries, CryptoHolding,
+    MonthlyData, NetWorthBreakdownSeries, NetWorthSeries, PayeeSummary,
 };
 
 use super::{App, RefreshResult, Tab, TabData, TabFlags};
@@ -28,6 +28,7 @@ struct LoadHandles {
     monthly: Option<Result<MonthlyData, anyhow::Error>>,
     last_year: Option<Result<MonthlyData, anyhow::Error>>,
     forecast: Option<Result<MonthlyData, anyhow::Error>>,
+    payee: Option<Result<Vec<PayeeSummary>, anyhow::Error>>,
 }
 
 fn spawn_all(
@@ -36,6 +37,7 @@ fn spawn_all(
     currency_symbol: &str,
     assets_account: &str,
     liabilities_account: &str,
+    expenses_account: &str,
     tabs: TabFlags,
 ) -> LoadHandles {
     let want_portfolio = tabs.portfolio;
@@ -70,6 +72,9 @@ fn spawn_all(
             want_monthly.then(|| s.spawn(|| load_last_year_monthly(journal_path, currency_symbol)));
         let t_fc = want_monthly
             .then(|| s.spawn(|| load_monthly_with_forecast(journal_path, currency_symbol)));
+        let t_payee = want_monthly.then(|| {
+            s.spawn(|| load_payee_analytics(journal_path, expenses_account, currency_symbol))
+        });
 
         LoadHandles {
             crypto: t_crypto.map(join_or_panic_err),
@@ -80,6 +85,7 @@ fn spawn_all(
             monthly: t_monthly.map(join_or_panic_err),
             last_year: t_ly.map(join_or_panic_err),
             forecast: t_fc.map(join_or_panic_err),
+            payee: t_payee.map(join_or_panic_err),
         }
     })
 }
@@ -112,6 +118,7 @@ pub(super) fn load_all_data(
     currency_symbol: &str,
     assets_account: &str,
     liabilities_account: &str,
+    expenses_account: &str,
     tabs: TabFlags,
 ) -> RefreshResult {
     let price_history = load_price_history(journal_dir);
@@ -123,6 +130,7 @@ pub(super) fn load_all_data(
         currency_symbol,
         assets_account,
         liabilities_account,
+        expenses_account,
         tabs,
     );
 
@@ -168,6 +176,11 @@ pub(super) fn load_all_data(
     let monthly = into_tab_data(h.monthly);
     let last_year = into_tab_data(h.last_year);
     let monthly_forecast = into_tab_data(h.forecast);
+    // Payee errors are non-fatal — the sub-view just stays empty.
+    let payee_data: TabData<Vec<PayeeSummary>> = match h.payee {
+        None | Some(Err(_)) => TabData::NotRequested,
+        Some(Ok(v)) => TabData::Ok(v),
+    };
 
     RefreshResult {
         tabs,
@@ -182,6 +195,7 @@ pub(super) fn load_all_data(
         monthly,
         last_year,
         monthly_forecast,
+        payee_data,
     }
 }
 
@@ -227,13 +241,15 @@ impl App {
         let currency = self.config.currency_symbol.clone();
         let assets = self.config.assets_account.clone();
         let liabilities = self.config.liabilities_account.clone();
+        let expenses = self.config.expenses_account.clone();
 
         let (tx, rx) = mpsc::channel();
         self.refresh_rx = Some(rx);
 
         std::thread::spawn(move || {
-            let result =
-                load_all_data(&jp, &jd, &nw_period, &currency, &assets, &liabilities, tabs);
+            let result = load_all_data(
+                &jp, &jd, &nw_period, &currency, &assets, &liabilities, &expenses, tabs,
+            );
             let _ = tx.send(result);
         });
     }
@@ -410,6 +426,7 @@ impl App {
         // Forecast errors are non-fatal: chart just omits the projected line
         // (user may not have periodic transaction rules).
         apply_field_silent!(self.monthly_forecast, r.monthly_forecast);
+        apply_field_silent!(self.payee_data, r.payee_data);
         self.rebuild_combined_months();
 
         // Current year has no data → jump to the last year with actual entries

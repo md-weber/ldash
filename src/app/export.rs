@@ -111,8 +111,10 @@ impl App {
             let currency = self.config.currency_symbol.clone();
             let assets = self.config.assets_account.clone();
             let liabilities = self.config.liabilities_account.clone();
-            let result =
-                load_all_data(&jp, &jd, &nw_period, &currency, &assets, &liabilities, need);
+            let expenses = self.config.expenses_account.clone();
+            let result = load_all_data(
+                &jp, &jd, &nw_period, &currency, &assets, &liabilities, &expenses, need,
+            );
             self.apply_refresh(result);
         }
     }

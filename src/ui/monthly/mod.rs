@@ -7,6 +7,7 @@ mod chart;
 mod expenses;
 mod forecast;
 mod income;
+mod payee;
 mod summary;
 
 /// BarChart bar width (chars per bar). Shared between render and mouse hit-test.
@@ -111,6 +112,12 @@ pub(super) fn render_monthly(f: &mut Frame, app: &mut App, area: Rect, theme: &T
         chart::render_monthly_chart(f, app, chunks[0], theme);
     }
     summary::render_monthly_summary(f, app, chunks[1], theme);
+
+    // Payee analytics replaces the full income+expense area when active.
+    if app.payee_view {
+        payee::render_payee_analytics(f, app, chunks[2], theme);
+        return;
+    }
 
     let detail_chunks = if very_narrow {
         Layout::vertical([Constraint::Percentage(50), Constraint::Percentage(50)]).split(chunks[2])

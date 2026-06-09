@@ -18,6 +18,7 @@ fn empty_refresh_result(tabs: TabFlags) -> RefreshResult {
         monthly: TabData::NotRequested,
         last_year: TabData::NotRequested,
         monthly_forecast: TabData::NotRequested,
+        payee_data: TabData::NotRequested,
     }
 }
 
