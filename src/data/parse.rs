@@ -54,13 +54,14 @@ pub(super) fn parse_amount_str(s: &str) -> Option<(f64, String)> {
         let raw_sym = s[..pos].trim();
         let num_str = s[pos + 1..].trim();
 
-        let (commodity, num_str): (String, String) = if raw_sym.starts_with('-') {
-            // "-Eur 100" → commodity "Eur", amount -100
-            let negated = format!("-{}", num_str.trim_start_matches('-'));
-            (raw_sym[1..].to_string(), negated)
-        } else {
-            (raw_sym.to_string(), num_str.to_string())
-        };
+        let (commodity, num_str): (String, String) =
+            if let Some(stripped) = raw_sym.strip_prefix('-') {
+                // "-Eur 100" → commodity "Eur", amount -100
+                let negated = format!("-{}", num_str.trim_start_matches('-'));
+                (stripped.to_string(), negated)
+            } else {
+                (raw_sym.to_string(), num_str.to_string())
+            };
 
         if let Some(amount) = parse_eu_number(&num_str) {
             return Some((amount, commodity));
