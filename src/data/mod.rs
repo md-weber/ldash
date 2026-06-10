@@ -36,6 +36,18 @@ const KNOWN_FIAT: &[&str] = &[
     "EUR", "USD", "GBP", "JPY", "CHF", "CAD", "AUD", "NZD", "SEK", "NOK", "DKK",
 ];
 
+/// Result of journal currency detection.
+pub struct DetectedCurrency {
+    /// Canonical uppercase form used for matching (`"EUR"`, `"USD"`, …).
+    pub canonical: String,
+    /// Raw display form as it appears in the journal (`"Eur"`, `"€"`, `"$"`, …).
+    /// Preserved so the UI can mirror the user's own notation.
+    pub display: String,
+    /// `true` when the journal places the commodity symbol *before* the amount
+    /// (`Eur 100`) rather than after (`100 EUR`).
+    pub prefix: bool,
+}
+
 /// Detect the primary fiat currency used in a journal by running `hledger commodities`.
 ///
 /// Prefers known fiat currencies (EUR, USD, …). Falls back to the first
@@ -43,24 +55,94 @@ const KNOWN_FIAT: &[&str] = &[
 /// files) still get a usable display currency instead of silently defaulting to
 /// the config value and showing nothing.
 ///
+/// Also detects whether the journal uses prefix commodity notation (`Eur 100`)
+/// by sampling one balance row from hledger's CSV output.
+///
 /// Returns `None` when hledger fails or the journal has no commodities at all.
-pub fn detect_journal_currency(journal_path: &Path) -> Option<String> {
+pub fn detect_journal_currency(journal_path: &Path) -> Option<DetectedCurrency> {
     let jp = journal_path.to_str()?;
     let output = run_hledger(&["-f", jp, "commodities"]).ok()?;
-    let mut first_commodity: Option<String> = None;
+
+    let mut first: Option<(String, String)> = None; // (canonical, raw)
     for line in output.lines() {
-        let c = canonical_currency(line.trim());
+        let raw = line.trim();
+        if raw.is_empty() {
+            continue;
+        }
+        let c = canonical_currency(raw);
         if c.is_empty() {
             continue;
         }
-        if first_commodity.is_none() {
-            first_commodity = Some(c.clone());
+        if first.is_none() {
+            first = Some((c.clone(), raw.to_string()));
         }
         if KNOWN_FIAT.contains(&c.as_str()) {
-            return Some(c);
+            let (display, prefix) = detect_commodity_format(journal_path, &c);
+            return Some(DetectedCurrency {
+                canonical: c,
+                display,
+                prefix,
+            });
         }
     }
-    first_commodity
+    first.map(|(canonical, raw)| {
+        let (display, prefix) = detect_commodity_format(journal_path, &canonical);
+        let display = if display == canonical { raw } else { display };
+        DetectedCurrency {
+            canonical,
+            display,
+            prefix,
+        }
+    })
+}
+
+/// Sample a single hledger balance row to determine whether the journal writes
+/// `<symbol> <amount>` (prefix) or `<amount> <symbol>` (suffix), and to recover
+/// the exact display form of the commodity symbol.
+///
+/// Returns `(display_form, is_prefix)`.  Falls back to `(canonical, false)` on
+/// any error or when no matching row is found.
+fn detect_commodity_format(journal_path: &Path, canonical: &str) -> (String, bool) {
+    let fallback = (canonical.to_string(), false);
+    let jp = match journal_path.to_str() {
+        Some(s) => s,
+        None => return fallback,
+    };
+    let output = match run_hledger(&["-f", jp, "balance", "-O", "csv"]) {
+        Ok(o) => o,
+        Err(_) => return fallback,
+    };
+    for line in output.lines().skip(1) {
+        // Skip the Total: row.
+        if line.to_ascii_lowercase().contains("total") {
+            continue;
+        }
+        // Extract the last CSV field (the balance value).
+        let val = match line.rfind(',') {
+            Some(pos) => line[pos + 1..].trim().trim_matches('"'),
+            None => continue,
+        };
+        if val.is_empty() || val == "0" {
+            continue;
+        }
+        // Multi-commodity rows: take the first commodity segment.
+        let segment = val.split(", ").next().unwrap_or(val);
+        // Determine format and commodity string.
+        if segment.starts_with(|c: char| c.is_alphabetic()) {
+            // Prefix format: "Eur 100"
+            let sym = segment.split_whitespace().next().unwrap_or(canonical);
+            if currency_matches(canonical, sym) {
+                return (sym.to_string(), true);
+            }
+        } else {
+            // Suffix format: "100 EUR" or "-100 EUR"
+            let sym = segment.split_whitespace().last().unwrap_or(canonical);
+            if currency_matches(canonical, sym) {
+                return (sym.to_string(), false);
+            }
+        }
+    }
+    fallback
 }
 
 pub(crate) fn canonical_currency(raw: &str) -> String {

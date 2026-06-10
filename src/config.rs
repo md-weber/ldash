@@ -29,6 +29,10 @@ pub struct Config {
     pub assets_account: String,
     /// Top-level account name for liabilities (default "liabilities").
     pub liabilities_account: String,
+    /// When `true` the currency symbol is placed *before* the amount
+    /// (`Eur 100,00` instead of `100,00 €`).  Auto-detected from the journal at
+    /// startup; set explicitly in config to override.
+    pub currency_prefix: bool,
     pub colors: ColorConfig,
     pub theme: ThemeConfig,
     pub budgets: HashMap<String, f64>,
@@ -82,6 +86,7 @@ impl Default for Config {
             income_account: "income".to_string(),
             assets_account: "assets".to_string(),
             liabilities_account: "liabilities".to_string(),
+            currency_prefix: false,
             colors: ColorConfig::default(),
             theme: ThemeConfig::default(),
             budgets: HashMap::new(),
@@ -110,6 +115,10 @@ const DEFAULT_CONFIG: &str = r##"# ldash configuration
 
 # Currency symbol shown in UI
 # currency_symbol = "€"
+
+# Place the currency symbol before the amount ("Eur 100,00" instead of "100,00 €").
+# Auto-detected from the journal at startup; uncomment to override.
+# currency_prefix = false
 
 # Top-level account names used in your journal.
 # Only needed when your journal uses non-English account names.
@@ -315,12 +324,15 @@ impl Config {
         };
         self.refresh_interval = fresh.refresh_interval;
         self.number_format = fresh.number_format;
-        // Only update currency_symbol when the user has explicitly set a
-        // non-default value in the config file. If the config still holds the
-        // default ("€"), the symbol was likely auto-detected at startup and
-        // must not be reverted.
+        // Only update currency_symbol / currency_prefix when the user has
+        // explicitly set a non-default value in the config file. If the config
+        // still holds the defaults they were likely auto-detected at startup
+        // and must not be reverted on hot-reload.
         if fresh.currency_symbol != Config::default().currency_symbol {
             self.currency_symbol = fresh.currency_symbol;
+        }
+        if fresh.currency_prefix != Config::default().currency_prefix {
+            self.currency_prefix = fresh.currency_prefix;
         }
         self.chart_mode = fresh.chart_mode;
         self.expenses_account = fresh.expenses_account;
@@ -426,13 +438,17 @@ impl Config {
         out
     }
 
-    /// Format an amount with currency symbol, e.g. `"1.234,56 €"` or `"1,234.56 $"`.
+    /// Format an amount with currency symbol.
+    ///
+    /// Suffix (default): `"1.234,56 €"` / `"1,234.56 $"`
+    /// Prefix:           `"€ 1.234,56"` / `"Eur 1.234,56"`
     pub fn fmt_amount(&self, amount: f64, decimals: usize) -> String {
-        format!(
-            "{} {}",
-            self.fmt_number(amount, decimals),
-            self.currency_symbol
-        )
+        let n = self.fmt_number(amount, decimals);
+        if self.currency_prefix {
+            format!("{} {}", self.currency_symbol, n)
+        } else {
+            format!("{} {}", n, self.currency_symbol)
+        }
     }
 
     /// Compact number with no currency symbol — e.g. `"1.234,56"`.
@@ -442,15 +458,18 @@ impl Config {
         self.fmt_number(amount, decimals)
     }
 
-    /// Like `fmt_amount` but no space between number and symbol — e.g. `"1.234,56€"`.
+    /// Like `fmt_amount` but no space between number and symbol.
+    ///
+    /// Suffix: `"1.234,56€"` — Prefix: `"Eur1.234,56"`
     /// Used in tight spots (P/L cells, goal progress). For axis labels prefer
     /// `fmt_compact` so the symbol doesn't crowd the tick marks.
     pub fn fmt_amount_compact(&self, amount: f64, decimals: usize) -> String {
-        format!(
-            "{}{}",
-            self.fmt_number(amount, decimals),
-            self.currency_symbol
-        )
+        let n = self.fmt_number(amount, decimals);
+        if self.currency_prefix {
+            format!("{}{}", self.currency_symbol, n)
+        } else {
+            format!("{}{}", n, self.currency_symbol)
+        }
     }
 }
 

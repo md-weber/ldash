@@ -24,6 +24,12 @@ pub fn parse_eu_number(s: &str) -> Option<f64> {
 
 /// Parse an amount string like "4,40140000 SOL" or "1430,15 €" into (amount, commodity).
 ///
+/// Handles both suffix format (`100 EUR`, `3 800,00 €`) and prefix format
+/// (`Eur 100`, `Eur -100`).  Suffix is tried first; rfind ensures that
+/// space-as-thousands-separator amounts (`3 800,00 €`) are split correctly.
+/// If the suffix parse fails (the left-hand token is not a number) the string
+/// is retried as prefix format.
+///
 /// Only handles a **single** commodity amount. For multi-commodity strings use
 /// `parse_first_amount_str`.
 pub(super) fn parse_amount_str(s: &str) -> Option<(f64, String)> {
@@ -32,12 +38,36 @@ pub(super) fn parse_amount_str(s: &str) -> Option<(f64, String)> {
         return None;
     }
 
-    let pos = s.rfind(' ')?;
-    let num_str = s[..pos].trim();
-    let commodity = s[pos + 1..].trim().to_string();
+    // Suffix format: "<number> <commodity>"  e.g. "100 EUR", "3 800,00 €"
+    // rfind keeps amounts with a space-thousands separator intact.
+    if let Some(pos) = s.rfind(' ') {
+        let num_str = s[..pos].trim();
+        let commodity = s[pos + 1..].trim().to_string();
+        if let Some(amount) = parse_eu_number(num_str) {
+            return Some((amount, commodity));
+        }
+    }
 
-    let amount = parse_eu_number(num_str)?;
-    Some((amount, commodity))
+    // Prefix format: "<commodity> <amount>"  e.g. "Eur 100", "Eur -100"
+    // Also handles a sign attached to the symbol: "-Eur 100".
+    if let Some(pos) = s.find(' ') {
+        let raw_sym = s[..pos].trim();
+        let num_str = s[pos + 1..].trim();
+
+        let (commodity, num_str): (String, String) = if raw_sym.starts_with('-') {
+            // "-Eur 100" → commodity "Eur", amount -100
+            let negated = format!("-{}", num_str.trim_start_matches('-'));
+            (raw_sym[1..].to_string(), negated)
+        } else {
+            (raw_sym.to_string(), num_str.to_string())
+        };
+
+        if let Some(amount) = parse_eu_number(&num_str) {
+            return Some((amount, commodity));
+        }
+    }
+
+    None
 }
 
 /// Parse the **first** valid amount from a balance string that may contain
@@ -380,6 +410,35 @@ mod tests {
     fn amount_str_strips_outer_quotes() {
         let (amt, com) = parse_amount_str("\"1.000,00 €\"").unwrap();
         assert!((amt - 1000.0).abs() < 1e-10);
+        assert_eq!(com, "€");
+    }
+
+    #[test]
+    fn amount_str_prefix_commodity() {
+        let (amt, com) = parse_amount_str("Eur 100").unwrap();
+        assert!((amt - 100.0).abs() < 1e-10);
+        assert_eq!(com, "Eur");
+    }
+
+    #[test]
+    fn amount_str_prefix_negative_amount() {
+        let (amt, com) = parse_amount_str("Eur -100").unwrap();
+        assert!((amt - (-100.0)).abs() < 1e-10);
+        assert_eq!(com, "Eur");
+    }
+
+    #[test]
+    fn amount_str_prefix_negative_symbol() {
+        let (amt, com) = parse_amount_str("-Eur 100").unwrap();
+        assert!((amt - (-100.0)).abs() < 1e-10);
+        assert_eq!(com, "Eur");
+    }
+
+    #[test]
+    fn amount_str_suffix_dot_thousands() {
+        // Regression guard: dot-as-thousands-separator (hledger CSV output).
+        let (amt, com) = parse_amount_str("1.430,15 €").unwrap();
+        assert!((amt - 1430.15).abs() < 1e-10);
         assert_eq!(com, "€");
     }
 

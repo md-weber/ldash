@@ -258,27 +258,34 @@ fn run(
     mut config: config::Config,
     config_warnings: Vec<String>,
 ) -> Result<()> {
-    // Auto-detect the journal's primary fiat currency. When the configured
-    // symbol doesn't match what the journal actually uses (e.g. default "€"
-    // against a USD journal), every parsed amount would be silently dropped.
-    // Detecting up-front keeps the app usable without requiring the user to
-    // touch their config for simple single-currency journals.
-    let currency_warning = if let Some(detected) = data::detect_journal_currency(&journal_path) {
-        if !data::currency_matches(&config.currency_symbol, &detected) {
-            let old = std::mem::replace(
-                &mut config.currency_symbol,
-                match detected.as_str() {
-                    "EUR" => "€".to_string(),
-                    "USD" => "$".to_string(),
-                    "GBP" => "£".to_string(),
-                    "JPY" => "¥".to_string(),
-                    other => other.to_string(),
-                },
-            );
+    // Auto-detect the journal's primary fiat currency and commodity format.
+    // When the configured symbol doesn't match what the journal actually uses
+    // (e.g. default "€" against a USD journal), every parsed amount would be
+    // silently dropped. Detecting up-front keeps the app usable without
+    // requiring the user to touch their config for simple single-currency
+    // journals.
+    //
+    // We also detect whether the journal uses prefix notation ("Eur 100") and,
+    // when it does, adopt the raw display form and prefix flag — unless the
+    // user has explicitly configured those fields.
+    let currency_warning = if let Some(det) = data::detect_journal_currency(&journal_path) {
+        // Apply detected prefix format when the user hasn't overridden it.
+        if det.prefix && !config.currency_prefix {
+            config.currency_prefix = true;
+        }
+        if !data::currency_matches(&config.currency_symbol, &det.canonical) {
+            // Symbol mismatch: replace with detected display form.
+            let old = std::mem::replace(&mut config.currency_symbol, det.display.clone());
             Some(format!(
                 "Currency auto-detected: {} (was {}). Set currency_symbol in config to override.",
                 config.currency_symbol, old
             ))
+        } else if det.prefix && config.currency_symbol == config::Config::default().currency_symbol
+        {
+            // Same canonical currency but prefix format — adopt the raw form
+            // (e.g. "Eur") so it mirrors the journal's own notation.
+            config.currency_symbol = det.display;
+            None
         } else {
             None
         }

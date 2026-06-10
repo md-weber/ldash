@@ -7,6 +7,26 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [1.3.1] - 2026-06-10
+
+### Fixed
+
+- Prefixed commodity symbols (`Eur 100`, `USD 50`) are now parsed correctly.
+  `parse_amount_str` previously only handled suffix layout (`100 EUR`); it now
+  falls back to prefix detection when the left-hand token is not a number,
+  covering `Eur 100`, `Eur -100`, and `-Eur 100` forms emitted by hledger.
+- Display format follows the journal's commodity notation: when hledger reports
+  amounts in prefix style, ldash auto-detects this at startup and renders all
+  amounts with the symbol before the number (e.g. `Eur 1.234,56` instead of
+  `1.234,56 €`). The raw commodity name from the journal (e.g. `Eur`) is
+  preserved. A new `currency_prefix` config key allows manual override.
+
+### Added
+
+- `examples/prefixed-commodity-comments.journal` — reference journal exercising
+  prefix commodities (`Eur`, `USD`), multiple account types, three months of
+  income/expense data, and inline comments.
+
 ## [1.3.0] - 2026-06-09
 
 ### Added

@@ -1,0 +1,146 @@
+; Example journal demonstrating two known parsing issues.
+; Run: ldash --file examples/prefixed-commodity-comments.journal
+;
+; ─────────────────────────────────────────────────────────────────────────────
+; Issue 1 – percent (%) comment lines
+; ─────────────────────────────────────────────────────────────────────────────
+; hledger only recognises ;  #  and * as comment characters.
+; A % at the start of a line causes an immediate parse error:
+;
+;   hledger: Error: …:1:1:
+;     | % a comment is here
+;     | ^ unexpected '%' expecting end of input or transaction or directive
+;
+; To reproduce, remove the leading ; from the line below and run hledger:
+;   % this line breaks hledger
+;
+; ─────────────────────────────────────────────────────────────────────────────
+; Issue 2 – prefixed commodity symbols  (symbol placed BEFORE the amount)
+; ─────────────────────────────────────────────────────────────────────────────
+; All monetary amounts below use prefix notation: Eur 100, USD 50.
+; hledger stores these correctly, but its CSV output keeps the prefix
+; layout ("Eur 100"), which previously caused ldash to silently drop
+; every amount because parse_amount_str only handled suffix format.
+;
+; ─────────────────────────────────────────────────────────────────────────────
+; Setup
+; ─────────────────────────────────────────────────────────────────────────────
+
+2025-12-31 Opening balances                       ; bootstrap accounts tab
+    assets:bank:checking        Eur 4500
+    assets:bank:savings         Eur 12000
+    assets:cash:wallet          Eur 250
+    assets:savings:usd          USD 800           ; foreign-currency pocket
+    equity:opening-balances
+
+; ─────────────────────────────────────────────────────────────────────────────
+; 2026-01
+; ─────────────────────────────────────────────────────────────────────────────
+
+2026-01-31 Salary                                 ; income:salary with prefix Eur
+    assets:bank:checking        Eur 2800
+    income:salary
+
+2026-01-05 Rent
+    expenses:housing:rent       Eur 800
+    assets:bank:checking
+
+2026-01-08 Groceries
+    expenses:food               Eur 145           ; who:jozef
+    assets:bank:checking
+
+2026-01-12 Public transport
+    expenses:transport          Eur 55
+    assets:bank:checking
+
+2026-01-15 Freelance – USD client                 ; USD income (prefix)
+    assets:savings:usd          USD 400
+    income:freelance
+
+2026-01-18 Streaming subscription
+    expenses:entertainment      Eur 15
+    assets:bank:checking
+
+2026-01-22 Cash withdrawal
+    assets:cash:wallet          Eur 100
+    assets:bank:checking
+
+2026-01-25 Pharmacy                               ; negative prefix in CSV: Eur -xx
+    expenses:health             Eur 38
+    assets:bank:checking
+
+2026-01-28 Savings transfer
+    assets:bank:savings         Eur 300
+    assets:bank:checking
+
+; ─────────────────────────────────────────────────────────────────────────────
+; 2026-02
+; ─────────────────────────────────────────────────────────────────────────────
+
+2026-02-28 Salary
+    assets:bank:checking        Eur 2800
+    income:salary
+
+2026-02-04 Rent
+    expenses:housing:rent       Eur 800
+    assets:bank:checking
+
+2026-02-07 Groceries
+    expenses:food               Eur 162
+    assets:bank:checking
+
+2026-02-10 Public transport
+    expenses:transport          Eur 55
+    assets:bank:checking
+
+2026-02-14 Valentine dinner
+    expenses:food               Eur 68
+    assets:bank:checking
+
+2026-02-18 Streaming subscription
+    expenses:entertainment      Eur 15
+    assets:bank:checking
+
+2026-02-20 USD conference ticket                  ; another USD posting
+    expenses:education          USD 120
+    assets:savings:usd
+
+2026-02-24 Freelance – USD client
+    assets:savings:usd          USD 350
+    income:freelance
+
+2026-02-26 Savings transfer
+    assets:bank:savings         Eur 250
+    assets:bank:checking
+
+; ─────────────────────────────────────────────────────────────────────────────
+; 2026-03  (partial – tests forecast / incomplete-month handling)
+; ─────────────────────────────────────────────────────────────────────────────
+
+2026-03-31 Salary
+    assets:bank:checking        Eur 2800
+    income:salary
+
+2026-03-05 Rent
+    expenses:housing:rent       Eur 800
+    assets:bank:checking
+
+2026-03-09 Groceries
+    expenses:food               Eur 138
+    assets:bank:checking
+
+2026-03-12 Public transport
+    expenses:transport          Eur 55
+    assets:bank:checking
+
+2026-03-18 Streaming subscription
+    expenses:entertainment      Eur 15
+    assets:bank:checking
+
+2026-03-22 Online course                          ; education with prefix USD
+    expenses:education          USD 89
+    assets:savings:usd
+
+2026-03-28 Savings transfer
+    assets:bank:savings         Eur 200
+    assets:bank:checking
