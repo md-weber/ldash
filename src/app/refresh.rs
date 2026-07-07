@@ -396,7 +396,8 @@ impl App {
         self.price_fetch_rx = Some(rx);
 
         std::thread::spawn(move || {
-            let result = fetch_and_append_prices(&prices_path, &tokens, &currency, &currency_symbol);
+            let result =
+                fetch_and_append_prices(&prices_path, &tokens, &currency, &currency_symbol);
             let _ = tx.send(result);
         });
     }
@@ -422,7 +423,11 @@ impl App {
     /// Poll the price-fetch background thread and apply its result.
     /// Called every tick from the main loop.
     pub fn check_price_fetch(&mut self) {
-        let result = match self.price_fetch_rx.as_ref().and_then(|rx| rx.try_recv().ok()) {
+        let result = match self
+            .price_fetch_rx
+            .as_ref()
+            .and_then(|rx| rx.try_recv().ok())
+        {
             Some(r) => r,
             None => return,
         };

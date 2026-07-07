@@ -144,8 +144,7 @@ mod tests {
         use std::sync::atomic::{AtomicU64, Ordering};
         static ID: AtomicU64 = AtomicU64::new(0);
         let id = ID.fetch_add(1, Ordering::Relaxed);
-        let dir = std::env::temp_dir()
-            .join(format!("ldash-pf-test-{}-{id}", std::process::id()));
+        let dir = std::env::temp_dir().join(format!("ldash-pf-test-{}-{id}", std::process::id()));
         std::fs::create_dir_all(&dir).unwrap();
         let p = dir.join("prices.journal");
 

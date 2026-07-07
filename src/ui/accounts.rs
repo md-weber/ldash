@@ -47,11 +47,8 @@ pub(super) fn render_accounts(f: &mut Frame, app: &mut App, area: Rect, theme: &
 
     // Side-by-side layout for wide terminals with liabilities
     if has_liabilities && wide_terminal {
-        let cols = Layout::horizontal([
-            Constraint::Percentage(60),
-            Constraint::Percentage(40),
-        ])
-        .split(tables_area);
+        let cols = Layout::horizontal([Constraint::Percentage(60), Constraint::Percentage(40)])
+            .split(tables_area);
         render_accounts_table(f, app, cols[0], theme);
         render_liabilities_table(f, app, cols[1], theme);
     } else if has_liabilities {
@@ -604,7 +601,7 @@ fn render_goals(f: &mut Frame, app: &App, area: Rect, theme: &Theme) {
             Span::styled(padding, Style::default()),
             Span::styled(amounts_text, Style::default().fg(theme.muted)),
         ]);
-        
+
         f.render_widget(
             Paragraph::new(name_line),
             Rect {
@@ -619,12 +616,9 @@ fn render_goals(f: &mut Frame, app: &App, area: Rect, theme: &Theme) {
         let bar_width = (inner.width as usize).saturating_sub(4);
         let filled = ((g.pct / 100.0).min(1.0) * bar_width as f64) as usize;
         let empty = bar_width.saturating_sub(filled);
-        
+
         let progress_char = if g.pct >= 100.0 { "█" } else { "▓" };
-        let bar = format!("  {}{}", 
-            progress_char.repeat(filled), 
-            "░".repeat(empty)
-        );
+        let bar = format!("  {}{}", progress_char.repeat(filled), "░".repeat(empty));
 
         f.render_widget(
             Paragraph::new(Line::from(Span::styled(bar, Style::default().fg(color)))),

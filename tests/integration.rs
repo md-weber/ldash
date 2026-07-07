@@ -181,9 +181,21 @@ fn integration_load_monthly_data_us_format() {
     let path = fixture("us_simple.journal");
     let data = ldash::data::load_monthly_data(&path, "$").unwrap();
 
-    assert_eq!(data.months.len(), 2, "expected Jan + Feb, got: {:?}", data.months.iter().map(|m| &m.month_name).collect::<Vec<_>>());
+    assert_eq!(
+        data.months.len(),
+        2,
+        "expected Jan + Feb, got: {:?}",
+        data.months
+            .iter()
+            .map(|m| &m.month_name)
+            .collect::<Vec<_>>()
+    );
 
-    let jan = data.months.iter().find(|m| m.month_name == "January").unwrap();
+    let jan = data
+        .months
+        .iter()
+        .find(|m| m.month_name == "January")
+        .unwrap();
     assert!(
         (jan.total_income - 2000.0).abs() < 0.01,
         "jan income {}, expected 2000",
@@ -195,7 +207,11 @@ fn integration_load_monthly_data_us_format() {
         jan.total_expenses
     );
 
-    let feb = data.months.iter().find(|m| m.month_name == "February").unwrap();
+    let feb = data
+        .months
+        .iter()
+        .find(|m| m.month_name == "February")
+        .unwrap();
     assert!(
         (feb.total_income - 2000.0).abs() < 0.01,
         "feb income {}, expected 2000",
