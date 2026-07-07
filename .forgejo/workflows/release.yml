@@ -41,28 +41,50 @@ jobs:
           path: |
             ~/.cargo/registry
             ~/.cargo/git
+            target
           key: cargo-release-${{ matrix.target }}-${{ hashFiles('**/Cargo.lock') }}
           restore-keys: cargo-release-${{ matrix.target }}-
 
-      - name: Install zig + cargo-zigbuild
+      - name: Cache zig + cargo-zigbuild
         if: matrix.zigbuild
+        id: cache-zig
+        uses: actions/cache@v4
+        with:
+          path: |
+            /usr/local/zig-linux-x86_64-${{ env.ZIG_VERSION }}
+            ~/.cargo/bin/cargo-zigbuild
+          key: zig-${{ env.ZIG_VERSION }}-zigbuild
+
+      - name: Install zig + cargo-zigbuild
+        if: matrix.zigbuild && steps.cache-zig.outputs.cache-hit != 'true'
         run: |
           curl -fsSL "https://ziglang.org/download/${ZIG_VERSION}/zig-linux-x86_64-${ZIG_VERSION}.tar.xz" \
             | tar -xJ -C /usr/local
-          echo "/usr/local/zig-linux-x86_64-${ZIG_VERSION}" >> "$GITHUB_PATH"
           cargo install cargo-zigbuild --locked
 
+      - name: Add zig to PATH
+        if: matrix.zigbuild
+        run: echo "/usr/local/zig-linux-x86_64-${ZIG_VERSION}" >> "$GITHUB_PATH"
+
+      - name: Cache macOS SDK
+        if: contains(matrix.target, 'apple-darwin')
+        id: cache-macos-sdk
+        uses: actions/cache@v4
+        with:
+          path: /opt/MacOSX11.3.sdk
+          key: macos-sdk-11.3
+
       - name: Install macOS SDK (Apple targets)
+        if: contains(matrix.target, 'apple-darwin') && steps.cache-macos-sdk.outputs.cache-hit != 'true'
+        run: |
+          sudo mkdir -p /opt
+          curl -fsSL "https://github.com/phracker/MacOSX-SDKs/releases/download/11.3/MacOSX11.3.sdk.tar.xz" \
+            | sudo tar -xJ -C /opt
+
+      - name: Set macOS SDK env
         if: contains(matrix.target, 'apple-darwin')
         run: |
-          SDK_VER="11.3"
-          SDK_DIR="/opt/MacOSX${SDK_VER}.sdk"
-          if [ ! -d "$SDK_DIR" ]; then
-            sudo mkdir -p /opt
-            curl -fsSL "https://github.com/phracker/MacOSX-SDKs/releases/download/${SDK_VER}/MacOSX${SDK_VER}.sdk.tar.xz" \
-              | sudo tar -xJ -C /opt
-          fi
-          echo "SDKROOT=${SDK_DIR}" >> "$GITHUB_ENV"
+          echo "SDKROOT=/opt/MacOSX11.3.sdk" >> "$GITHUB_ENV"
           echo "MACOSX_DEPLOYMENT_TARGET=11.0" >> "$GITHUB_ENV"
 
       - name: Build (native)
@@ -83,7 +105,7 @@ jobs:
           cp man/ldash.1 stage/
           tar -czf "${{ matrix.artifact }}.tar.gz" -C stage .
 
-      - uses: actions/upload-artifact@v3
+      - uses: actions/upload-artifact@v4
         with:
           name: ${{ matrix.artifact }}
           path: ${{ matrix.artifact }}.tar.gz
@@ -94,7 +116,7 @@ jobs:
     needs: build
     runs-on: codeberg-small
     steps:
-      - uses: actions/download-artifact@v3
+      - uses: actions/download-artifact@v4
         with:
           path: artifacts
 
