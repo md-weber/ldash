@@ -4,10 +4,12 @@ use std::path::Path;
 use std::process::Command;
 
 mod balances;
+mod liquid;
 mod monthly;
 mod parse;
 mod payee;
 mod portfolio;
+mod price_fetch;
 mod prices;
 mod transactions;
 
@@ -15,6 +17,7 @@ pub use balances::{
     load_account_balances_eur, load_crypto_balances, load_liability_balances_eur,
     load_liability_progress, load_net_worth_breakdown, load_net_worth_history, LiabilityProgress,
 };
+pub use liquid::load_liquid_cash_monthly;
 pub use monthly::{
     load_last_year_monthly, load_monthly_data, load_monthly_for_period, load_monthly_with_forecast,
 };
@@ -24,6 +27,7 @@ pub use parse::parse_eu_number;
 pub(crate) use parse::{month_index, month_name, MONTH_NAMES};
 pub use payee::{load_payee_analytics, PayeeSummary};
 pub use portfolio::{compute_portfolio, load_all_coin_chart_series};
+pub use price_fetch::{fetch_and_append_prices, today_prices_present};
 pub use prices::{latest_prices, load_price_history};
 pub use transactions::{load_recent_transactions, search_transactions};
 

@@ -141,6 +141,48 @@ fn integration_load_account_balances_checking() {
 
 #[test]
 #[ignore]
+fn integration_load_liquid_cash_monthly_reports_per_month_change() {
+    if !hledger_available() {
+        return;
+    }
+    let path = fixture("simple.journal");
+    let prefixes = vec!["assets:bank:checking".to_string()];
+    let monthly = ldash::data::load_liquid_cash_monthly(&path, &prefixes, "EUR").unwrap();
+
+    // Fixture dates are Jan/Feb 2026; this test (like the other date-coupled
+    // integration tests in this file) assumes it runs within calendar 2026.
+    let jan = monthly
+        .iter()
+        .find(|(m, _)| m == "January")
+        .expect("January column present");
+    assert!(
+        (jan.1 - 1850.0).abs() < 0.01,
+        "jan liquid change {}, expected 1850 (2000 salary - 150 groceries)",
+        jan.1
+    );
+
+    let feb = monthly
+        .iter()
+        .find(|(m, _)| m == "February")
+        .expect("February column present");
+    assert!(
+        (feb.1 - 1200.0).abs() < 0.01,
+        "feb liquid change {}, expected 1200 (2000 salary - 800 rent)",
+        feb.1
+    );
+}
+
+#[test]
+fn integration_load_liquid_cash_monthly_empty_whitelist_returns_empty() {
+    // No hledger call is made when the whitelist is empty, so this doesn't
+    // need the availability guard.
+    let path = fixture("simple.journal");
+    let monthly = ldash::data::load_liquid_cash_monthly(&path, &[], "EUR").unwrap();
+    assert!(monthly.is_empty());
+}
+
+#[test]
+#[ignore]
 fn integration_currency_alias_eur_symbol_loaders() {
     if !hledger_available() {
         return;

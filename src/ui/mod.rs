@@ -473,6 +473,16 @@ mod tests {
     }
 
     #[test]
+    fn snapshot_monthly_tab_with_liquid_cash() {
+        let mut app = App::fixture_with_monthly();
+        app.liquid_cash_monthly = vec![
+            ("January".to_string(), -300.0),
+            ("February".to_string(), 4200.0),
+        ];
+        insta::assert_snapshot!(render_to_string(&mut app));
+    }
+
+    #[test]
     fn color_override_exact_match() {
         let mut map = std::collections::HashMap::new();
         map.insert("essen".to_string(), "yellow".to_string());

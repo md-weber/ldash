@@ -301,6 +301,7 @@ fn run(
 
     terminal.draw(|f| ui::render(f, &mut app))?;
     app.ensure_tab_loaded(app.tab);
+    app.maybe_auto_fetch_prices();
 
     let tick = Duration::from_millis(250);
     let mut last_tick = Instant::now();

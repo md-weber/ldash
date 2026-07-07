@@ -6,10 +6,11 @@ use std::time::Instant;
 
 use crate::config::Config;
 use crate::data::{
-    compute_portfolio, latest_prices, load_account_balances_eur, load_all_coin_chart_series,
-    load_crypto_balances, load_last_year_monthly, load_liability_balances_eur,
-    load_liability_progress, load_monthly_data, load_monthly_with_forecast,
-    load_net_worth_breakdown, load_net_worth_history, load_payee_analytics, load_price_history,
+    compute_portfolio, fetch_and_append_prices, latest_prices, load_account_balances_eur,
+    load_all_coin_chart_series, load_crypto_balances, load_last_year_monthly,
+    load_liability_balances_eur, load_liability_progress, load_liquid_cash_monthly,
+    load_monthly_data, load_monthly_with_forecast, load_net_worth_breakdown,
+    load_net_worth_history, load_payee_analytics, load_price_history, today_prices_present,
     AccountBalance, CoinChartSeries, CryptoHolding, LiabilityProgress, MonthlyData,
     NetWorthBreakdownSeries, NetWorthSeries, PayeeSummary,
 };
@@ -25,6 +26,7 @@ pub(super) struct LoadConfig {
     pub(super) assets_account: String,
     pub(super) liabilities_account: String,
     pub(super) expenses_account: String,
+    pub(super) liquid_accounts: Vec<String>,
 }
 
 /// Joined results of every background loader thread. Each field is `None` when
@@ -42,6 +44,7 @@ struct LoadHandles {
     last_year: Option<Result<MonthlyData, anyhow::Error>>,
     forecast: Option<Result<MonthlyData, anyhow::Error>>,
     payee: Option<Result<Vec<PayeeSummary>, anyhow::Error>>,
+    liquid_cash_monthly: Option<Result<Vec<(String, f64)>, anyhow::Error>>,
 }
 
 fn spawn_all(journal_path: &Path, cfg: &LoadConfig, tabs: TabFlags) -> LoadHandles {
@@ -54,6 +57,7 @@ fn spawn_all(journal_path: &Path, cfg: &LoadConfig, tabs: TabFlags) -> LoadHandl
     let assets = cfg.assets_account.as_str();
     let liabilities = cfg.liabilities_account.as_str();
     let expenses = cfg.expenses_account.as_str();
+    let liquid_accounts = cfg.liquid_accounts.as_slice();
 
     std::thread::scope(|s| {
         let t_crypto = want_portfolio.then(|| s.spawn(|| load_crypto_balances(journal_path)));
@@ -77,6 +81,8 @@ fn spawn_all(journal_path: &Path, cfg: &LoadConfig, tabs: TabFlags) -> LoadHandl
             want_monthly.then(|| s.spawn(|| load_monthly_with_forecast(journal_path, currency)));
         let t_payee = want_monthly
             .then(|| s.spawn(|| load_payee_analytics(journal_path, expenses, currency)));
+        let t_liquid = want_monthly
+            .then(|| s.spawn(|| load_liquid_cash_monthly(journal_path, liquid_accounts, currency)));
 
         LoadHandles {
             crypto: t_crypto.map(join_or_panic_err),
@@ -89,6 +95,7 @@ fn spawn_all(journal_path: &Path, cfg: &LoadConfig, tabs: TabFlags) -> LoadHandl
             last_year: t_ly.map(join_or_panic_err),
             forecast: t_fc.map(join_or_panic_err),
             payee: t_payee.map(join_or_panic_err),
+            liquid_cash_monthly: t_liquid.map(join_or_panic_err),
         }
     })
 }
@@ -170,6 +177,7 @@ pub(super) fn load_all_data(
     let last_year = into_tab_data(h.last_year);
     let monthly_forecast = into_tab_data(h.forecast);
     let payee_data: TabData<Vec<PayeeSummary>> = into_tab_data(h.payee);
+    let liquid_cash_monthly: TabData<Vec<(String, f64)>> = into_tab_data(h.liquid_cash_monthly);
 
     RefreshResult {
         tabs,
@@ -186,6 +194,7 @@ pub(super) fn load_all_data(
         last_year,
         monthly_forecast,
         payee_data,
+        liquid_cash_monthly,
     }
 }
 
@@ -233,6 +242,7 @@ impl App {
             assets_account: self.config.assets_account.clone(),
             liabilities_account: self.config.liabilities_account.clone(),
             expenses_account: self.config.expenses_account.clone(),
+            liquid_accounts: self.config.liquid_accounts.clone(),
         };
 
         let (tx, rx) = mpsc::channel();
@@ -258,9 +268,10 @@ impl App {
     }
 
     /// Drain any completed background tasks (detail loads, year reloads,
-    /// net-worth reloads). Called from the main loop on every tick so the UI
-    /// picks up async results promptly without blocking input handling.
+    /// net-worth reloads, price fetches). Called from the main loop on every
+    /// tick so the UI picks up async results promptly without blocking input.
     pub fn check_background(&mut self) {
+        self.check_price_fetch();
         use ratatui::widgets::TableState;
 
         if let Some(rx) = &self.account_detail_rx {
@@ -358,6 +369,78 @@ impl App {
             || self.net_worth_rx.is_some()
     }
 
+    /// Start an asynchronous price fetch if none is already running.
+    ///
+    /// Fetches spot prices from CoinGecko for every token configured under
+    /// `[price_fetch]` and appends today's `P` directives to `prices.journal`
+    /// in the journal directory.  The result is surfaced via `check_price_fetch`.
+    pub fn start_price_fetch(&mut self) {
+        if self.price_fetch_rx.is_some() {
+            self.status_msg = "Price fetch already in progress…".to_string();
+            return;
+        }
+        if self.config.price_fetch.tokens.is_empty() {
+            self.status_msg =
+                "No tokens configured — add [[price_fetch.tokens]] to config".to_string();
+            return;
+        }
+
+        let prices_path = self.journal_dir.join("prices.journal");
+        let tokens = self.config.price_fetch.tokens.clone();
+        let currency = self.config.price_fetch.currency.clone();
+        let currency_symbol = self.config.currency_symbol.clone();
+
+        self.status_msg = "Fetching prices…".to_string();
+
+        let (tx, rx) = mpsc::channel();
+        self.price_fetch_rx = Some(rx);
+
+        std::thread::spawn(move || {
+            let result = fetch_and_append_prices(&prices_path, &tokens, &currency, &currency_symbol);
+            let _ = tx.send(result);
+        });
+    }
+
+    /// Check whether the auto-fetch-on-startup condition is met and, if so,
+    /// kick off a price fetch in the background.
+    ///
+    /// This is a no-op when:
+    /// - No tokens are configured (`[price_fetch]` section absent or empty).
+    /// - Today's prices are already present in `prices.journal`.
+    /// - A fetch is already running.
+    pub fn maybe_auto_fetch_prices(&mut self) {
+        if self.config.price_fetch.tokens.is_empty() {
+            return;
+        }
+        let prices_path = self.journal_dir.join("prices.journal");
+        if today_prices_present(&prices_path) {
+            return;
+        }
+        self.start_price_fetch();
+    }
+
+    /// Poll the price-fetch background thread and apply its result.
+    /// Called every tick from the main loop.
+    pub fn check_price_fetch(&mut self) {
+        let result = match self.price_fetch_rx.as_ref().and_then(|rx| rx.try_recv().ok()) {
+            Some(r) => r,
+            None => return,
+        };
+        self.price_fetch_rx = None;
+        match result {
+            Ok(msg) => {
+                let now = Local::now().format("%H:%M:%S");
+                self.status_msg = format!("{msg} (at {now})");
+                // Re-load prices from disk so the portfolio chart reflects the
+                // freshly appended entries without waiting for the next full refresh.
+                self.start_refresh();
+            }
+            Err(e) => {
+                self.status_msg = format!("Price fetch failed: {e}");
+            }
+        }
+    }
+
     pub(super) fn apply_refresh(&mut self, r: RefreshResult) {
         // Capture per-tab Ok status BEFORE field-by-field consumption below
         // moves the `TabData` values out of `r`. Tabs that errored stay
@@ -420,6 +503,9 @@ impl App {
         // (user may not have periodic transaction rules).
         apply_field_silent!(self.monthly_forecast, r.monthly_forecast);
         apply_field!(self.payee_data, r.payee_data, errors);
+        // Liquid-cash errors are non-fatal: the summary line just omits
+        // itself (e.g. user hasn't configured `liquid_accounts` yet).
+        apply_field_silent!(self.liquid_cash_monthly, r.liquid_cash_monthly);
         self.rebuild_combined_months();
 
         // Current year has no data → jump to the last year with actual entries

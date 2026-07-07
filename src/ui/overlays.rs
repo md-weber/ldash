@@ -64,6 +64,7 @@ pub(super) fn render_help_popup(f: &mut Frame, area: Rect, theme: &Theme) {
         ("s", "Toggle chart stacked / unstacked"),
         ("c", "Toggle expense colors"),
         ("r", "Refresh data"),
+        ("P", "Fetch prices from CoinGecko"),
         ("", ""),
         ("§", "General"),
         ("? / q", "Toggle help / quit"),

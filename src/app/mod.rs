@@ -99,8 +99,15 @@ pub struct App {
     pub payee_view: bool,
     /// Whether the YoY comparison bar chart is shown below the monthly chart (`C`).
     pub yoy_view: bool,
+    /// When true, the current calendar month is shown with actuals + periodic-rule
+    /// projections from today to end of month (toggled with `F`).
+    pub show_current_month_forecast: bool,
     pub payee_data: Vec<PayeeSummary>,
     pub payee_state: TableState,
+    /// Per-month net change in liquid cash (whitelisted accounts only) for
+    /// the current calendar year. Empty when `config.liquid_accounts` is
+    /// unset or the load failed.
+    pub liquid_cash_monthly: Vec<(String, f64)>,
     pub price_alerts: Vec<PriceAlert>,
     pub show_alerts: bool,
     pub alert_dismissed: bool,
@@ -123,6 +130,8 @@ pub struct App {
     pub(crate) watcher: Option<JournalWatcher>,
     last_journal_mtime: Option<SystemTime>,
     last_config_mtime: Option<SystemTime>,
+    /// Receiver for the background price-fetch thread result.
+    pub(super) price_fetch_rx: Option<mpsc::Receiver<Result<String, String>>>,
 }
 
 /// Background-thread payload for an account/expense/income detail load.
@@ -206,8 +215,10 @@ impl Default for App {
             search_state: TableState::default(),
             payee_view: false,
             yoy_view: false,
+            show_current_month_forecast: false,
             payee_data: Vec::new(),
             payee_state: TableState::default(),
+            liquid_cash_monthly: Vec::new(),
             price_alerts: Vec::new(),
             show_alerts: false,
             alert_dismissed: false,
@@ -226,6 +237,7 @@ impl Default for App {
             watcher: None,
             last_journal_mtime: None,
             last_config_mtime: None,
+            price_fetch_rx: None,
         }
     }
 }
@@ -304,8 +316,10 @@ impl App {
             search_state: TableState::default(),
             payee_view: false,
             yoy_view: false,
+            show_current_month_forecast: false,
             payee_data: Vec::new(),
             payee_state: TableState::default(),
+            liquid_cash_monthly: Vec::new(),
             price_alerts: Vec::new(),
             show_alerts: false,
             alert_dismissed: false,
@@ -324,6 +338,7 @@ impl App {
             watcher,
             last_journal_mtime: None,
             last_config_mtime: Config::config_mtime(),
+            price_fetch_rx: None,
         })
     }
 
@@ -638,6 +653,18 @@ impl App {
 
     pub fn total_portfolio_value(&self) -> f64 {
         self.holdings.iter().map(|h| h.value_eur).sum()
+    }
+
+    /// Net change in liquid cash (whitelisted accounts) for the currently
+    /// selected month on the Monthly tab. `None` when the feature is off
+    /// (`liquid_accounts` unset) or the selected month has no matching data
+    /// (e.g. a past year with no periodic history for this metric).
+    pub fn liquid_cash_change_for_selected_month(&self) -> Option<f64> {
+        let month_name = &self.current_month()?.month_name;
+        self.liquid_cash_monthly
+            .iter()
+            .find(|(name, _)| name == month_name)
+            .map(|(_, v)| *v)
     }
 
     pub fn total_net_worth(&self) -> f64 {

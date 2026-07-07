@@ -7,6 +7,24 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [1.4.0] - 2026-07-07
+
+### Added
+
+- **Automatic price fetching** — ldash now fetches spot prices from the
+  [CoinGecko](https://www.coingecko.com) free API and appends them to
+  `prices.journal` automatically. On startup it checks whether today's prices
+  are already present; if not, a background thread fetches them immediately so
+  you no longer need to run a separate script. Press `P` to trigger a manual
+  fetch at any time.
+- New `[price_fetch]` config section with `currency` (default `"eur"`) and a
+  `[[price_fetch.tokens]]` array mapping commodity symbols (e.g. `BTC`) to
+  CoinGecko coin IDs (e.g. `"bitcoin"`). The feature is opt-in: it is a no-op
+  until at least one token is configured.
+- `P` keybinding — fetch prices on demand from anywhere in the TUI; status bar
+  shows progress and result. A full data refresh is triggered automatically once
+  new prices are written.
+
 ## [1.3.1] - 2026-06-10
 
 ### Fixed
@@ -102,7 +120,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Forgejo CI workflow (lint, build, test)
 - Forgejo release workflow with cross-compilation via `cargo-zigbuild`
 
-[Unreleased]: https://codeberg.org/md-weber/ldash/compare/v1.3.0...HEAD
+[Unreleased]: https://codeberg.org/md-weber/ldash/compare/v1.4.0...HEAD
+[1.4.0]: https://codeberg.org/md-weber/ldash/compare/v1.3.1...v1.4.0
+[1.3.1]: https://codeberg.org/md-weber/ldash/compare/v1.3.0...v1.3.1
 [1.3.0]: https://codeberg.org/md-weber/ldash/compare/v1.2.0...v1.3.0
 [1.2.0]: https://codeberg.org/md-weber/ldash/compare/v1.1.0...v1.2.0
 [1.1.0]: https://codeberg.org/md-weber/ldash/compare/v1.0.0...v1.1.0

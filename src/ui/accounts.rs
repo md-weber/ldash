@@ -5,31 +5,21 @@ use crate::app::App;
 use crate::config::Config;
 
 pub(super) fn render_accounts(f: &mut Frame, app: &mut App, area: Rect, theme: &Theme) {
+    let net_worth = app.total_net_worth();
+    let has_goals = !app.config.goals.is_empty();
+    let has_liabilities = !app.liabilities.is_empty();
+    let wide_terminal = area.width >= 100;
+
+    // Reduced chart height (30%), more room for tables
     let chunks = Layout::vertical([
-        Constraint::Percentage(40), // net worth chart
-        Constraint::Length(3),      // net worth number
-        Constraint::Min(0),         // accounts table or detail
+        Constraint::Percentage(30), // net worth chart (with inline net worth display)
+        Constraint::Min(0),         // tables area
     ])
     .split(area);
 
-    render_net_worth_chart(f, app, chunks[0], theme);
+    render_net_worth_chart(f, app, chunks[0], theme, net_worth);
 
-    let net_worth = app.total_net_worth();
-    let nw_text = Line::from(vec![
-        Span::styled("  Net Worth: ", Style::default().fg(theme.muted).bold()),
-        Span::styled(
-            app.config.fmt_amount(net_worth, 2),
-            Style::default().fg(theme.gold).bold(),
-        ),
-    ]);
-    let nw_block = Block::default()
-        .borders(Borders::ALL)
-        .border_type(BorderType::Rounded)
-        .border_style(Style::default().fg(theme.muted));
-    f.render_widget(Paragraph::new(nw_text).block(nw_block), chunks[1]);
-
-    let has_goals = !app.config.goals.is_empty();
-
+    // Handle detail view separately
     if let Some(txns) = app.account_detail.as_ref() {
         let name = app.detail_account_name.as_ref().unwrap();
         render_account_detail(
@@ -37,36 +27,45 @@ pub(super) fn render_accounts(f: &mut Frame, app: &mut App, area: Rect, theme: &
             txns,
             name,
             &app.config,
-            chunks[2],
+            chunks[1],
             theme,
             &mut app.detail_state,
         );
-    } else if has_goals {
-        let goal_h = (app.config.goals.len() as u16 + 2).min(8);
-        let bottom =
-            Layout::vertical([Constraint::Min(0), Constraint::Length(goal_h)]).split(chunks[2]);
+        return;
+    }
 
-        if !app.liabilities.is_empty() {
-            let split = Layout::vertical([Constraint::Percentage(70), Constraint::Percentage(30)])
-                .split(bottom[0]);
-            render_accounts_table(f, app, split[0], theme);
-            render_liabilities_table(f, app, split[1], theme);
-        } else {
-            render_accounts_table(f, app, bottom[0], theme);
-        }
+    // Calculate tables area (with optional goals at bottom)
+    let tables_area = if has_goals {
+        let goal_h = (app.config.goals.len() as u16 * 3 + 2).min(12);
+        let split =
+            Layout::vertical([Constraint::Min(0), Constraint::Length(goal_h)]).split(chunks[1]);
+        render_goals(f, app, split[1], theme);
+        split[0]
+    } else {
+        chunks[1]
+    };
 
-        render_goals(f, app, bottom[1], theme);
-    } else if !app.liabilities.is_empty() {
-        let split = Layout::vertical([Constraint::Percentage(70), Constraint::Percentage(30)])
-            .split(chunks[2]);
+    // Side-by-side layout for wide terminals with liabilities
+    if has_liabilities && wide_terminal {
+        let cols = Layout::horizontal([
+            Constraint::Percentage(60),
+            Constraint::Percentage(40),
+        ])
+        .split(tables_area);
+        render_accounts_table(f, app, cols[0], theme);
+        render_liabilities_table(f, app, cols[1], theme);
+    } else if has_liabilities {
+        // Narrow terminal: fall back to stacked layout
+        let split = Layout::vertical([Constraint::Percentage(65), Constraint::Percentage(35)])
+            .split(tables_area);
         render_accounts_table(f, app, split[0], theme);
         render_liabilities_table(f, app, split[1], theme);
     } else {
-        render_accounts_table(f, app, chunks[2], theme);
+        render_accounts_table(f, app, tables_area, theme);
     }
 }
 
-fn render_net_worth_chart(f: &mut Frame, app: &App, area: Rect, theme: &Theme) {
+fn render_net_worth_chart(f: &mut Frame, app: &App, area: Rect, theme: &Theme, net_worth: f64) {
     let range_label = app.nw_range.label();
     let bd = &app.net_worth_breakdown;
 
@@ -76,20 +75,33 @@ fn render_net_worth_chart(f: &mut Frame, app: &App, area: Rect, theme: &Theme) {
         bd.layer_total.len() >= 2 && bd.layer_total.iter().any(|(_, v)| v.abs() > 1e-6);
 
     if has_breakdown {
-        render_breakdown_chart(f, app, area, theme, range_label);
+        render_breakdown_chart(f, app, area, theme, range_label, net_worth);
     } else {
-        render_single_line_chart(f, app, area, theme, range_label);
+        render_single_line_chart(f, app, area, theme, range_label, net_worth);
     }
 }
 
-fn render_breakdown_chart(f: &mut Frame, app: &App, area: Rect, theme: &Theme, range_label: &str) {
+fn render_breakdown_chart(
+    f: &mut Frame,
+    app: &App,
+    area: Rect,
+    theme: &Theme,
+    range_label: &str,
+    net_worth: f64,
+) {
     let bd = &app.net_worth_breakdown;
+    let nw_formatted = app.config.fmt_amount(net_worth, 2);
 
     let block = Block::default()
-        .title(Span::styled(
-            format!(" Asset Breakdown [{range_label}]  ◀ ▶ "),
-            Style::default().fg(theme.gold).bold(),
-        ))
+        .title(Line::from(vec![
+            Span::styled(
+                format!(" Asset Breakdown [{range_label}]  "),
+                Style::default().fg(theme.gold).bold(),
+            ),
+            Span::styled("Net Worth: ", Style::default().fg(theme.muted).bold()),
+            Span::styled(nw_formatted, Style::default().fg(theme.gold).bold()),
+            Span::styled("  ◀ ▶ ", Style::default().fg(theme.gold).bold()),
+        ]))
         .borders(Borders::ALL)
         .border_type(BorderType::Rounded)
         .border_style(Style::default().fg(theme.muted));
@@ -169,12 +181,20 @@ fn render_single_line_chart(
     area: Rect,
     theme: &Theme,
     range_label: &str,
+    net_worth: f64,
 ) {
+    let nw_formatted = app.config.fmt_amount(net_worth, 2);
+
     let block = Block::default()
-        .title(Span::styled(
-            format!(" Net Worth History [{range_label}]  ◀ ▶ "),
-            Style::default().fg(theme.gold).bold(),
-        ))
+        .title(Line::from(vec![
+            Span::styled(
+                format!(" Net Worth History [{range_label}]  "),
+                Style::default().fg(theme.gold).bold(),
+            ),
+            Span::styled("Net Worth: ", Style::default().fg(theme.muted).bold()),
+            Span::styled(nw_formatted, Style::default().fg(theme.gold).bold()),
+            Span::styled("  ◀ ▶ ", Style::default().fg(theme.gold).bold()),
+        ]))
         .borders(Borders::ALL)
         .border_type(BorderType::Rounded)
         .border_style(Style::default().fg(theme.muted));
@@ -523,7 +543,7 @@ fn render_liabilities_table(f: &mut Frame, app: &mut App, area: Rect, theme: &Th
 fn render_goals(f: &mut Frame, app: &App, area: Rect, theme: &Theme) {
     let block = Block::default()
         .title(Span::styled(
-            " Savings Goals ",
+            " 🎯 Savings Goals ",
             Style::default().fg(theme.gold).bold(),
         ))
         .borders(Borders::ALL)
@@ -533,11 +553,15 @@ fn render_goals(f: &mut Frame, app: &App, area: Rect, theme: &Theme) {
     f.render_widget(block, area);
 
     let goals = app.goal_progress();
-    for (i, g) in goals.iter().enumerate() {
-        if i as u16 >= inner.height {
+    let max_goals = inner.height as usize / 3; // 3 lines per goal (2 content + 1 spacing)
+
+    for (i, g) in goals.iter().take(max_goals).enumerate() {
+        let y_start = inner.y + (i * 3) as u16;
+
+        if y_start + 1 >= inner.y + inner.height {
             break;
         }
-        let y = inner.y + i as u16;
+
         let color = if g.pct >= 100.0 {
             theme.positive
         } else if g.pct >= 60.0 {
@@ -546,52 +570,68 @@ fn render_goals(f: &mut Frame, app: &App, area: Rect, theme: &Theme) {
             theme.accent
         };
 
-        let label_w = 18u16.min(inner.width / 3);
-        let pct_w = 22u16;
-        let bar_w = inner.width.saturating_sub(label_w + pct_w);
+        let icon = if g.pct >= 100.0 { "✓" } else { "○" };
+        let remaining = g.target - g.current;
 
-        let label = Span::styled(
-            format!(" {:<w$}", g.name, w = (label_w - 1) as usize),
-            Style::default().fg(theme.fg),
-        );
+        // Line 1: Goal name/percentage (left) and amounts (right)
+        let amounts_text = if remaining > 0.0 {
+            format!(
+                "{}/{} • {} left",
+                app.config.fmt_amount_compact(g.current, 0),
+                app.config.fmt_amount_compact(g.target, 0),
+                app.config.fmt_amount_compact(remaining, 0)
+            )
+        } else {
+            format!(
+                "{}/{} ✓",
+                app.config.fmt_amount_compact(g.current, 0),
+                app.config.fmt_amount_compact(g.target, 0)
+            )
+        };
+
+        let name_text = format!(" {} {} ({:.0}%)", icon, g.name, g.pct);
+        let name_len = name_text.len();
+        let amounts_len = amounts_text.len();
+        let total_space = inner.width as usize;
+        let padding = if name_len + amounts_len < total_space {
+            " ".repeat(total_space - name_len - amounts_len)
+        } else {
+            " ".to_string()
+        };
+
+        let name_line = Line::from(vec![
+            Span::styled(name_text, Style::default().fg(theme.fg).bold()),
+            Span::styled(padding, Style::default()),
+            Span::styled(amounts_text, Style::default().fg(theme.muted)),
+        ]);
+        
         f.render_widget(
-            Paragraph::new(Line::from(label)),
+            Paragraph::new(name_line),
             Rect {
                 x: inner.x,
-                y,
-                width: label_w,
+                y: y_start,
+                width: inner.width,
                 height: 1,
             },
         );
 
-        let filled = ((g.pct / 100.0).min(1.0) * bar_w as f64) as usize;
-        let empty_b = bar_w as usize - filled;
-        let bar = format!("{}{}", "█".repeat(filled), "░".repeat(empty_b));
+        // Line 2: Full-width progress bar
+        let bar_width = (inner.width as usize).saturating_sub(4);
+        let filled = ((g.pct / 100.0).min(1.0) * bar_width as f64) as usize;
+        let empty = bar_width.saturating_sub(filled);
+        
+        let progress_char = if g.pct >= 100.0 { "█" } else { "▓" };
+        let bar = format!("  {}{}", 
+            progress_char.repeat(filled), 
+            "░".repeat(empty)
+        );
+
         f.render_widget(
             Paragraph::new(Line::from(Span::styled(bar, Style::default().fg(color)))),
             Rect {
-                x: inner.x + label_w,
-                y,
-                width: bar_w,
-                height: 1,
-            },
-        );
-
-        let info = Span::styled(
-            format!(
-                " {}/{} {:>3.0}%",
-                app.config.fmt_amount_compact(g.current, 0),
-                app.config.fmt_amount_compact(g.target, 0),
-                g.pct
-            ),
-            Style::default().fg(theme.muted),
-        );
-        f.render_widget(
-            Paragraph::new(Line::from(info)),
-            Rect {
-                x: inner.x + label_w + bar_w,
-                y,
-                width: pct_w,
+                x: inner.x,
+                y: y_start + 1,
+                width: inner.width,
                 height: 1,
             },
         );

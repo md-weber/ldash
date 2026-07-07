@@ -33,6 +33,9 @@ pub struct RefreshResult {
     pub monthly_forecast: TabData<MonthlyData>,
     /// Payee analytics for the Monthly tab's `p` sub-view.
     pub payee_data: TabData<Vec<PayeeSummary>>,
+    /// Per-month net change in liquid cash (whitelisted accounts only) for
+    /// the current calendar year. Empty when `liquid_accounts` is unset.
+    pub liquid_cash_monthly: TabData<Vec<(String, f64)>>,
 }
 
 /// How the portfolio analysis chart layers price-growth and staking on top of

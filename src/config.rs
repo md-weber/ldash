@@ -41,6 +41,19 @@ pub struct Config {
     pub export_format: String,
     /// Optional list of journal paths for quick switching (`:o` → Tab picker).
     pub journals: Vec<String>,
+    /// Account prefixes treated as *liquid* cash for the "Liquid Chg" figure
+    /// on the Monthly tab (net change in these accounts during the selected
+    /// month). Only accounts whose full name starts with one of these
+    /// prefixes are summed, so non-liquid asset accounts (AFA, bounded
+    /// mortgage savings / Tilgungsaussetzung, investments, …) can be excluded
+    /// by simply not listing them. Empty (default) disables the feature.
+    pub liquid_accounts: Vec<String>,
+    /// Automatic price fetching from CoinGecko.
+    /// When `tokens` is non-empty, ldash checks once per day at startup whether
+    /// today's prices are already in `prices.journal`. If not, it fetches them
+    /// automatically and appends the entries. The `P` key triggers a manual
+    /// fetch at any time.
+    pub price_fetch: PriceFetchConfig,
 }
 
 #[derive(Debug, Deserialize, Clone)]
@@ -48,6 +61,28 @@ pub struct SavingsGoal {
     pub name: String,
     pub target: f64,
     pub account: String,
+}
+
+#[derive(Debug, Deserialize, Clone)]
+pub struct PriceFetchToken {
+    pub symbol: String,
+    pub id: String,
+}
+
+#[derive(Debug, Deserialize)]
+#[serde(default)]
+pub struct PriceFetchConfig {
+    pub tokens: Vec<PriceFetchToken>,
+    pub currency: String,
+}
+
+impl Default for PriceFetchConfig {
+    fn default() -> Self {
+        Self {
+            tokens: Vec::new(),
+            currency: "eur".to_string(),
+        }
+    }
 }
 
 #[derive(Debug, Deserialize, Default)]
@@ -94,6 +129,8 @@ impl Default for Config {
             export_dir: None,
             export_format: "html".to_string(),
             journals: Vec::new(),
+            liquid_accounts: Vec::new(),
+            price_fetch: PriceFetchConfig::default(),
         }
     }
 }
@@ -194,6 +231,19 @@ const DEFAULT_CONFIG: &str = r##"# ldash configuration
 #   "~/Finance/2026.journal",
 # ]
 
+# Liquid cash — net change, per month, of accounts you can spend freely.
+# Only accounts whose name starts with one of these prefixes are summed, so
+# non-liquid assets (AFA / depreciation, bounded mortgage savings /
+# Tilgungsaussetzung, investments) stay excluded by omission.
+# Shown as a "Liquid Chg" line on the Monthly tab for whichever month is
+# selected (past months show the actual change, the current/future months
+# include the forecasted remainder). Empty (default) hides it.
+# liquid_accounts = [
+#   "assets:bank:checking",
+#   "assets:bank:savings",
+#   "assets:cash",
+# ]
+
 # Savings goals — track progress toward financial targets
 # Each goal maps a target amount to an account prefix.
 # Shown on the Accounts tab as a progress bar.
@@ -201,6 +251,25 @@ const DEFAULT_CONFIG: &str = r##"# ldash configuration
 # name = "Emergency Fund"
 # target = 15000.0
 # account = "assets:bank:savings"
+
+# Automatic price fetching from CoinGecko.
+# When tokens are configured, ldash fetches today's prices once at startup
+# (skipped if today is already in prices.journal) and writes them to
+# prices.journal in the journal's directory. Press `P` to fetch manually.
+# currency = target vs-currency (lowercase), e.g. "eur" or "usd".
+# Each [[price_fetch.tokens]] entry maps a commodity symbol (as used in your
+# journal) to the CoinGecko coin ID.
+# [price_fetch]
+# currency = "eur"
+# [[price_fetch.tokens]]
+# symbol = "BTC"
+# id     = "bitcoin"
+# [[price_fetch.tokens]]
+# symbol = "ETH"
+# id     = "ethereum"
+# [[price_fetch.tokens]]
+# symbol = "SOL"
+# id     = "solana"
 "##;
 
 impl Config {
@@ -348,6 +417,8 @@ impl Config {
         self.export_dir = fresh.export_dir;
         self.export_format = fresh.export_format;
         self.journals = fresh.journals;
+        self.liquid_accounts = fresh.liquid_accounts;
+        self.price_fetch = fresh.price_fetch;
         None
     }
 

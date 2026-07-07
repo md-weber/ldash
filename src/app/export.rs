@@ -113,6 +113,7 @@ impl App {
                 assets_account: self.config.assets_account.clone(),
                 liabilities_account: self.config.liabilities_account.clone(),
                 expenses_account: self.config.expenses_account.clone(),
+                liquid_accounts: self.config.liquid_accounts.clone(),
             };
             let result = load_all_data(&jp, &jd, cfg, need);
             self.apply_refresh(result);

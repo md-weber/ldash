@@ -177,6 +177,10 @@ fn handle_normal_key(app: &mut App, key: KeyEvent) -> Action {
         KeyCode::Char('C') if app.tab == Tab::Monthly => {
             app.yoy_view = !app.yoy_view;
         }
+        KeyCode::Char('F') if app.tab == Tab::Monthly => {
+            app.show_current_month_forecast = !app.show_current_month_forecast;
+            app.rebuild_combined_months();
+        }
         KeyCode::Char('G') if app.tab == Tab::Monthly => app.jump_to_last_entry(),
         KeyCode::Char('/') => app.open_search(),
         KeyCode::Char('?') => app.show_help = true,
@@ -234,11 +238,12 @@ fn handle_normal_key(app: &mut App, key: KeyEvent) -> Action {
         KeyCode::Char('s') => app.chart_mode = app.chart_mode.toggle(),
         KeyCode::Char('c') => app.expense_colors = !app.expense_colors,
         KeyCode::Char('r') => app.start_refresh(),
+        KeyCode::Char('P') => app.start_price_fetch(),
         KeyCode::Char(c)
             if app.tab == Tab::Accounts
                 && !matches!(
                     c,
-                    'q' | '/' | '?' | 'r' | 's' | 'c' | 'y' | 'Y' | 'e' | '1' | '2' | '3'
+                    'q' | '/' | '?' | 'r' | 's' | 'c' | 'y' | 'Y' | 'e' | 'P' | '1' | '2' | '3'
                 ) =>
         {
             app.account_filter_active = true;

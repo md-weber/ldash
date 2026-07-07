@@ -148,14 +148,19 @@ impl App {
     ///
     /// Months are placed in calendar order (Jan → Dec). Forecast months are
     /// only added when viewing the current year (`monthly_year_offset == 0`).
+    /// When `show_current_month_forecast` is true, the current calendar month
+    /// is replaced by its forecast entry (actuals + projected remainder).
     /// The previous selection is preserved by month name when possible.
-    pub(super) fn rebuild_combined_months(&mut self) {
+    pub(crate) fn rebuild_combined_months(&mut self) {
         let actual_names: std::collections::HashSet<&str> = self
             .monthly
             .months
             .iter()
             .map(|m| m.month_name.as_str())
             .collect();
+
+        let today = Local::now().date_naive();
+        let current_month_name = crate::data::month_name(today.month() as usize);
 
         let mut combined: Vec<(SingleMonth, bool)> = Vec::new();
         for name in &crate::data::MONTH_NAMES {
@@ -165,6 +170,22 @@ impl App {
                 .iter()
                 .find(|m| m.month_name.as_str() == *name)
             {
+                // When the toggle is on and this is the current calendar month,
+                // substitute the forecast version (actuals + projected remainder).
+                if self.show_current_month_forecast
+                    && self.monthly_year_offset == 0
+                    && *name == current_month_name
+                {
+                    if let Some(fm) = self
+                        .monthly_forecast
+                        .months
+                        .iter()
+                        .find(|fm| fm.month_name.as_str() == *name)
+                    {
+                        combined.push((fm.clone(), true));
+                        continue;
+                    }
+                }
                 combined.push((m.clone(), false));
             } else if self.monthly_year_offset == 0 {
                 if let Some(m) = self.monthly_forecast.months.iter().find(|m| {

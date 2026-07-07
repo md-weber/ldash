@@ -63,8 +63,13 @@ pub(super) fn render_monthly_chart(f: &mut Frame, app: &App, area: Rect, theme: 
     } else {
         "[C yoy]"
     };
+    let fc_hint = if app.show_current_month_forecast {
+        "[F hide fc]"
+    } else {
+        "[F forecast]"
+    };
     let chart_title = if app.monthly_year_offset == 0 {
-        format!(" Income vs Expenses  {yoy_hint}  [G last entry] ")
+        format!(" Income vs Expenses  {yoy_hint}  {fc_hint}  [G last entry] ")
     } else {
         format!(
             " Income vs Expenses ({})  [y/Y]  {yoy_hint}  [G last entry] ",

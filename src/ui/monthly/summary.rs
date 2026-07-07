@@ -75,6 +75,22 @@ pub(super) fn render_monthly_summary(f: &mut Frame, app: &App, area: Rect, theme
         ]),
     ];
 
+    if let Some(liquid) = app.liquid_cash_change_for_selected_month() {
+        let liquid_color = if liquid >= 0.0 {
+            theme.positive
+        } else {
+            theme.negative
+        };
+        let liquid_prefix = if liquid >= 0.0 { "+" } else { "" };
+        text.push(Line::from(vec![
+            Span::styled("  Liquid Chg", Style::default().fg(theme.muted)),
+            Span::styled(
+                format!(" {liquid_prefix}{}", app.config.fmt_amount(liquid, 2)),
+                Style::default().fg(liquid_color).bold(),
+            ),
+        ]));
+    }
+
     if let Some(ly) = app.last_year_match() {
         let short = &m.month_name[..3];
         let year_ago = chrono::Local::now().year() - 1;

@@ -22,6 +22,7 @@ Built with [Ratatui](https://ratatui.rs) and Rust.
 - **Recurring Expense Detection** — Automatically identifies subscription and recurring charges in your expense history
 - **Budget Tracking** — Set monthly limits per expense category; see progress bars inline and warnings when over budget
 - **Savings Goals** — Define target amounts for account prefixes; progress bars shown on the Accounts tab
+- **Automatic Price Fetching** — Fetches spot prices from CoinGecko at startup (once per day) and appends them to `prices.journal`; press `P` to fetch on demand. No external script needed.
 - **Background Refresh** — Non-blocking data loading with parallel hledger calls
 - **Auto-Refresh** — Detects journal file changes and reloads automatically
 - **Lazy Tab Loading** — Only loads data for the active tab on first visit
@@ -85,6 +86,7 @@ cd ~/Finance && ldash
 | `Ctrl-O` | Open journal-switch prompt (session only) |
 | `Ctrl-S` | Save typed/active journal to config (inside `Ctrl-O` prompt) |
 | `r` | Force refresh |
+| `P` | Fetch prices from CoinGecko (requires `[price_fetch]` config) |
 | `?` | Toggle help overlay |
 | `Esc` | Back / close |
 | `q` | Quit |
@@ -145,6 +147,21 @@ On first launch, ldash creates a config file at `~/.config/ldash/config.toml` wi
 # name = "Emergency Fund"
 # target = 15000.0
 # account = "assets:bank:savings"
+
+# Automatic price fetching from CoinGecko.
+# At startup ldash checks whether today's prices are already in prices.journal;
+# if not, it fetches them in the background. Press P to fetch on demand.
+# [price_fetch]
+# currency = "eur"
+# [[price_fetch.tokens]]
+# symbol = "BTC"
+# id     = "bitcoin"
+# [[price_fetch.tokens]]
+# symbol = "ETH"
+# id     = "ethereum"
+# [[price_fetch.tokens]]
+# symbol = "SOL"
+# id     = "solana"
 ```
 
 Missing or partially filled config is fine — defaults fill any gaps.
