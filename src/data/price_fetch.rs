@@ -114,7 +114,7 @@ fn format_eu_price(price: f64) -> String {
     let int_chars: Vec<char> = int_part.chars().collect();
     let mut int_out = String::with_capacity(int_chars.len() + int_chars.len() / 3);
     for (i, c) in int_chars.iter().enumerate() {
-        if i > 0 && (int_chars.len() - i) % 3 == 0 {
+        if i > 0 && (int_chars.len() - i).is_multiple_of(3) {
             int_out.push('.');
         }
         int_out.push(*c);

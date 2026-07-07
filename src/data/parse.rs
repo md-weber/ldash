@@ -91,8 +91,8 @@ pub(super) fn parse_amount_str(s: &str) -> Option<(f64, String)> {
     // The outer sign is stripped first, then leading non-digit chars form the
     // commodity symbol, and the remainder is parsed as a number.
     {
-        let (outer_neg, after_sign) = if s.starts_with('-') {
-            (true, &s[1..])
+        let (outer_neg, after_sign) = if let Some(stripped) = s.strip_prefix('-') {
+            (true, stripped)
         } else {
             (false, s)
         };
