@@ -7,6 +7,21 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Fixed
+
+- **US number format (`number_format = "us"`)** — journals using `$`-prefixed
+  amounts (e.g. `$2,000.00`) now parse correctly throughout the app, fixing the
+  "No income or expense data found" error on the Monthly tab and missing data in
+  the Asset Balances section (issue #2). Two bugs were present:
+  - `parse_eu_number` always assumed EU conventions (dot = thousands separator,
+    comma = decimal), so `"1,234.56"` was misread as `1.23456`. It now detects
+    the format by which separator appears last: a trailing dot means US format,
+    a trailing comma means EU format.
+  - `parse_amount_str` only handled amounts with a space between the currency
+    symbol and the number (`"100 EUR"`, `"Eur 100"`). The US convention of
+    attaching the symbol directly to the number (`"$2,000.00"`, `"-$100.00"`)
+    was silently dropped. A third detection path now covers this case.
+
 ## [1.4.0] - 2026-07-07
 
 ### Added

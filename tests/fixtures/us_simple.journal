@@ -1,0 +1,25 @@
+; US-format fixture journal for integration tests.
+; commodity directive forces hledger to output "$1,234.56"-style amounts
+; (prefix symbol, comma thousands separator, dot decimal).
+
+commodity $1,000.00
+
+account assets
+account income
+account expenses
+
+2026-01-15 Salary
+    income:salary              $-2,000.00
+    assets:bank:checking        $2,000.00
+
+2026-01-20 Groceries
+    expenses:food                $150.00
+    assets:bank:checking        $-150.00
+
+2026-02-15 Salary
+    income:salary              $-2,000.00
+    assets:bank:checking        $2,000.00
+
+2026-02-22 Rent
+    expenses:housing             $800.00
+    assets:bank:checking        $-800.00

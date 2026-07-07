@@ -2,15 +2,31 @@ use anyhow::Result;
 
 use super::{currency_matches, MonthlyData, SingleMonth};
 
-/// Parse a European-formatted number like "1.524,00" or "74,52" or "0,02352448"
+/// Parse a number that may be formatted in either EU or US convention.
+///
+/// When both a dot and a comma are present, the one that appears **last**
+/// is treated as the decimal separator:
+/// - `"1.234,56"` → last sep is `,` → EU format → 1234.56
+/// - `"1,234.56"` → last sep is `.` → US format → 1234.56
+///
+/// When only a comma is present it is treated as the decimal separator
+/// (EU convention): `"74,52"` → 74.52.
+/// When only a dot is present (or neither), standard float parsing applies.
 pub fn parse_eu_number(s: &str) -> Option<f64> {
     let s = s.trim();
     let negative = s.starts_with('-');
     let s = if negative { &s[1..] } else { s };
 
     let cleaned = if s.contains('.') && s.contains(',') {
-        // e.g. "1.524,00" → dot is thousands sep, comma is decimal
-        s.replace('.', "").replace(',', ".")
+        let last_dot = s.rfind('.').unwrap();
+        let last_comma = s.rfind(',').unwrap();
+        if last_dot > last_comma {
+            // US format: "1,234.56" — comma is thousands sep, dot is decimal
+            s.replace(',', "")
+        } else {
+            // EU format: "1.234,56" — dot is thousands sep, comma is decimal
+            s.replace('.', "").replace(',', ".")
+        }
     } else if s.contains(',') {
         // e.g. "74,52"
         s.replace(',', ".")
@@ -22,13 +38,15 @@ pub fn parse_eu_number(s: &str) -> Option<f64> {
     Some(if negative { -val } else { val })
 }
 
-/// Parse an amount string like "4,40140000 SOL" or "1430,15 €" into (amount, commodity).
+/// Parse an amount string like "4,40140000 SOL" or "1430,15 €" or "$1,234.56"
+/// into (amount, commodity).
 ///
-/// Handles both suffix format (`100 EUR`, `3 800,00 €`) and prefix format
-/// (`Eur 100`, `Eur -100`).  Suffix is tried first; rfind ensures that
-/// space-as-thousands-separator amounts (`3 800,00 €`) are split correctly.
-/// If the suffix parse fails (the left-hand token is not a number) the string
-/// is retried as prefix format.
+/// Three formats are tried in order:
+/// 1. Suffix with space: `"100 EUR"`, `"3 800,00 €"` — rfind keeps
+///    space-as-thousands-separator amounts intact.
+/// 2. Prefix with space: `"Eur 100"`, `"-Eur 100"`.
+/// 3. Attached prefix (no space): `"$100"`, `"$1,234.56"`, `"-$100.00"` —
+///    common US convention where the currency symbol is glued to the number.
 ///
 /// Only handles a **single** commodity amount. For multi-commodity strings use
 /// `parse_first_amount_str`.
@@ -65,6 +83,38 @@ pub(super) fn parse_amount_str(s: &str) -> Option<(f64, String)> {
 
         if let Some(amount) = parse_eu_number(&num_str) {
             return Some((amount, commodity));
+        }
+    }
+
+    // Attached-prefix format: symbol directly against number, no space.
+    // Handles "$100", "$1,234.56", "-$100.00", "$-100".
+    // The outer sign is stripped first, then leading non-digit chars form the
+    // commodity symbol, and the remainder is parsed as a number.
+    {
+        let (outer_neg, after_sign) = if s.starts_with('-') {
+            (true, &s[1..])
+        } else {
+            (false, s)
+        };
+
+        // Find where the symbol ends: first char that could start a number.
+        let sym_end = after_sign
+            .char_indices()
+            .find(|(_, c)| c.is_ascii_digit() || *c == '-' || *c == ',' || *c == '.')
+            .map(|(i, _)| i)
+            .unwrap_or(0);
+
+        if sym_end > 0 && sym_end < after_sign.len() {
+            let sym = &after_sign[..sym_end];
+            // Reject if the "symbol" contains a space — that would be a
+            // spaced prefix already handled above, or garbled input.
+            if !sym.contains(' ') {
+                let num_part = &after_sign[sym_end..];
+                if let Some(amount) = parse_eu_number(num_part) {
+                    let final_amount = if outer_neg { -amount } else { amount };
+                    return Some((final_amount, sym.to_string()));
+                }
+            }
         }
     }
 
@@ -374,6 +424,22 @@ mod tests {
         assert_eq!(parse_eu_number("abc"), None);
     }
 
+    // US-format regression tests (Bug 1: comma-as-thousands, dot-as-decimal).
+    #[test]
+    fn eu_number_us_thousands_comma() {
+        assert!((parse_eu_number("1,234.56").unwrap() - 1234.56).abs() < 1e-10);
+    }
+
+    #[test]
+    fn eu_number_us_large_amount() {
+        assert!((parse_eu_number("10,000.00").unwrap() - 10_000.0).abs() < 1e-10);
+    }
+
+    #[test]
+    fn eu_number_us_negative() {
+        assert!((parse_eu_number("-1,234.56").unwrap() - (-1234.56)).abs() < 1e-10);
+    }
+
     // ── parse_amount_str ──────────────────────────────────────────────────────
 
     #[test]
@@ -441,6 +507,35 @@ mod tests {
         let (amt, com) = parse_amount_str("1.430,15 €").unwrap();
         assert!((amt - 1430.15).abs() < 1e-10);
         assert_eq!(com, "€");
+    }
+
+    // US-format attached-prefix regressions (Bug 2: "$" without space).
+    #[test]
+    fn amount_str_dollar_prefix_no_space() {
+        let (amt, com) = parse_amount_str("$100").unwrap();
+        assert!((amt - 100.0).abs() < 1e-10);
+        assert_eq!(com, "$");
+    }
+
+    #[test]
+    fn amount_str_dollar_prefix_us_thousands() {
+        let (amt, com) = parse_amount_str("$1,234.56").unwrap();
+        assert!((amt - 1234.56).abs() < 1e-10);
+        assert_eq!(com, "$");
+    }
+
+    #[test]
+    fn amount_str_negative_dollar_prefix() {
+        let (amt, com) = parse_amount_str("-$100.00").unwrap();
+        assert!((amt - (-100.0)).abs() < 1e-10);
+        assert_eq!(com, "$");
+    }
+
+    #[test]
+    fn amount_str_dollar_prefix_large_us() {
+        let (amt, com) = parse_amount_str("$2,000.00").unwrap();
+        assert!((amt - 2000.0).abs() < 1e-10);
+        assert_eq!(com, "$");
     }
 
     // ── parse_first_amount_str ────────────────────────────────────────────────
@@ -596,6 +691,45 @@ mod tests {
         assert!(
             jan.expenses[0].1 >= jan.expenses[1].1,
             "expenses not sorted descending"
+        );
+    }
+
+    // US-format regression: "$2,000.00" attached-prefix amounts (Bugs 1 & 2).
+    #[test]
+    fn monthly_csv_us_format_dollar_prefix() {
+        let csv = "Monthly Income Statement,Jan 2026,Feb 2026\n\
+                   Revenues,,\n\
+                   income:salary,\"$2,000.00\",\"$2,000.00\"\n\
+                   Expenses,,\n\
+                   expenses:food,\"$150.00\",0\n\
+                   expenses:housing,0,\"$800.00\"\n";
+        let data = parse_monthly_csv(csv, "$").unwrap();
+        assert_eq!(data.months.len(), 2);
+
+        let jan = &data.months[0];
+        assert_eq!(jan.month_name, "January");
+        assert!(
+            (jan.total_income - 2000.0).abs() < 0.01,
+            "jan income: {}",
+            jan.total_income
+        );
+        assert!(
+            (jan.total_expenses - 150.0).abs() < 0.01,
+            "jan expenses: {}",
+            jan.total_expenses
+        );
+
+        let feb = &data.months[1];
+        assert_eq!(feb.month_name, "February");
+        assert!(
+            (feb.total_income - 2000.0).abs() < 0.01,
+            "feb income: {}",
+            feb.total_income
+        );
+        assert!(
+            (feb.total_expenses - 800.0).abs() < 0.01,
+            "feb expenses: {}",
+            feb.total_expenses
         );
     }
 }

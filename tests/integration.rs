@@ -173,6 +173,42 @@ fn integration_load_liquid_cash_monthly_reports_per_month_change() {
 }
 
 #[test]
+#[ignore]
+fn integration_load_monthly_data_us_format() {
+    if !hledger_available() {
+        return;
+    }
+    let path = fixture("us_simple.journal");
+    let data = ldash::data::load_monthly_data(&path, "$").unwrap();
+
+    assert_eq!(data.months.len(), 2, "expected Jan + Feb, got: {:?}", data.months.iter().map(|m| &m.month_name).collect::<Vec<_>>());
+
+    let jan = data.months.iter().find(|m| m.month_name == "January").unwrap();
+    assert!(
+        (jan.total_income - 2000.0).abs() < 0.01,
+        "jan income {}, expected 2000",
+        jan.total_income
+    );
+    assert!(
+        (jan.total_expenses - 150.0).abs() < 0.01,
+        "jan expenses {}, expected 150",
+        jan.total_expenses
+    );
+
+    let feb = data.months.iter().find(|m| m.month_name == "February").unwrap();
+    assert!(
+        (feb.total_income - 2000.0).abs() < 0.01,
+        "feb income {}, expected 2000",
+        feb.total_income
+    );
+    assert!(
+        (feb.total_expenses - 800.0).abs() < 0.01,
+        "feb expenses {}, expected 800",
+        feb.total_expenses
+    );
+}
+
+#[test]
 fn integration_load_liquid_cash_monthly_empty_whitelist_returns_empty() {
     // No hledger call is made when the whitelist is empty, so this doesn't
     // need the availability guard.
