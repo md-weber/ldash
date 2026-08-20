@@ -8,6 +8,7 @@ mod expenses;
 mod forecast;
 mod income;
 mod payee;
+mod sparkline;
 mod summary;
 mod yoy;
 

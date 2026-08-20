@@ -136,16 +136,16 @@ impl Default for Config {
 }
 
 const DEFAULT_CONFIG: &str = r##"# ldash configuration
-# See: https://codeberg.org/md-weber/ldash#configuration
+# See: https://github.com/md-weber/ldash#configuration
 
-# Path to hledger journal (overrides $LEDGER_FILE and CLI arg)
+# Path to hledger journal (overrides $LEDGER_FILE; CLI -f still wins)
 # journal = "/path/to/all.journal"
 
 # Auto-refresh interval in seconds (default: 300)
 # refresh_interval = 300
 
-# Default tab on startup: "portfolio", "accounts", "monthly"
-# default_tab = "portfolio"
+# Default tab on startup: "portfolio", "accounts", "monthly", "register"
+# default_tab = "accounts"
 
 # Number format: "eu" (1.000,00) or "us" (1,000.00)
 # number_format = "eu"
@@ -236,8 +236,9 @@ const DEFAULT_CONFIG: &str = r##"# ldash configuration
 # non-liquid assets (AFA / depreciation, bounded mortgage savings /
 # Tilgungsaussetzung, investments) stay excluded by omission.
 # Shown as a "Liquid Chg" line on the Monthly tab for whichever month is
-# selected (past months show the actual change, the current/future months
-# include the forecasted remainder). Empty (default) hides it.
+# selected. Past months show the posted change. The current month includes
+# the forecast remainder only when F is on. Future months always include
+# periodic-rule projections. Empty (default) hides it.
 # liquid_accounts = [
 #   "assets:bank:checking",
 #   "assets:bank:savings",

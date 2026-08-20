@@ -11,13 +11,14 @@ mod payee;
 mod portfolio;
 mod price_fetch;
 mod prices;
+mod register;
 mod transactions;
 
 pub use balances::{
     load_account_balances_eur, load_crypto_balances, load_liability_balances_eur,
     load_liability_progress, load_net_worth_breakdown, load_net_worth_history, LiabilityProgress,
 };
-pub use liquid::load_liquid_cash_monthly;
+pub use liquid::{load_liquid_cash_monthly, load_liquid_cash_monthly_with_forecast};
 pub use monthly::{
     load_last_year_monthly, load_monthly_data, load_monthly_for_period, load_monthly_with_forecast,
 };
@@ -29,7 +30,12 @@ pub use payee::{load_payee_analytics, PayeeSummary};
 pub use portfolio::{compute_portfolio, load_all_coin_chart_series};
 pub use price_fetch::{fetch_and_append_prices, today_prices_present};
 pub use prices::{latest_prices, load_price_history};
-pub use transactions::{load_recent_transactions, search_transactions};
+#[allow(unused_imports)]
+pub use register::{
+    build_register_view, group_register_txns, load_register_page, RegisterPosting, RegisterQuery,
+    RegisterTxn, RegisterViewRow, TxnStatus,
+};
+pub use transactions::load_recent_transactions;
 
 pub(crate) fn commodity_key(raw: &str) -> String {
     raw.trim().trim_matches('"').to_ascii_uppercase()
@@ -242,10 +248,6 @@ pub struct Transaction {
     pub description: String,
     pub amount: f64,
     pub running_total: f64,
-    /// Account this posting belongs to. `None` for account/expense/income
-    /// detail loads (where the account is already implicit); `Some` for global
-    /// search results so drill-down can navigate to the owning account.
-    pub account: Option<String>,
 }
 
 /// Three EUR-denominated time series for the portfolio analysis chart.

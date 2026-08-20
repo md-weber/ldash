@@ -15,9 +15,10 @@ Built with [Ratatui](https://ratatui.rs) and Rust.
 - **Crypto Portfolio** — Holdings table with price, value, allocation %, and P/L tracking (invested vs price gain vs staking rewards)
 - **Portfolio Chart** — Per-coin analysis with two modes: *stacked* (invested / purchased value / total value) or *unstacked* (invested / price gain / staking gain). Toggle with `s`.
 - **Net Worth History** — Interactive chart with selectable time ranges (YTD / 1Y / 2Y / 5Y / All)
-- **Account Balances** — All asset accounts with EUR valuations and visual bar indicators; stacked asset breakdown chart (toggle with `s`)
-- **Account Drill-Down** — Select any account and view its recent transactions
-- **Monthly Income & Expenses** — Bar chart overview with per-category breakdown, savings rate gauge, and year-over-year comparison
+- **Account Balances** — All asset accounts with EUR valuations and visual bar indicators, plus a stacked asset breakdown chart
+- **Account Drill-Down** — Enter on an account opens the Register tab for that account and the current month
+- **Transaction Register** — month of postings grouped by transaction. `/` focuses the query bar. `h`/`l` changes month. Enter opens the transaction's legs
+- **Monthly Income & Expenses** — Bar chart overview with per-category breakdown, 6-month trend sparklines, savings rate gauge, and year-over-year comparison
 - **Cash Flow Forecast** — Projected income/expenses for future months via `hledger --forecast`, overlaid on the monthly chart
 - **Recurring Expense Detection** — Automatically identifies subscription and recurring charges in your expense history
 - **Budget Tracking** — Set monthly limits per expense category; see progress bars inline and warnings when over budget
@@ -45,7 +46,7 @@ brew install ldash
 ### From source
 
 ```bash
-git clone https://codeberg.org/md-weber/ldash.git
+git clone https://github.com/md-weber/ldash.git
 cd ldash
 cargo install --path .
 ```
@@ -68,21 +69,24 @@ cd ~/Finance && ldash
 
 | Key | Action |
 |-----|--------|
-| `1` / `2` / `3` | Switch tab |
+| `1` / `2` / `3` / `4` | Accounts / Monthly / Register / Portfolio |
 | `Tab` / `Shift-Tab` | Next / previous tab |
 | `↑` `k` / `↓` `j` | Scroll / select |
 | `PgUp` / `PgDn` | Page up / down |
 | `Home` / `End` | Jump to first / last row |
-| `←` `h` / `→` `l` | Month navigation (Monthly) / net worth range (Accounts/Portfolio) |
+| `←` `h` / `→` `l` | Month (Monthly, Register) / net worth range (Accounts) / chart range (Portfolio) |
 | `y` / `Y` | Previous / next year (Monthly tab) |
 | `G` | Jump to latest month (Monthly tab) |
 | `i` | Toggle income / expense focus (Monthly tab) |
-| `Enter` | Drill into account / expense category |
-| `s` | Toggle chart mode (stacked / unstacked) |
+| `p` | Payee analytics (Monthly tab) |
+| `C` | Year-over-year chart (Monthly tab) |
+| `F` | Current-month forecast remainder (Monthly tab) |
+| `Enter` | Open Register from an account or category / open transaction legs on Register |
+| `s` | Toggle portfolio chart stacked / unstacked |
 | `c` | Toggle expense category colors |
-| `/` | Filter accounts (Accounts tab) / search |
+| `/` | Register query bar (description filter) |
 | `e` | Export current view to file |
-| `Y` | Copy current view to clipboard (Portfolio / Accounts tab) |
+| `Y` | Copy current view to clipboard (non-Monthly) |
 | `Ctrl-O` | Open journal-switch prompt (session only) |
 | `Ctrl-S` | Save typed/active journal to config (inside `Ctrl-O` prompt) |
 | `r` | Force refresh |
@@ -96,14 +100,14 @@ cd ~/Finance && ldash
 On first launch, ldash creates a config file at `~/.config/ldash/config.toml` with all options commented out. Edit it to customize behavior.
 
 ```toml
-# Path to hledger journal (overrides $LEDGER_FILE and CLI arg)
+# Path to hledger journal (overrides $LEDGER_FILE; CLI -f still wins)
 # journal = "/path/to/all.journal"
 
 # Auto-refresh interval in seconds (default: 300)
 # refresh_interval = 300
 
-# Default tab on startup: "portfolio", "accounts", "monthly"
-# default_tab = "portfolio"
+# Default tab on startup: "portfolio", "accounts", "monthly", "register"
+# default_tab = "accounts"
 
 # Number format: "eu" (1.000,00) or "us" (1,000.00)
 # number_format = "eu"
@@ -123,6 +127,13 @@ On first launch, ldash creates a config file at `~/.config/ldash/config.toml` wi
 # journals = [
 #   "/path/to/personal.journal",
 #   "/path/to/work.journal",
+# ]
+
+# Account prefixes treated as liquid cash (Monthly tab "Liquid Chg").
+# Empty (default) hides the figure.
+# liquid_accounts = [
+#   "assets:bank:checking",
+#   "assets:cash",
 # ]
 
 # Expense category color overrides

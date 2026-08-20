@@ -2,7 +2,7 @@ use chrono::Local;
 use serde_json::{json, Value};
 use std::path::PathBuf;
 
-use crate::data;
+use crate::data::{self, TxnStatus};
 
 use super::refresh::load_all_data;
 use super::{App, Tab};
@@ -90,6 +90,33 @@ impl App {
                 }
                 for (name, amount) in &m.expenses {
                     let _ = wtr.write_record([name.clone(), format!("-{:.2}", amount)]);
+                }
+                finish_csv(wtr)
+            }
+            Tab::Register => {
+                let mut wtr = csv::Writer::from_writer(vec![]);
+                let _ = wtr.write_record([
+                    "Date",
+                    "Status",
+                    "Description",
+                    "Account",
+                    "Amount",
+                    "Total",
+                ]);
+                for p in &self.register_rows {
+                    let status = match p.status {
+                        TxnStatus::Cleared => "*",
+                        TxnStatus::Pending => "!",
+                        TxnStatus::Unmarked => "",
+                    };
+                    let _ = wtr.write_record([
+                        p.date.format("%Y-%m-%d").to_string(),
+                        status.to_string(),
+                        p.description.clone(),
+                        p.account.clone(),
+                        format!("{:.2}", p.amount),
+                        format!("{:.2}", p.running_total),
+                    ]);
                 }
                 finish_csv(wtr)
             }

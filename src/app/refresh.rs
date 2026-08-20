@@ -9,10 +9,10 @@ use crate::data::{
     compute_portfolio, fetch_and_append_prices, latest_prices, load_account_balances_eur,
     load_all_coin_chart_series, load_crypto_balances, load_last_year_monthly,
     load_liability_balances_eur, load_liability_progress, load_liquid_cash_monthly,
-    load_monthly_data, load_monthly_with_forecast, load_net_worth_breakdown,
-    load_net_worth_history, load_payee_analytics, load_price_history, today_prices_present,
-    AccountBalance, CoinChartSeries, CryptoHolding, LiabilityProgress, MonthlyData,
-    NetWorthBreakdownSeries, NetWorthSeries, PayeeSummary,
+    load_liquid_cash_monthly_with_forecast, load_monthly_data, load_monthly_with_forecast,
+    load_net_worth_breakdown, load_net_worth_history, load_payee_analytics, load_price_history,
+    today_prices_present, AccountBalance, CoinChartSeries, CryptoHolding, LiabilityProgress,
+    MonthlyData, NetWorthBreakdownSeries, NetWorthSeries, PayeeSummary,
 };
 
 use super::{App, RefreshResult, Tab, TabData, TabFlags};
@@ -45,6 +45,7 @@ struct LoadHandles {
     forecast: Option<Result<MonthlyData, anyhow::Error>>,
     payee: Option<Result<Vec<PayeeSummary>, anyhow::Error>>,
     liquid_cash_monthly: Option<Result<Vec<(String, f64)>, anyhow::Error>>,
+    liquid_cash_forecast: Option<Result<Vec<(String, f64)>, anyhow::Error>>,
 }
 
 fn spawn_all(journal_path: &Path, cfg: &LoadConfig, tabs: TabFlags) -> LoadHandles {
@@ -83,6 +84,11 @@ fn spawn_all(journal_path: &Path, cfg: &LoadConfig, tabs: TabFlags) -> LoadHandl
             .then(|| s.spawn(|| load_payee_analytics(journal_path, expenses, currency)));
         let t_liquid = want_monthly
             .then(|| s.spawn(|| load_liquid_cash_monthly(journal_path, liquid_accounts, currency)));
+        let t_liquid_fc = want_monthly.then(|| {
+            s.spawn(|| {
+                load_liquid_cash_monthly_with_forecast(journal_path, liquid_accounts, currency)
+            })
+        });
 
         LoadHandles {
             crypto: t_crypto.map(join_or_panic_err),
@@ -96,6 +102,7 @@ fn spawn_all(journal_path: &Path, cfg: &LoadConfig, tabs: TabFlags) -> LoadHandl
             forecast: t_fc.map(join_or_panic_err),
             payee: t_payee.map(join_or_panic_err),
             liquid_cash_monthly: t_liquid.map(join_or_panic_err),
+            liquid_cash_forecast: t_liquid_fc.map(join_or_panic_err),
         }
     })
 }
@@ -178,6 +185,7 @@ pub(super) fn load_all_data(
     let monthly_forecast = into_tab_data(h.forecast);
     let payee_data: TabData<Vec<PayeeSummary>> = into_tab_data(h.payee);
     let liquid_cash_monthly: TabData<Vec<(String, f64)>> = into_tab_data(h.liquid_cash_monthly);
+    let liquid_cash_forecast: TabData<Vec<(String, f64)>> = into_tab_data(h.liquid_cash_forecast);
 
     RefreshResult {
         tabs,
@@ -195,6 +203,7 @@ pub(super) fn load_all_data(
         monthly_forecast,
         payee_data,
         liquid_cash_monthly,
+        liquid_cash_forecast,
     }
 }
 
@@ -202,9 +211,16 @@ impl App {
     pub fn start_refresh(&mut self) {
         self.tabs_loaded = TabFlags::none();
         self.start_refresh_tabs(TabFlags::all(true));
+        if self.tab == Tab::Register || self.register_already_loaded() {
+            self.reload_register();
+        }
     }
 
     pub fn ensure_tab_loaded(&mut self, tab: Tab) {
+        if tab == Tab::Register {
+            self.ensure_register_loaded();
+            return;
+        }
         if self.tabs_loaded.get(tab) || self.refresh_rx.is_some() {
             return;
         }
@@ -272,6 +288,7 @@ impl App {
     /// tick so the UI picks up async results promptly without blocking input.
     pub fn check_background(&mut self) {
         self.check_price_fetch();
+        self.check_register_load();
         use ratatui::widgets::TableState;
 
         if let Some(rx) = &self.account_detail_rx {
@@ -367,6 +384,7 @@ impl App {
             || self.income_detail_rx.is_some()
             || self.monthly_year_rx.is_some()
             || self.net_worth_rx.is_some()
+            || self.register_rx.is_some()
     }
 
     /// Start an asynchronous price fetch if none is already running.
@@ -511,6 +529,7 @@ impl App {
         // Liquid-cash errors are non-fatal: the summary line just omits
         // itself (e.g. user hasn't configured `liquid_accounts` yet).
         apply_field_silent!(self.liquid_cash_monthly, r.liquid_cash_monthly);
+        apply_field_silent!(self.liquid_cash_forecast, r.liquid_cash_forecast);
         self.rebuild_combined_months();
 
         // Current year has no data → jump to the last year with actual entries

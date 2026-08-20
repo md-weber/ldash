@@ -8,10 +8,13 @@ on:
 env:
   ZIG_VERSION: "0.13.0"
 
+permissions:
+  contents: write
+
 jobs:
   build:
     name: Build ${{ matrix.target }}
-    runs-on: codeberg-medium
+    runs-on: ubuntu-latest
     strategy:
       fail-fast: false
       matrix:
@@ -32,7 +35,7 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
-      - uses: https://github.com/dtolnay/rust-toolchain@stable
+      - uses: dtolnay/rust-toolchain@stable
         with:
           targets: ${{ matrix.target }}
 
@@ -64,7 +67,7 @@ jobs:
 
       - name: Add zig to PATH
         if: matrix.zigbuild
-        run: echo "/usr/local/zig-linux-x86_64-${ZIG_VERSION}" >> "$GITHUB_PATH"
+        run: echo "/usr/local/zig-linux-x86_64-${{ env.ZIG_VERSION }}" >> "$GITHUB_PATH"
 
       - name: Cache macOS SDK
         if: contains(matrix.target, 'apple-darwin')
@@ -98,7 +101,6 @@ jobs:
       - name: Package
         run: |
           BIN="target/${{ matrix.target }}/release/ldash"
-          # strip only works on native target; skip silently for cross-compiled
           strip "$BIN" 2>/dev/null || true
           mkdir -p stage
           cp "$BIN" stage/ldash
@@ -114,64 +116,21 @@ jobs:
   release:
     name: Create Release
     needs: build
-    runs-on: codeberg-small
+    runs-on: ubuntu-latest
     steps:
       - uses: actions/download-artifact@v4
         with:
           path: artifacts
 
-      - name: Checksums
+      - name: Flatten artifacts and checksums
         run: |
           cd artifacts
           find . -type f -name "*.tar.gz" -exec cp {} . \;
           sha256sum *.tar.gz > SHA256SUMS
           cat SHA256SUMS
 
-      - name: Publish release
-        env:
-          GITHUB_TOKEN: ${{ github.token }}
-        run: |
-          set -euo pipefail
-          TAG="${GITHUB_REF#refs/tags/}"
-          API_BASE="${GITHUB_API_URL:-${FORGEJO_API_URL:-}}"
-          REPO="${GITHUB_REPOSITORY:-${FORGEJO_REPOSITORY:-}}"
-          TOKEN="${GITHUB_TOKEN:-${FORGEJO_TOKEN:-}}"
-          API="${API_BASE}/repos/${REPO}/releases"
-
-          if [ -z "${API_BASE}" ] || [ -z "${REPO}" ] || [ -z "${TOKEN}" ]; then
-            echo "Missing API context or token."
-            echo "GITHUB_API_URL='${GITHUB_API_URL:-}'"
-            echo "GITHUB_REPOSITORY='${GITHUB_REPOSITORY:-}'"
-            echo "FORGEJO_API_URL='${FORGEJO_API_URL:-}'"
-            echo "FORGEJO_REPOSITORY='${FORGEJO_REPOSITORY:-}'"
-            exit 1
-          fi
-
-          CREATE_PAYLOAD="{\"tag_name\":\"${TAG}\",\"name\":\"${TAG}\",\"draft\":false,\"prerelease\":false}"
-          CREATE_RESP="$(mktemp)"
-          CREATE_CODE="$(curl -sS -o "${CREATE_RESP}" -w "%{http_code}" -X POST "${API}" \
-            -H "Authorization: token ${TOKEN}" \
-            -H "Content-Type: application/json" \
-            -d "${CREATE_PAYLOAD}")"
-
-          if [ "${CREATE_CODE}" -ge 300 ]; then
-            echo "Release creation failed (HTTP ${CREATE_CODE})"
-            cat "${CREATE_RESP}"
-            exit 1
-          fi
-
-          RELEASE_ID="$(python3 -c 'import json,sys; d=json.load(open(sys.argv[1])); rid=d.get("id"); print(rid if rid is not None else "");' "${CREATE_RESP}")"
-          if [ -z "${RELEASE_ID}" ]; then
-            echo "Release creation response missing id:"
-            cat "${CREATE_RESP}"
-            exit 1
-          fi
-
-          for file in artifacts/*.tar.gz artifacts/SHA256SUMS; do
-            curl -sS -f -X POST \
-              "${API}/${RELEASE_ID}/assets?name=$(basename "$file")" \
-              -H "Authorization: token ${TOKEN}" \
-              -H "Content-Type: application/octet-stream" \
-              --data-binary @"$file"
-            echo "Uploaded $(basename "$file")"
-          done
+      - uses: softprops/action-gh-release@v2
+        with:
+          files: |
+            artifacts/*.tar.gz
+            artifacts/SHA256SUMS

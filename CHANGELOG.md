@@ -7,6 +7,32 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [1.5.0] - 2026-08-20
+
+### Added
+
+- **Transaction Register tab** — month-bounded `hledger register` (`3` in the
+  tab bar; Portfolio is `4` when shown). Query bar (`/`) filters by
+  description. `h`/`l` steps months. Enter on Accounts or Monthly opens
+  Register already filtered to that account or category. Postings of the same
+  transaction are grouped (continuation legs hide date/description). With an
+  account filter, one row is one transaction. Enter on a row opens that
+  transaction's postings. Loads stay bounded with `-p YYYY-MM`.
+- **Category sparklines** — last 6 months of spend on each expense row (wide
+  terminals).
+
+### Changed
+
+- Hosting moved from Codeberg to GitHub (`https://github.com/md-weber/ldash`).
+  CI and release workflows now run on GitHub Actions.
+- `/` opens the Register query bar instead of a search overlay.
+- Number keys follow the tab bar: `1` Accounts, `2` Monthly, `3` Register, `4`
+  Portfolio. When Portfolio is hidden, `3` is Register and `4` does nothing.
+- Liquid Change on the Monthly tab uses posted actuals. Forecast remainder is
+  included only when `F` is on (or the selected month is a future forecast
+  month), same as income and expenses.
+- Help overlay documents `p`, `C`, `F`, and Register keys.
+
 ## [1.4.0] - 2026-07-07
 
 ### Added
@@ -135,10 +161,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Forgejo CI workflow (lint, build, test)
 - Forgejo release workflow with cross-compilation via `cargo-zigbuild`
 
-[Unreleased]: https://codeberg.org/md-weber/ldash/compare/v1.4.0...HEAD
-[1.4.0]: https://codeberg.org/md-weber/ldash/compare/v1.3.1...v1.4.0
-[1.3.1]: https://codeberg.org/md-weber/ldash/compare/v1.3.0...v1.3.1
-[1.3.0]: https://codeberg.org/md-weber/ldash/compare/v1.2.0...v1.3.0
-[1.2.0]: https://codeberg.org/md-weber/ldash/compare/v1.1.0...v1.2.0
-[1.1.0]: https://codeberg.org/md-weber/ldash/compare/v1.0.0...v1.1.0
-[1.0.0]: https://codeberg.org/md-weber/ldash/compare/v0.1.0...v1.0.0
+[Unreleased]: https://github.com/md-weber/ldash/compare/v1.5.0...HEAD
+[1.5.0]: https://github.com/md-weber/ldash/compare/v1.4.0...v1.5.0
+[1.4.0]: https://github.com/md-weber/ldash/compare/v1.3.1...v1.4.0
+[1.3.1]: https://github.com/md-weber/ldash/compare/v1.3.0...v1.3.1
+[1.3.0]: https://github.com/md-weber/ldash/compare/v1.2.0...v1.3.0
+[1.2.0]: https://github.com/md-weber/ldash/compare/v1.1.0...v1.2.0
+[1.1.0]: https://github.com/md-weber/ldash/compare/v1.0.0...v1.1.0
+[1.0.0]: https://github.com/md-weber/ldash/compare/v0.1.0...v1.0.0

@@ -1,7 +1,8 @@
 use crossterm::event::{KeyCode, KeyEvent, KeyEventKind, KeyModifiers};
 
-use crate::app::{App, MonthlyFocus, Tab};
+use crate::app::{App, Tab};
 use crate::copy_to_clipboard;
+use crate::data::RegisterQuery;
 
 pub enum Action {
     Quit,
@@ -17,8 +18,6 @@ pub fn handle_key(app: &mut App, key: KeyEvent) -> Action {
         handle_file_prompt_key(app, key)
     } else if app.export_prompt_active {
         handle_export_prompt_key(app, key)
-    } else if app.search_active {
-        handle_search_key(app, key)
     } else if app.show_alerts {
         app.show_alerts = false;
         app.alert_dismissed = true;
@@ -27,6 +26,8 @@ pub fn handle_key(app: &mut App, key: KeyEvent) -> Action {
         handle_help_key(app, key)
     } else if app.account_filter_active {
         handle_filter_key(app, key)
+    } else if app.tab == Tab::Register && app.register_focus_query {
+        handle_register_query_key(app, key)
     } else {
         handle_normal_key(app, key)
     }
@@ -75,28 +76,18 @@ fn handle_export_prompt_key(app: &mut App, key: KeyEvent) -> Action {
     Action::Continue
 }
 
-fn handle_search_key(app: &mut App, key: KeyEvent) -> Action {
+fn handle_register_query_key(app: &mut App, key: KeyEvent) -> Action {
     match key.code {
-        KeyCode::Esc => app.close_search(),
-        KeyCode::Enter => {
-            // If results are showing and a row is selected → drill into account.
-            // Otherwise execute the search.
-            if !app.search_results.is_empty() && app.search_state.selected().is_some() {
-                app.search_navigate_to_account();
-            } else {
-                app.execute_search();
-            }
+        KeyCode::Esc => {
+            app.register_focus_query = false;
         }
+        KeyCode::Enter => app.submit_register_query(),
         KeyCode::Backspace => {
-            app.search_query.pop();
-            app.execute_search();
+            app.register_draft.pop();
         }
-        KeyCode::Char(c) => {
-            app.search_query.push(c);
-            app.execute_search();
+        KeyCode::Char(c) if !key.modifiers.contains(KeyModifiers::CONTROL) => {
+            app.register_draft.push(c);
         }
-        KeyCode::Up => app.search_scroll_up(),
-        KeyCode::Down => app.search_scroll_down(),
         _ => {}
     }
     Action::Continue
@@ -136,7 +127,7 @@ fn handle_filter_key(app: &mut App, key: KeyEvent) -> Action {
                 app.scroll_down();
             }
         }
-        KeyCode::Enter => app.open_account_detail(),
+        KeyCode::Enter => app.open_selected_account_in_register(),
         KeyCode::Char(c) => app.account_filter_push(c),
         _ => {}
     }
@@ -147,7 +138,9 @@ fn handle_normal_key(app: &mut App, key: KeyEvent) -> Action {
     match key.code {
         KeyCode::Char('q') => return Action::Quit,
         KeyCode::Esc => {
-            if app.account_detail.is_some() {
+            if app.register_detail.is_some() {
+                app.close_register_detail();
+            } else if app.account_detail.is_some() {
                 app.close_account_detail();
             } else if app.income_detail.is_some() {
                 app.close_income_detail();
@@ -163,12 +156,10 @@ fn handle_normal_key(app: &mut App, key: KeyEvent) -> Action {
             }
         }
         KeyCode::Enter => match app.tab {
-            Tab::Accounts => app.open_account_detail(),
-            Tab::Monthly => match app.monthly_focus {
-                MonthlyFocus::Income => app.open_income_detail(),
-                MonthlyFocus::Expenses => app.open_expense_detail(),
-            },
-            _ => {}
+            Tab::Accounts => app.open_selected_account_in_register(),
+            Tab::Monthly => app.open_selected_category_in_register(),
+            Tab::Register => app.open_register_row_detail(),
+            Tab::Portfolio => {}
         },
         KeyCode::Char('i') if app.tab == Tab::Monthly => app.toggle_monthly_focus(),
         KeyCode::Char('p') if app.tab == Tab::Monthly => {
@@ -182,13 +173,20 @@ fn handle_normal_key(app: &mut App, key: KeyEvent) -> Action {
             app.rebuild_combined_months();
         }
         KeyCode::Char('G') if app.tab == Tab::Monthly => app.jump_to_last_entry(),
-        KeyCode::Char('/') => app.open_search(),
+        KeyCode::Char('/') => {
+            if app.tab == Tab::Register {
+                app.register_focus_query = true;
+            } else {
+                app.open_register(RegisterQuery::current_month(), true);
+            }
+        }
         KeyCode::Char('?') => app.show_help = true,
         KeyCode::Tab => app.next_tab(),
         KeyCode::BackTab => app.prev_tab(),
         KeyCode::Char('1') => app.select_tab(0),
         KeyCode::Char('2') => app.select_tab(1),
         KeyCode::Char('3') => app.select_tab(2),
+        KeyCode::Char('4') => app.select_tab(3),
         KeyCode::Up | KeyCode::Char('k') => {
             if app.has_open_detail() {
                 app.detail_scroll_up();
@@ -211,11 +209,13 @@ fn handle_normal_key(app: &mut App, key: KeyEvent) -> Action {
             Tab::Portfolio => app.portfolio_range_left(),
             Tab::Accounts => app.nw_range_left(),
             Tab::Monthly => app.month_left(),
+            Tab::Register => app.register_month_prev(),
         },
         KeyCode::Right | KeyCode::Char('l') => match app.tab {
             Tab::Portfolio => app.portfolio_range_right(),
             Tab::Accounts => app.nw_range_right(),
             Tab::Monthly => app.month_right(),
+            Tab::Register => app.register_month_next(),
         },
         KeyCode::Char('y') if app.tab == Tab::Monthly => {
             app.cycle_year_back();
@@ -243,7 +243,19 @@ fn handle_normal_key(app: &mut App, key: KeyEvent) -> Action {
             if app.tab == Tab::Accounts
                 && !matches!(
                     c,
-                    'q' | '/' | '?' | 'r' | 's' | 'c' | 'y' | 'Y' | 'e' | 'P' | '1' | '2' | '3'
+                    'q' | '/'
+                        | '?'
+                        | 'r'
+                        | 's'
+                        | 'c'
+                        | 'y'
+                        | 'Y'
+                        | 'e'
+                        | 'P'
+                        | '1'
+                        | '2'
+                        | '3'
+                        | '4'
                 ) =>
         {
             app.account_filter_active = true;

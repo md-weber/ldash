@@ -260,3 +260,38 @@ fn integration_currency_alias_eur_symbol_loaders() {
         "expected breakdown rows with EUR alias"
     );
 }
+
+#[test]
+#[ignore]
+fn load_register_page() {
+    if !hledger_available() {
+        return;
+    }
+    let path = fixture("simple.journal");
+    let query = ldash::data::RegisterQuery {
+        year: 2026,
+        month: 1,
+        account: None,
+        description: None,
+    };
+    let txns = ldash::data::load_register_page(&path, &query, "EUR").unwrap();
+    assert!(
+        !txns.is_empty(),
+        "expected January 2026 transactions in simple.journal"
+    );
+    assert!(
+        txns.iter().any(|t| t.description == "Salary"),
+        "expected Salary transaction"
+    );
+    assert!(
+        txns.iter()
+            .any(|t| t.postings.iter().any(|p| p.account.contains("food"))),
+        "expected groceries posting among transaction legs"
+    );
+    let salary = txns.iter().find(|t| t.description == "Salary").unwrap();
+    assert!(
+        salary.postings.len() >= 2,
+        "Salary should keep both legs for drill-down, got {}",
+        salary.postings.len()
+    );
+}

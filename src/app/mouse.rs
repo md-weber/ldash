@@ -12,10 +12,10 @@ impl App {
             MouseEventKind::Down(MouseButton::Left) => {
                 self.on_left_click(ev.column, ev.row);
             }
-            MouseEventKind::ScrollDown if !self.search_active => {
+            MouseEventKind::ScrollDown if !self.register_focus_query => {
                 self.scroll_down();
             }
-            MouseEventKind::ScrollUp if !self.search_active => {
+            MouseEventKind::ScrollUp if !self.register_focus_query => {
                 self.scroll_up();
             }
             _ => {}
@@ -29,7 +29,7 @@ impl App {
             return;
         }
 
-        if self.search_active {
+        if self.register_focus_query {
             return;
         }
 
@@ -68,7 +68,7 @@ impl App {
                     self.on_table_click(col, row);
                 }
             }
-            _ => {
+            Tab::Accounts | Tab::Portfolio | Tab::Register => {
                 if rect_contains(self.geometry.table_area, col, row) {
                     self.on_table_click(col, row);
                 }
@@ -82,7 +82,7 @@ impl App {
                 MonthlyFocus::Income => self.geometry.income_table_area,
                 MonthlyFocus::Expenses => self.geometry.expense_table_area,
             },
-            _ => self.geometry.table_area,
+            Tab::Accounts | Tab::Portfolio | Tab::Register => self.geometry.table_area,
         };
         // border (1) + header row (1) + header bottom_margin (1) = 3 rows before data
         let content_y = area.y + 3;
@@ -121,6 +121,14 @@ impl App {
                 let abs = clicked_idx + self.portfolio_scroll_offset;
                 if abs < self.holdings.len() {
                     self.selected_holding = abs;
+                }
+            }
+            Tab::Register => {
+                let offset = self.register_table.offset();
+                let abs = clicked_idx + offset;
+                if abs < self.register_rows.len() {
+                    self.register_select_txn_at(abs);
+                    self.register_focus_query = false;
                 }
             }
         }
@@ -168,7 +176,7 @@ impl App {
                     self.reload_net_worth();
                 }
             }
-            _ => {}
+            Tab::Monthly | Tab::Register => {}
         }
     }
 }

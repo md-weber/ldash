@@ -1,5 +1,6 @@
 use ratatui::{prelude::*, widgets::*};
 
+use super::sparkline::{category_expense_history, sparkline_str};
 use crate::app::{App, MonthlyFocus};
 use crate::ui::{expense_color, Theme};
 
@@ -13,7 +14,7 @@ pub(super) fn render_monthly_expenses(f: &mut Frame, app: &mut App, area: Rect, 
     let bar_width = if narrow {
         0
     } else {
-        area.width.saturating_sub(if has_budgets { 56 } else { 40 }) as usize
+        area.width.saturating_sub(if has_budgets { 64 } else { 48 }) as usize
     };
 
     let rows: Vec<Row> = m
@@ -42,6 +43,10 @@ pub(super) fn render_monthly_expenses(f: &mut Frame, app: &mut App, area: Rect, 
                     } else {
                         theme.negative
                     })),
+                );
+                let history = category_expense_history(&app.monthly.months, &m.month_name, name);
+                cells.push(
+                    Cell::from(sparkline_str(&history)).style(Style::default().fg(theme.accent)),
                 );
             }
             if has_budgets {
@@ -92,6 +97,7 @@ pub(super) fn render_monthly_expenses(f: &mut Frame, app: &mut App, area: Rect, 
             Constraint::Min(20),
             Constraint::Length(12),
             Constraint::Min(4),
+            Constraint::Length(8),
         ];
         if has_budgets {
             w.push(Constraint::Length(16));
@@ -102,6 +108,7 @@ pub(super) fn render_monthly_expenses(f: &mut Frame, app: &mut App, area: Rect, 
     let mut header = vec!["Category", "Amount"];
     if !narrow {
         header.push("");
+        header.push("Trend");
     }
     if has_budgets {
         header.push("Budget");

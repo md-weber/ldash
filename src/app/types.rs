@@ -36,6 +36,9 @@ pub struct RefreshResult {
     /// Per-month net change in liquid cash (whitelisted accounts only) for
     /// the current calendar year. Empty when `liquid_accounts` is unset.
     pub liquid_cash_monthly: TabData<Vec<(String, f64)>>,
+    /// Same series with `--forecast`. Non-fatal if the journal has no
+    /// periodic rules.
+    pub liquid_cash_forecast: TabData<Vec<(String, f64)>>,
 }
 
 /// How the portfolio analysis chart layers price-growth and staking on top of
@@ -87,6 +90,7 @@ pub enum Tab {
     Portfolio,
     Accounts,
     Monthly,
+    Register,
 }
 
 /// Per-tab boolean flags with named accessors. Replaces the older `[bool; 3]`
@@ -117,6 +121,7 @@ impl TabFlags {
             Tab::Portfolio => self.portfolio,
             Tab::Accounts => self.accounts,
             Tab::Monthly => self.monthly,
+            Tab::Register => false,
         }
     }
 
@@ -125,6 +130,7 @@ impl TabFlags {
             Tab::Portfolio => self.portfolio = value,
             Tab::Accounts => self.accounts = value,
             Tab::Monthly => self.monthly = value,
+            Tab::Register => {}
         }
     }
 

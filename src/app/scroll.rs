@@ -12,6 +12,7 @@ enum FocusedList {
     MonthlyIncome,
     MonthlyExpenses,
     MonthlyPayee,
+    Register,
 }
 
 impl App {
@@ -35,6 +36,7 @@ impl App {
                     }
                 }
             }
+            Tab::Register => FocusedList::Register,
         }
     }
 
@@ -46,6 +48,7 @@ impl App {
             FocusedList::MonthlyIncome => self.income_state.selected().unwrap_or(0),
             FocusedList::MonthlyExpenses => self.expense_state.selected().unwrap_or(0),
             FocusedList::MonthlyPayee => self.payee_state.selected().unwrap_or(0),
+            FocusedList::Register => self.register_table.selected().unwrap_or(0),
         }
     }
 
@@ -59,6 +62,7 @@ impl App {
                 self.current_month().map(|m| m.expenses.len()).unwrap_or(0)
             }
             FocusedList::MonthlyPayee => self.payee_data.len(),
+            FocusedList::Register => self.register_rows.len(),
         }
     }
 
@@ -70,6 +74,7 @@ impl App {
             FocusedList::MonthlyIncome => self.income_state.select(Some(i)),
             FocusedList::MonthlyExpenses => self.expense_state.select(Some(i)),
             FocusedList::MonthlyPayee => self.payee_state.select(Some(i)),
+            FocusedList::Register => self.register_table.select(Some(i)),
         }
     }
 
@@ -77,7 +82,9 @@ impl App {
     /// borders (2) + header (1) + header margin (1) = 4.
     fn current_page_size(&self) -> usize {
         let area = match self.focused_list() {
-            FocusedList::Portfolio | FocusedList::Accounts => self.geometry.table_area,
+            FocusedList::Portfolio | FocusedList::Accounts | FocusedList::Register => {
+                self.geometry.table_area
+            }
             FocusedList::AccountsLiabilities => self.geometry.liability_table_area,
             FocusedList::MonthlyIncome => self.geometry.income_table_area,
             FocusedList::MonthlyExpenses => self.geometry.expense_table_area,
@@ -97,11 +104,19 @@ impl App {
             self.liability_state.select(Some(i - 1));
             return;
         }
+        if self.tab == Tab::Register {
+            self.register_select_prev_txn();
+            return;
+        }
         let i = self.current_selected();
         self.set_current_selected(i.saturating_sub(1));
     }
 
     pub fn scroll_down(&mut self) {
+        if self.tab == Tab::Register {
+            self.register_select_next_txn();
+            return;
+        }
         let i = self.current_selected();
         let len = self.current_len();
         if i + 1 < len {
@@ -116,12 +131,26 @@ impl App {
     }
 
     pub fn scroll_page_up(&mut self) {
+        if self.tab == Tab::Register {
+            let n = self.current_page_size();
+            let i = self.register_table.selected().unwrap_or(0);
+            self.register_select_near(i.saturating_sub(n), false);
+            return;
+        }
         let n = self.current_page_size();
         let i = self.current_selected();
         self.set_current_selected(i.saturating_sub(n));
     }
 
     pub fn scroll_page_down(&mut self) {
+        if self.tab == Tab::Register {
+            let n = self.current_page_size();
+            let i = self.register_table.selected().unwrap_or(0);
+            let len = self.register_rows.len();
+            let target = (i + n).min(len.saturating_sub(1));
+            self.register_select_near(target, true);
+            return;
+        }
         let n = self.current_page_size();
         let i = self.current_selected();
         let len = self.current_len();
@@ -134,6 +163,10 @@ impl App {
     }
 
     pub fn scroll_end(&mut self) {
+        if self.tab == Tab::Register {
+            self.register_select_last_txn();
+            return;
+        }
         let len = self.current_len();
         self.set_current_selected(len.saturating_sub(1));
     }

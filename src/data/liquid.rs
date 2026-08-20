@@ -19,10 +19,11 @@ use super::{currency_matches, month_name, run_hledger};
 /// with a big one-off expense or mortgage principal payment show a dip even
 /// though the running total stays positive.
 ///
-/// Computed via `hledger balance` over `monthly this year`, applying
-/// `--forecast` from today through year-end so future months carry
-/// periodic-rule projections and the current (partial) month carries actuals
-/// plus the projected remainder.
+/// Computed via `hledger balance` over `monthly this year`. When
+/// `with_forecast` is true, `--forecast` runs from today through year-end so
+/// future months carry periodic-rule projections and the current (partial)
+/// month carries actuals plus the projected remainder. When false, only
+/// posted transactions are included.
 ///
 /// Returns an empty `Vec` when `liquid_prefixes` is empty (feature off) or
 /// when no matching accounts have any activity this year.
@@ -30,6 +31,24 @@ pub fn load_liquid_cash_monthly(
     journal_path: &Path,
     liquid_prefixes: &[String],
     currency_symbol: &str,
+) -> Result<Vec<(String, f64)>> {
+    load_liquid_cash_monthly_inner(journal_path, liquid_prefixes, currency_symbol, false)
+}
+
+/// Same as [`load_liquid_cash_monthly`], with `--forecast=TODAY..YEAR_END`.
+pub fn load_liquid_cash_monthly_with_forecast(
+    journal_path: &Path,
+    liquid_prefixes: &[String],
+    currency_symbol: &str,
+) -> Result<Vec<(String, f64)>> {
+    load_liquid_cash_monthly_inner(journal_path, liquid_prefixes, currency_symbol, true)
+}
+
+fn load_liquid_cash_monthly_inner(
+    journal_path: &Path,
+    liquid_prefixes: &[String],
+    currency_symbol: &str,
+    with_forecast: bool,
 ) -> Result<Vec<(String, f64)>> {
     if liquid_prefixes.is_empty() {
         return Ok(Vec::new());
@@ -58,8 +77,10 @@ pub fn load_liquid_cash_monthly(
         "-V",
         "-p",
         "monthly this year",
-        &forecast_arg,
     ];
+    if with_forecast {
+        args.push(&forecast_arg);
+    }
     for p in liquid_prefixes {
         args.push(p.as_str());
     }

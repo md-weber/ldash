@@ -4,6 +4,7 @@ mod export;
 mod insights;
 mod mouse;
 mod refresh;
+mod register;
 mod scroll;
 mod types;
 
@@ -24,7 +25,7 @@ use std::time::{Instant, SystemTime};
 use crate::config::Config;
 use crate::data::{
     AccountBalance, CoinChartSeries, CryptoHolding, LiabilityProgress, MonthlyData,
-    NetWorthBreakdownSeries, NetWorthSeries, PayeeSummary, PriceEntry, Transaction,
+    NetWorthBreakdownSeries, NetWorthSeries, PayeeSummary, PriceEntry, RegisterQuery, Transaction,
 };
 use crate::watcher::JournalWatcher;
 
@@ -81,8 +82,6 @@ pub struct App {
     pub show_help: bool,
     pub account_filter: String,
     pub account_filter_active: bool,
-    pub search_active: bool,
-    pub search_query: String,
     pub export_prompt_active: bool,
     pub export_prompt_path: String,
     pub file_prompt_active: bool,
@@ -93,8 +92,6 @@ pub struct App {
     /// startup journal; extended by every successful `confirm_file_prompt`.
     /// Session-only — never written to disk.
     pub recent_journals: Vec<String>,
-    pub search_results: Vec<Transaction>,
-    pub search_state: TableState,
     /// Whether the payee analytics sub-view is active on the Monthly tab (`p`).
     pub payee_view: bool,
     /// Whether the YoY comparison bar chart is shown below the monthly chart (`C`).
@@ -105,9 +102,24 @@ pub struct App {
     pub payee_data: Vec<PayeeSummary>,
     pub payee_state: TableState,
     /// Per-month net change in liquid cash (whitelisted accounts only) for
-    /// the current calendar year. Empty when `config.liquid_accounts` is
-    /// unset or the load failed.
+    /// the current calendar year, posted transactions only. Empty when
+    /// `config.liquid_accounts` is unset or the load failed.
     pub liquid_cash_monthly: Vec<(String, f64)>,
+    /// Same series with `--forecast` from today through year-end. Used when
+    /// the selected month is a forecast month (`F` on the current month, or
+    /// a future month).
+    pub liquid_cash_forecast: Vec<(String, f64)>,
+    pub register_query: RegisterQuery,
+    pub register_draft: String,
+    pub register_txns: Vec<crate::data::RegisterTxn>,
+    pub register_rows: Vec<crate::data::RegisterViewRow>,
+    pub register_table: TableState,
+    pub register_focus_query: bool,
+    pub register_error: Option<String>,
+    pub register_detail: Option<crate::data::RegisterTxn>,
+    /// Year/month of the last successful Register load. Account and
+    /// description filters are applied in memory against this page.
+    pub(super) register_loaded_period: Option<(i32, u8)>,
     pub price_alerts: Vec<PriceAlert>,
     pub show_alerts: bool,
     pub alert_dismissed: bool,
@@ -125,6 +137,7 @@ pub struct App {
     pub(super) account_detail_rx: Option<mpsc::Receiver<DetailLoad>>,
     pub(super) expense_detail_rx: Option<mpsc::Receiver<DetailLoad>>,
     pub(super) income_detail_rx: Option<mpsc::Receiver<DetailLoad>>,
+    pub(super) register_rx: Option<mpsc::Receiver<RegisterLoad>>,
     pub(super) monthly_year_rx: Option<mpsc::Receiver<MonthlyYearLoad>>,
     pub(super) net_worth_rx: Option<mpsc::Receiver<NetWorthLoad>>,
     pub(crate) watcher: Option<JournalWatcher>,
@@ -138,6 +151,12 @@ pub struct App {
 pub struct DetailLoad {
     pub name: String,
     pub result: Result<Vec<Transaction>, String>,
+}
+
+/// Background-thread payload for a Register tab load.
+pub struct RegisterLoad {
+    pub query: RegisterQuery,
+    pub result: Result<Vec<crate::data::RegisterTxn>, String>,
 }
 
 /// Background-thread payload for a yearly monthly-data reload.
@@ -203,22 +222,28 @@ impl Default for App {
             show_help: false,
             account_filter: String::new(),
             account_filter_active: false,
-            search_active: false,
-            search_query: String::new(),
             export_prompt_active: false,
             export_prompt_path: String::new(),
             file_prompt_active: false,
             file_prompt_path: String::new(),
             file_prompt_journal_idx: None,
             recent_journals: Vec::new(),
-            search_results: Vec::new(),
-            search_state: TableState::default(),
             payee_view: false,
             yoy_view: false,
             show_current_month_forecast: false,
             payee_data: Vec::new(),
             payee_state: TableState::default(),
             liquid_cash_monthly: Vec::new(),
+            liquid_cash_forecast: Vec::new(),
+            register_query: RegisterQuery::current_month(),
+            register_draft: String::new(),
+            register_txns: Vec::new(),
+            register_rows: Vec::new(),
+            register_table: TableState::default(),
+            register_focus_query: false,
+            register_error: None,
+            register_detail: None,
+            register_loaded_period: None,
             price_alerts: Vec::new(),
             show_alerts: false,
             alert_dismissed: false,
@@ -232,6 +257,7 @@ impl Default for App {
             account_detail_rx: None,
             expense_detail_rx: None,
             income_detail_rx: None,
+            register_rx: None,
             monthly_year_rx: None,
             net_worth_rx: None,
             watcher: None,
@@ -257,6 +283,7 @@ impl App {
         let default_tab = match config.default_tab.as_str() {
             "portfolio" => Tab::Portfolio,
             "monthly" => Tab::Monthly,
+            "register" => Tab::Register,
             _ => Tab::Accounts,
         };
         let chart_mode = ChartMode::from_config(&config.chart_mode);
@@ -304,22 +331,28 @@ impl App {
             show_help: false,
             account_filter: String::new(),
             account_filter_active: false,
-            search_active: false,
-            search_query: String::new(),
             export_prompt_active: false,
             export_prompt_path: String::new(),
             file_prompt_active: false,
             file_prompt_path: String::new(),
             file_prompt_journal_idx: None,
             recent_journals: Vec::new(),
-            search_results: Vec::new(),
-            search_state: TableState::default(),
             payee_view: false,
             yoy_view: false,
             show_current_month_forecast: false,
             payee_data: Vec::new(),
             payee_state: TableState::default(),
             liquid_cash_monthly: Vec::new(),
+            liquid_cash_forecast: Vec::new(),
+            register_query: RegisterQuery::current_month(),
+            register_draft: String::new(),
+            register_txns: Vec::new(),
+            register_rows: Vec::new(),
+            register_table: TableState::default(),
+            register_focus_query: false,
+            register_error: None,
+            register_detail: None,
+            register_loaded_period: None,
             price_alerts: Vec::new(),
             show_alerts: false,
             alert_dismissed: false,
@@ -333,6 +366,7 @@ impl App {
             account_detail_rx: None,
             expense_detail_rx: None,
             income_detail_rx: None,
+            register_rx: None,
             monthly_year_rx: None,
             net_worth_rx: None,
             watcher,
@@ -343,11 +377,20 @@ impl App {
     }
 
     pub fn visible_tabs(&self) -> Vec<Tab> {
-        let mut v = vec![Tab::Accounts, Tab::Monthly];
+        let mut v = vec![Tab::Accounts, Tab::Monthly, Tab::Register];
         if self.portfolio_tab_visible() {
             v.push(Tab::Portfolio);
         }
         v
+    }
+
+    pub fn switch_tab(&mut self, tab: Tab) {
+        if self.tab == Tab::Accounts {
+            self.close_account_filter();
+            self.liability_focus = false;
+        }
+        self.tab = tab;
+        self.ensure_tab_loaded(tab);
     }
 
     /// Whether the Portfolio tab appears in the tab bar.
@@ -388,13 +431,8 @@ impl App {
     }
 
     pub fn select_tab(&mut self, idx: usize) {
-        if self.tab == Tab::Accounts {
-            self.close_account_filter();
-            self.liability_focus = false;
-        }
         if let Some(&t) = self.visible_tabs().get(idx) {
-            self.tab = t;
-            self.ensure_tab_loaded(t);
+            self.switch_tab(t);
         }
     }
 
@@ -659,8 +697,20 @@ impl App {
     /// selected month on the Monthly tab. `None` when the feature is off
     /// (`liquid_accounts` unset) or the selected month has no matching data
     /// (e.g. a past year with no periodic history for this metric).
+    ///
+    /// Forecast remainder is included only when the selected month is a
+    /// forecast month (`F` on the current calendar month, or a future month).
     pub fn liquid_cash_change_for_selected_month(&self) -> Option<f64> {
         let month_name = &self.current_month()?.month_name;
+        if self.current_month_is_forecast() {
+            if let Some((_, v)) = self
+                .liquid_cash_forecast
+                .iter()
+                .find(|(name, _)| name == month_name)
+            {
+                return Some(*v);
+            }
+        }
         self.liquid_cash_monthly
             .iter()
             .find(|(name, _)| name == month_name)

@@ -29,7 +29,7 @@ pub(super) fn render_loading_overlay(f: &mut Frame, area: Rect, theme: &Theme) {
 
 pub(super) fn render_help_popup(f: &mut Frame, area: Rect, theme: &Theme) {
     let w = 68u16.min(area.width.saturating_sub(4));
-    let h = 30u16.min(area.height.saturating_sub(4));
+    let h = 36u16.min(area.height.saturating_sub(4));
     let popup = Rect {
         x: area.x + (area.width.saturating_sub(w)) / 2,
         y: area.y + (area.height.saturating_sub(h)) / 2,
@@ -43,17 +43,21 @@ pub(super) fn render_help_popup(f: &mut Frame, area: Rect, theme: &Theme) {
     let bindings: &[(&str, &str)] = &[
         ("", ""),
         ("§", "Navigation"),
-        ("1/2/3  Tab/⇧Tab", "Switch tab"),
+        ("1/2/3/4  Tab/⇧Tab", "Switch tab"),
         ("↑k / ↓j", "Scroll / select row"),
         ("PgUp/PgDn  Home/End", "Page up/down · first/last"),
         ("←h / →l", "Month · NW range · chart range"),
-        ("Enter  /", "Open detail · search"),
+        ("Enter", "Open Register / transaction legs"),
+        ("/", "Register query bar"),
         ("", ""),
         ("§", "Tab-specific"),
         ("y / Y", "Year back / forward  (Monthly)"),
         ("G", "Jump to last entry  (Monthly)"),
         ("i", "Income/expense focus  (Monthly)"),
         ("p", "Payee analytics  (Monthly)"),
+        ("C", "YoY comparison  (Monthly)"),
+        ("F", "Current-month forecast  (Monthly)"),
+        ("h / l", "Previous / next month  (Register)"),
         ("a–z  Backspace", "Filter · clear char  (Accounts)"),
         ("", ""),
         ("§", "Data & view"),
@@ -109,101 +113,6 @@ pub(super) fn render_help_popup(f: &mut Frame, area: Rect, theme: &Theme) {
         .style(Style::default().bg(theme.background));
 
     f.render_widget(Paragraph::new(lines).block(block), popup);
-}
-
-pub(super) fn render_search_overlay(f: &mut Frame, app: &mut App, area: Rect, theme: &Theme) {
-    f.render_widget(Clear, area);
-
-    let chunks = Layout::vertical([
-        Constraint::Length(3),
-        Constraint::Min(0),
-        Constraint::Length(1),
-    ])
-    .split(area);
-
-    let input = Paragraph::new(Line::from(vec![
-        Span::styled("  / ", Style::default().fg(theme.gold).bold()),
-        Span::styled(&app.search_query, Style::default().fg(theme.fg)),
-        Span::styled("█", Style::default().fg(theme.accent)),
-    ]))
-    .block(
-        Block::default()
-            .title(Span::styled(
-                " Search Transactions ",
-                Style::default().fg(theme.accent).bold(),
-            ))
-            .borders(Borders::ALL)
-            .border_type(BorderType::Rounded)
-            .border_style(Style::default().fg(theme.accent)),
-    );
-    f.render_widget(input, chunks[0]);
-
-    let rows: Vec<Row> = app
-        .search_results
-        .iter()
-        .map(|t| {
-            let amt_color = if t.amount >= 0.0 {
-                theme.positive
-            } else {
-                theme.negative
-            };
-            Row::new(vec![
-                Cell::from(t.date.format("%Y-%m-%d").to_string())
-                    .style(Style::default().fg(theme.muted)),
-                Cell::from(t.description.clone()).style(Style::default().fg(theme.fg)),
-                Cell::from(format!("{:>13}", app.config.fmt_amount(t.amount, 2)))
-                    .style(Style::default().fg(amt_color)),
-                Cell::from(format!("{:>13}", app.config.fmt_amount(t.running_total, 2)))
-                    .style(Style::default().fg(theme.accent)),
-            ])
-        })
-        .collect();
-
-    let result_count = app.search_results.len();
-    let title = if result_count > 0 {
-        format!(" {} results ", result_count)
-    } else if app.search_query.is_empty() {
-        " Type to search ".to_string()
-    } else {
-        " No results ".to_string()
-    };
-
-    let table = Table::new(
-        rows,
-        [
-            Constraint::Length(12),
-            Constraint::Min(24),
-            Constraint::Length(14),
-            Constraint::Length(14),
-        ],
-    )
-    .header(
-        Row::new(vec!["Date", "Description", "Amount", "Balance"])
-            .style(Style::default().fg(theme.muted).bold())
-            .bottom_margin(1),
-    )
-    .row_highlight_style(Style::default().bg(theme.highlight_bg).bold())
-    .highlight_symbol("▶ ")
-    .block(
-        Block::default()
-            .title(Span::styled(title, Style::default().fg(theme.gold).bold()))
-            .borders(Borders::ALL)
-            .border_type(BorderType::Rounded)
-            .border_style(Style::default().fg(theme.muted)),
-    );
-
-    f.render_stateful_widget(table, chunks[1], &mut app.search_state);
-
-    let hint_text = if app.search_results.is_empty() {
-        "  [↑↓] navigate  [Esc] close  · regex ok (e.g. \"grocery|supermarket\")"
-    } else {
-        "  [Enter] open account  [↑↓] navigate  [Esc] close  · type to refine"
-    };
-    let hint = Paragraph::new(Line::from(Span::styled(
-        hint_text,
-        Style::default().fg(theme.muted),
-    )));
-    f.render_widget(hint, chunks[2]);
 }
 
 pub(super) fn render_price_alerts(f: &mut Frame, app: &App, area: Rect, theme: &Theme) {
@@ -391,7 +300,7 @@ pub(super) fn render_status(f: &mut Frame, app: &App, area: Rect, theme: &Theme)
         return;
     }
 
-    let help = "  [1-3] tab  [↑↓/jk] navigate  [PgUp/PgDn/Home/End] scroll  [←→/hl] month/range  [^O] open file  [r] refresh  [?] help  [q] quit";
+    let help = "  [1-4] tab  [↑↓/jk] navigate  [PgUp/PgDn/Home/End] scroll  [←→/hl] month/range  [^O] open file  [r] refresh  [?] help  [q] quit";
     let text = Line::from(vec![
         Span::styled(&app.status_msg, Style::default().fg(theme.accent)),
         Span::styled(help, Style::default().fg(theme.muted)),

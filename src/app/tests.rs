@@ -21,6 +21,7 @@ fn empty_refresh_result(tabs: TabFlags) -> RefreshResult {
         monthly_forecast: TabData::NotRequested,
         payee_data: TabData::NotRequested,
         liquid_cash_monthly: TabData::NotRequested,
+        liquid_cash_forecast: TabData::NotRequested,
     }
 }
 
@@ -645,4 +646,203 @@ fn price_alert_threshold_comes_from_config() {
     app.config.price_alert_threshold_pct = 0.5;
     app.compute_price_alerts();
     assert_eq!(app.price_alerts.len(), 1, "1% should pass at 0.5%");
+}
+
+#[test]
+fn number_keys_follow_visible_tab_order() {
+    let mut app = App::fixture_empty();
+    app.config.show_portfolio = Some(true);
+    assert_eq!(
+        app.visible_tabs(),
+        vec![Tab::Accounts, Tab::Monthly, Tab::Register, Tab::Portfolio]
+    );
+    app.select_tab(0);
+    assert_eq!(app.tab, Tab::Accounts);
+    app.select_tab(2);
+    assert_eq!(app.tab, Tab::Register);
+    app.select_tab(3);
+    assert_eq!(app.tab, Tab::Portfolio);
+
+    app.config.show_portfolio = Some(false);
+    assert_eq!(
+        app.visible_tabs(),
+        vec![Tab::Accounts, Tab::Monthly, Tab::Register]
+    );
+    app.select_tab(2);
+    assert_eq!(app.tab, Tab::Register);
+    app.select_tab(3);
+    assert_eq!(
+        app.tab,
+        Tab::Register,
+        "4 is a no-op when Portfolio is hidden"
+    );
+}
+
+#[test]
+fn liquid_change_uses_actuals_unless_month_is_forecast() {
+    let mut app = App::fixture_with_monthly();
+    app.liquid_cash_monthly = vec![
+        ("January".to_string(), 100.0),
+        ("February".to_string(), 200.0),
+    ];
+    app.liquid_cash_forecast = vec![
+        ("January".to_string(), 100.0),
+        ("February".to_string(), 999.0),
+    ];
+    app.combined_selected = 1;
+    assert!(
+        !app.current_month_is_forecast(),
+        "February in the fixture is an actual month"
+    );
+    assert_eq!(app.liquid_cash_change_for_selected_month(), Some(200.0));
+
+    app.combined_months[1].1 = true;
+    assert!(app.current_month_is_forecast());
+    assert_eq!(app.liquid_cash_change_for_selected_month(), Some(999.0));
+}
+
+#[test]
+fn register_enter_opens_transaction_legs_from_memory() {
+    use crate::data::{
+        build_register_view, group_register_txns, RegisterPosting, RegisterQuery, TxnStatus,
+    };
+    use chrono::NaiveDate;
+
+    let mut app = App::fixture_empty();
+    app.tab = Tab::Register;
+    app.register_query = RegisterQuery {
+        year: 2026,
+        month: 1,
+        account: None,
+        description: None,
+    };
+    let date = NaiveDate::from_ymd_opt(2026, 1, 15).unwrap();
+    let postings = vec![
+        RegisterPosting {
+            txnidx: 1,
+            date,
+            status: TxnStatus::Unmarked,
+            description: "Salary".to_string(),
+            account: "income:salary".to_string(),
+            amount: -2000.0,
+            running_total: -2000.0,
+        },
+        RegisterPosting {
+            txnidx: 1,
+            date,
+            status: TxnStatus::Unmarked,
+            description: "Salary".to_string(),
+            account: "assets:bank:checking".to_string(),
+            amount: 2000.0,
+            running_total: 0.0,
+        },
+    ];
+    app.register_txns = group_register_txns(&postings);
+    app.register_rows = build_register_view(&app.register_txns, None, None);
+    app.register_table.select(Some(1));
+
+    app.open_register_row_detail();
+
+    let detail = app.register_detail.as_ref().expect("overlay should open");
+    assert_eq!(detail.description, "Salary");
+    assert_eq!(detail.postings.len(), 2);
+    assert_eq!(detail.postings[1].account, "assets:bank:checking");
+}
+
+fn register_two_txns() -> App {
+    use crate::data::{
+        build_register_view, group_register_txns, RegisterPosting, RegisterQuery, TxnStatus,
+    };
+    use chrono::NaiveDate;
+
+    let mut app = App::fixture_empty();
+    app.tab = Tab::Register;
+    app.register_query = RegisterQuery {
+        year: 2026,
+        month: 1,
+        account: None,
+        description: None,
+    };
+    let jan15 = NaiveDate::from_ymd_opt(2026, 1, 15).unwrap();
+    let jan20 = NaiveDate::from_ymd_opt(2026, 1, 20).unwrap();
+    let postings = vec![
+        RegisterPosting {
+            txnidx: 1,
+            date: jan15,
+            status: TxnStatus::Unmarked,
+            description: "Salary".to_string(),
+            account: "income:salary".to_string(),
+            amount: -2000.0,
+            running_total: -2000.0,
+        },
+        RegisterPosting {
+            txnidx: 1,
+            date: jan15,
+            status: TxnStatus::Unmarked,
+            description: "Salary".to_string(),
+            account: "assets:bank:checking".to_string(),
+            amount: 2000.0,
+            running_total: 0.0,
+        },
+        RegisterPosting {
+            txnidx: 2,
+            date: jan20,
+            status: TxnStatus::Cleared,
+            description: "Groceries".to_string(),
+            account: "expenses:food".to_string(),
+            amount: 150.0,
+            running_total: 150.0,
+        },
+        RegisterPosting {
+            txnidx: 2,
+            date: jan20,
+            status: TxnStatus::Cleared,
+            description: "Groceries".to_string(),
+            account: "assets:bank:checking".to_string(),
+            amount: -150.0,
+            running_total: 0.0,
+        },
+    ];
+    app.register_txns = group_register_txns(&postings);
+    app.register_rows = build_register_view(&app.register_txns, None, None);
+    app.register_table.select(Some(0));
+    app
+}
+
+#[test]
+fn register_j_k_skip_continuation_legs() {
+    let mut app = register_two_txns();
+    assert_eq!(app.register_rows.len(), 4);
+    assert!(app.register_rows[1].continuation);
+    assert!(!app.register_rows[2].continuation);
+
+    app.scroll_down();
+    assert_eq!(app.register_table.selected(), Some(2));
+
+    app.scroll_down();
+    assert_eq!(
+        app.register_table.selected(),
+        Some(2),
+        "already on last transaction"
+    );
+
+    app.scroll_up();
+    assert_eq!(app.register_table.selected(), Some(0));
+}
+
+#[test]
+fn register_end_selects_last_transaction_header() {
+    let mut app = register_two_txns();
+    app.scroll_end();
+    assert_eq!(app.register_table.selected(), Some(2));
+    assert!(!app.register_rows[2].continuation);
+}
+
+#[test]
+fn register_click_on_leg_selects_transaction() {
+    let mut app = register_two_txns();
+    app.register_select_txn_at(1);
+    assert_eq!(app.register_table.selected(), Some(0));
+    app.register_select_txn_at(3);
+    assert_eq!(app.register_table.selected(), Some(2));
 }

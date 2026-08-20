@@ -10,12 +10,13 @@ mod accounts;
 mod monthly;
 mod overlays;
 mod portfolio;
+mod register;
 
 pub(crate) use monthly::MONTHLY_GROUP_WIDTH;
 
 use overlays::{
     render_file_prompt, render_help_popup, render_loading_overlay, render_price_alerts,
-    render_search_overlay, render_status,
+    render_status,
 };
 
 // ── Theme ─────────────────────────────────────────────────────────────────────
@@ -339,10 +340,6 @@ pub fn render(f: &mut Frame, app: &mut App) {
         render_file_prompt(f, app, layout[2], &theme);
     }
 
-    if app.search_active {
-        render_search_overlay(f, app, layout[2], &theme);
-    }
-
     if app.show_alerts {
         render_price_alerts(f, app, layout[2], &theme);
     }
@@ -380,6 +377,7 @@ fn render_tabs(f: &mut Frame, app: &mut App, area: Rect, theme: &Theme) {
         .map(|t| match t {
             Tab::Accounts => "  Accounts  ".to_string(),
             Tab::Monthly => "  Monthly  ".to_string(),
+            Tab::Register => "  Register  ".to_string(),
             Tab::Portfolio => "  Portfolio  ".to_string(),
         })
         .collect();
@@ -425,6 +423,7 @@ fn render_content(f: &mut Frame, app: &mut App, area: Rect, theme: &Theme) {
         Tab::Portfolio => portfolio::render_portfolio(f, app, area, theme),
         Tab::Accounts => accounts::render_accounts(f, app, area, theme),
         Tab::Monthly => monthly::render_monthly(f, app, area, theme),
+        Tab::Register => register::render_register(f, app, area, theme),
     }
 }
 
@@ -469,6 +468,60 @@ mod tests {
     #[test]
     fn snapshot_monthly_tab() {
         let mut app = App::fixture_with_monthly();
+        insta::assert_snapshot!(render_to_string(&mut app));
+    }
+
+    #[test]
+    fn snapshot_register_empty() {
+        use crate::data::RegisterQuery;
+        let mut app = App::fixture_empty();
+        app.tab = Tab::Register;
+        app.register_query = RegisterQuery {
+            year: 2026,
+            month: 8,
+            account: None,
+            description: None,
+        };
+        insta::assert_snapshot!(render_to_string(&mut app));
+    }
+
+    #[test]
+    fn snapshot_register_grouped_postings() {
+        use crate::data::{
+            build_register_view, group_register_txns, RegisterPosting, RegisterQuery, TxnStatus,
+        };
+        use chrono::NaiveDate;
+        let mut app = App::fixture_empty();
+        app.tab = Tab::Register;
+        app.register_query = RegisterQuery {
+            year: 2026,
+            month: 1,
+            account: None,
+            description: None,
+        };
+        let date = NaiveDate::from_ymd_opt(2026, 1, 15).unwrap();
+        let postings = vec![
+            RegisterPosting {
+                txnidx: 1,
+                date,
+                status: TxnStatus::Unmarked,
+                description: "Salary".to_string(),
+                account: "income:salary".to_string(),
+                amount: -2000.0,
+                running_total: -2000.0,
+            },
+            RegisterPosting {
+                txnidx: 1,
+                date,
+                status: TxnStatus::Unmarked,
+                description: "Salary".to_string(),
+                account: "assets:bank:checking".to_string(),
+                amount: 2000.0,
+                running_total: 0.0,
+            },
+        ];
+        app.register_txns = group_register_txns(&postings);
+        app.register_rows = build_register_view(&app.register_txns, None, None);
         insta::assert_snapshot!(render_to_string(&mut app));
     }
 

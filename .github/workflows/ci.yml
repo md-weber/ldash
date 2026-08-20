@@ -9,11 +9,11 @@ on:
 jobs:
   lint:
     name: Lint
-    runs-on: codeberg-small
+    runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
 
-      - uses: https://github.com/dtolnay/rust-toolchain@stable
+      - uses: dtolnay/rust-toolchain@stable
         with:
           components: rustfmt, clippy
 
@@ -31,11 +31,11 @@ jobs:
 
   build-test:
     name: Build & Test
-    runs-on: codeberg-medium
+    runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
 
-      - uses: https://github.com/dtolnay/rust-toolchain@stable
+      - uses: dtolnay/rust-toolchain@stable
 
       - uses: actions/cache@v4
         with:
