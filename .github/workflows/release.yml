@@ -54,20 +54,20 @@ jobs:
         uses: actions/cache@v4
         with:
           path: |
-            /usr/local/zig-linux-x86_64-${{ env.ZIG_VERSION }}
+            ${{ runner.home }}/zig-linux-x86_64-${{ env.ZIG_VERSION }}
             ~/.cargo/bin/cargo-zigbuild
-          key: zig-${{ env.ZIG_VERSION }}-zigbuild
+          key: zig-${{ env.ZIG_VERSION }}-zigbuild-home
 
       - name: Install zig + cargo-zigbuild
         if: matrix.zigbuild && steps.cache-zig.outputs.cache-hit != 'true'
         run: |
           curl -fsSL "https://ziglang.org/download/${ZIG_VERSION}/zig-linux-x86_64-${ZIG_VERSION}.tar.xz" \
-            | tar -xJ -C /usr/local
+            | tar -xJ -C "$HOME"
           cargo install cargo-zigbuild --locked
 
       - name: Add zig to PATH
         if: matrix.zigbuild
-        run: echo "/usr/local/zig-linux-x86_64-${{ env.ZIG_VERSION }}" >> "$GITHUB_PATH"
+        run: echo "$HOME/zig-linux-x86_64-${{ env.ZIG_VERSION }}" >> "$GITHUB_PATH"
 
       - name: Cache macOS SDK
         if: contains(matrix.target, 'apple-darwin')

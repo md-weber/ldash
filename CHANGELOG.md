@@ -33,6 +33,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   month), same as income and expenses.
 - Help overlay documents `p`, `C`, `F`, and Register keys.
 
+### Fixed
+
+- Release workflow unpacks Zig into `$HOME`. GitHub-hosted runners cannot
+  write to `/usr/local`.
+
 ## [1.4.0] - 2026-07-07
 
 ### Added
