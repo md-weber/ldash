@@ -1,0 +1,235 @@
+commodity 1,00000000 SOL
+commodity 1,00000000 AR
+commodity 1,00000000 ETH
+commodity 1,00000000 LINK
+commodity 1,00000000 TON
+commodity 1,00000000 BTC
+commodity 1,00000000 XMR
+commodity 1,00 €
+
+account liabilities
+account income
+account equity
+account assets
+account expenses
+
+# --- Assets: Bank Accounts ---
+# type: C = Cash & cash equivalents (Giro, Tagesgeld) -> zaehlt in `hledger cf`
+# type: A = Assets, aber nicht liquid (Investments, Sachvermoegen)
+account assets:c24:freelancer   ; type: C
+account assets:c24:haushalt     ; type: C
+account assets:c24:joint        ; type: C
+account assets:c24:person-a          ; type: C
+account assets:n26:person-b       ; type: C
+account assets:n26:person-a          ; type: C
+account assets:n26:joint        ; type: C
+account assets:oskar            ; type: A
+account assets:comdirect:joint  ; type: C
+account assets:cash             ; type: C
+account assets:raisin           ; type: C
+account assets:bitpanda         ; type: A
+account assets:traderepublic    ; type: A
+
+account assets:haus:reservierungsgebühr    ; type: A
+account assets:haushalt:kaution    ; type: A 
+account assets:immobilien:wohnung:kaufpreis   ; type: A
+account assets:immobilien:wohnung:kaufnebenkosten:steuer  ; type: A
+account assets:immobilien:wohnung:kaufnebenkosten:notar   ; type: A
+account assets:immobilien:wohnung:kaufnebenkosten:grundbuch   ; type: A
+
+# --- Assets: Crypto & Investments ---
+account assets:crypto:primal
+account assets:crypto:bitbox:btc
+account assets:crypto:bitvavo:btc
+account assets:crypto:bitvavo:eur
+account assets:crypto:bitvavo:SOL
+account assets:crypto:bitvavo:ETH
+account assets:crypto:bitvavo:LINK
+account assets:crypto:bitvavo:AR
+account assets:crypto:exodus:SOL
+account assets:crypto:exodus:SOL:staked
+account assets:crypto:exodus:ETH
+account assets:crypto:exodus:LINK
+account assets:crypto:exodus:TON
+account assets:crypto:cakewallet:XMR
+account assets:crypto:telegram:TON
+account assets:oskar:kind-a
+account assets:oskar:kind-b
+account assets:oskar:joint
+account assets:traderepublic
+
+# --- Income --- #
+account income:steuer:erstattung           ; type: R
+account income:abos:youtube premium         ; type: R
+account income:transport:auto:versicherung   ; type: R 
+account income:oskar:investment:growth      ; type: R 
+account income:amazon                       ; type: R
+account income:haushalt                     ; type: R
+account income:kinder:sport                 ; type: R
+account income:app                          ; type: R
+account income:wahlhelfer                   ; type: R 
+account income:app:in-app-verkäufe          ; type: R
+account income:c24:zinsgutschrift           ; type: R
+account income:raisin:zinsgutschrift           ; type: R
+account income:haushalt:strom               ; type: R
+account income:otto                         ; type: R
+account income:ebay                         ; type: R
+account income:betriebseinnahmen:youtube    ; type: R
+account income:arbeit:reisen
+account income:c24:Prämie                   ; type: R
+account income:elterngeld                   ; type: R
+account income:kindergeld                   ; type: R
+account income:pfadfinder:sommerlager       ; type: R
+account income:kinder:kleider               ; type: R
+account income:sonstiges                   ; type: R
+account income:Kinderkrankengeld     ; type: R 
+
+account income:betriebseinnahmen            ; type: R
+account income:gehalt:person-b                ; type: R
+account income:gehalt:person-a                   ; type: R
+account income:unknown                      ; type: R
+
+account income:crypto:staking:rewards           ; type: R
+
+# --- Expesens --- #
+account expenses:traderepublic:investment:decline   ; type X      
+account expenses:investment:decline   ; type X      
+account expenses:steuer                   ; type X
+account expenses:steuer:zinsgutschrift    ; type: X
+account expenses:steuer:kapitalertragssteuer    ; type: X
+account expenses:steuer:kap    ; type: X
+account expenses:steuer:soli    ; type: X
+
+account expenses:ebay                 ; type: X
+account expenses:fortbildung          ; type: X
+account expenses:post                 ; type: X
+account expenses:pfadfinder           ; type: X
+account expenses:pfadfinder:freiholsheim    ; type: X
+account expenses:unknown              ; type: X
+account expenses:sonstiges              ; type: X
+account expenses:schenkung            ; type: X
+account expenses:mediaMarkt           ; type: X
+account expenses:polarstep            ; type: X
+account expenses:arbeit:reisen        ; type: X
+
+account expenses:kinder:kleider       ; type: X
+account expenses:kinder:sport         ; type: X
+account expenses:kinder:schuhe        ; type: X
+account expenses:kinder:spielzeug     ; type: X
+account expenses:kinder:betreuung:kind-b   ; type: X
+account expenses:kinder:betreuung:kind-a   ; type: X
+account expenses:kinder:schreibwaren    ; type: X
+account expenses:kinder:windeln         ; type: X
+account expenses:kinder:kurs:musik      ; type: X
+account expenses:kinder:kurs:persisch      ; type: X
+account expenses:kinder:freizeit        ; type: X
+
+account expenses:gesundheit:medikamente   ; type: X
+account expenses:gesundheit:zahnarzt    ; type: X
+account expenses:gesundheit:hautarzt    ; type: X
+account expenses:gesundheit:frauenarzt  ; type: X
+account expenses:gesundheit:sehhilfe    ; type: X
+account expenses:gesundheit             ; type X
+account expenses:betriebsausgaben:website  ; type: X
+account expenses:betriebsausgaben       ; type: X
+account expenses:hygiene    ; type: X
+account expenses:hygiene:friseur    ; type: X
+
+account expenses:kleider             ; type: X
+account expenses:kleider:kinder     ; type: X
+account expenses:kleider:person-a        ; type: X
+account expenses:kleider:person-b        ; type: X
+account expenses:kleider:kind-a        ; type: X
+account expenses:kleider:kind-b        ; type: X
+
+account expenses:freizeit             ; type: X
+account expenses:freizeit:movies      ; type: X
+account expenses:freizeit:bücher      ; type: X
+account expenses:freizeit:zoo         ; type: X
+account expenses:freizeit:person-a     ; type: X
+account expenses:freizeit:person-a:pc-spiele   ; type: X
+account expenses:freizeit:person-a:server      ; type: X
+account expenses:freizeit:person-b          ; type: X
+account expenses:freizeit:feiern          ; type: X
+
+account expenses:spende:signal      ; type: X
+account expenses:spende:oss         ; type: X
+account expenses:spende:codeberg         ; type: X
+
+account expenses:versicherung                     ; type: X
+account expenses:versicherung:reiseversicherung   ; type: X
+account expenses:versicherung:rechtsberatung      ; type: X
+account expenses:versicherung:haftpflicht      ; type: X
+
+account expenses:haushalt           ; type: X
+account expenses:haushalt:reinigung     ; type: X
+account expenses:haushalt:miete     ; type: X
+account expenses:haushalt:strom     ; type: X
+account expenses:haushalt:möbel     ; type: X
+account expenses:haushalt:gez       ; type: X
+account expenses:haushalt:küche     ; type: X
+account expenses:haushalt:handwerker     ; type: X
+account expenses:haushalt:werkzeug     ; type: X
+
+account expenses:kommunikation:internet   ; type: X
+account expenses:kommunikation:handy      ; type: X
+
+account expenses:amazon         ; type: X
+account expenses:otto           ; type: X
+
+account expenses:crypto:fees:eur    ; type: X
+account expenses:crypto:fees:btc    ; type: X
+account expenses:crypto:fees:LINK    ; type: X
+account expenses:crypto:fees:ar    ; type: X
+account expenses:crypto:fees:SOL    ; type: X
+account expenses:crypto:fees:ETH    ; type: X
+account expenses:crypto:fees:TON    ; type: X
+
+# Essen
+account expenses:essen:lebensmittel   ; type: X
+account expenses:essen:snacks         ; type: X
+account expenses:essen:restaurant     ; type: X
+
+# Urlaube
+account expenses:urlaub                 ; type: X
+account expenses:urlaub:Schluchsee      ; type: X
+account expenses:urlaub:amerika:flug    ; type: X
+account expenses:urlaub:schneeberg    ; type: X
+
+
+# Hauskauf
+account expenses:hauskauf:berater         ; type: X
+account expenses:wohnen:kreditzinsen      ; type: X
+account expenses:wohnen:miete      ; type: X
+account expenses:wohnen:wohngeld      ; type: X
+
+# Transport
+account expenses:transport:auto:reperatur     ; type: X
+account expenses:transport:auto:strafe     ; type: X
+account expenses:transport:auto:tankstelle    ; type: X
+account expenses:transport:auto:parkgebühr    ; type: X
+account expenses:transport:auto:reinigung     ; type: X
+account expenses:transport:auto:versicherung  ; type: X
+account expenses:transport:auto:maut          ; type: X
+account expenses:transport:auto:hu            ; type: X
+account expense:transport:bikeleasing         ; type: X
+account expenses:transport:öpnv       ; type: X
+account expenses:transport:kinder     ; type: X
+account expenses:transport:fahrrad    ; type: X
+
+# Abos #
+account expenses:abos:amazon prime        ; type: X
+account expenses:abos:microsoft           ; type: X
+account expenses:abos:youtube premium     ; type: X
+account expenses:abos:amazon prime ads    ; type: X
+account expenses:abos:appletv              ; type: X
+
+# --- liabilities --- #
+account liabilities:paypal:pc     ; type: L
+account liabilities:macbook pro   ; type: L
+account liabilities:kredit:wohnung  ; type: L
+account liabilities:kueche:mescher  ; type: L
+account liabilities:wohngeld                          ; type: L
+
+account assets:scalable:etf    ; type: A
+account equity:opening-balances

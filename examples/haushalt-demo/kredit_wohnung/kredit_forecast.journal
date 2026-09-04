@@ -1,0 +1,26 @@
+;; Demo mortgage forecast — tilgung:1 tags for liquid cash flow
+
+~ 2026-09-30  Demo mortgage payment 09/2026
+    liabilities:kredit:wohnung                960,00 €  ; tilgung:1
+    expenses:wohnen:kreditzinsen            1 140,00 €
+    assets:c24:joint                       -2 100,00 €
+
+~ 2026-10-30  Demo mortgage payment 10/2026
+    liabilities:kredit:wohnung                970,00 €  ; tilgung:1
+    expenses:wohnen:kreditzinsen            1 130,00 €
+    assets:c24:joint                       -2 100,00 €
+
+~ 2026-11-30  Demo mortgage payment 11/2026
+    liabilities:kredit:wohnung                980,00 €  ; tilgung:1
+    expenses:wohnen:kreditzinsen            1 120,00 €
+    assets:c24:joint                       -2 100,00 €
+
+~ 2026-12-30  Demo mortgage payment 12/2026
+    liabilities:kredit:wohnung                990,00 €  ; tilgung:1
+    expenses:wohnen:kreditzinsen            1 110,00 €
+    assets:c24:joint                       -2 100,00 €
+
+~ 2027-01-30  Demo mortgage payment 01/2027
+    liabilities:kredit:wohnung              1 000,00 €  ; tilgung:1
+    expenses:wohnen:kreditzinsen            1 100,00 €
+    assets:c24:joint                       -2 100,00 €

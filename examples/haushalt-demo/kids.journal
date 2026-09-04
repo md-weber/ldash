@@ -1,0 +1,23 @@
+2026-02-08 Demo depot update kind A
+    assets:oskar:kind-a                       = 980,00 €
+    income:oskar:investment:growth
+
+2026-02-08 Demo depot update kind B
+    assets:oskar:kind-b                     = 3 450,00 €
+    income:oskar:investment:growth
+
+2026-05-31 Demo depot update kind A
+    assets:oskar:kind-a                       = 1 120,00 €
+    income:oskar:investment:growth
+
+2026-05-31 Demo depot update kind B
+    assets:oskar:kind-b                     = 3 720,00 €
+    income:oskar:investment:growth
+
+2026-08-30 Demo depot update kind A
+    assets:oskar:kind-a                       = 1 250,00 €
+    income:oskar:investment:growth
+
+2026-08-30 Demo depot update kind B
+    assets:oskar:kind-b                     = 3 950,00 €
+    income:oskar:investment:growth

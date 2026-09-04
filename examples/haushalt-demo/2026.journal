@@ -1,0 +1,394 @@
+; 2026 — current-year demo transactions (Jan–Sep)
+
+2026-01-28 Demo salary person B
+    assets:c24:joint                        2 850,00 €
+    income:gehalt:person-b
+
+2026-01-24 Demo salary person A
+    assets:c24:joint                        3 250,00 €
+    income:gehalt:person-a
+
+2026-01-04 Demo kindergeld
+    assets:c24:joint                          450,00 €
+    income:kindergeld
+
+2026-01-02 Demo rent
+    assets:c24:joint                       -1 220,00 €
+    expenses:wohnen:miete                   1 220,00 €
+
+2026-01-05 Demo groceries
+    assets:c24:joint                         -505,00 €
+    expenses:essen:lebensmittel               505,00 €
+
+2026-01-08 Demo restaurant
+    assets:c24:joint                          -88,00 €
+    expenses:essen:restaurant                  88,00 €
+
+2026-01-10 Demo childcare
+    assets:c24:joint                         -620,00 €
+    expenses:kinder:betreuung:kind-a             290,00 €
+    expenses:kinder:betreuung:kind-b           330,00 €
+
+2026-01-12 Demo transport
+    assets:c24:joint                          -98,00 €
+    expenses:transport:auto:tankstelle         60,00 €
+    expenses:transport:öpnv                    38,00 €
+
+2026-01-15 Demo mortgage payment
+    liabilities:kredit:wohnung                920,00 €  ; tilgung:1
+    expenses:wohnen:kreditzinsen            1 180,00 €
+    assets:c24:joint                       -2 100,00 €
+
+2026-01-18 Demo ETF savings
+    assets:scalable:etf                       1 200,00 €
+    assets:c24:joint
+
+2026-01-20 Demo raisin interest
+    assets:raisin                              18,50 €
+    income:raisin:zinsgutschrift
+
+2026-02-28 Demo salary person B
+    assets:c24:joint                        2 850,00 €
+    income:gehalt:person-b
+
+2026-02-24 Demo salary person A
+    assets:c24:joint                        3 250,00 €
+    income:gehalt:person-a
+
+2026-02-04 Demo kindergeld
+    assets:c24:joint                          450,00 €
+    income:kindergeld
+
+2026-02-02 Demo rent
+    assets:c24:joint                       -1 220,00 €
+    expenses:wohnen:miete                   1 220,00 €
+
+2026-02-05 Demo groceries
+    assets:c24:joint                         -495,00 €
+    expenses:essen:lebensmittel               495,00 €
+
+2026-02-08 Demo restaurant
+    assets:c24:joint                         -102,00 €
+    expenses:essen:restaurant                 102,00 €
+
+2026-02-10 Demo childcare
+    assets:c24:joint                         -620,00 €
+    expenses:kinder:betreuung:kind-a             290,00 €
+    expenses:kinder:betreuung:kind-b           330,00 €
+
+2026-02-12 Demo transport
+    assets:c24:joint                          -98,00 €
+    expenses:transport:auto:tankstelle         60,00 €
+    expenses:transport:öpnv                    38,00 €
+
+2026-02-15 Demo freelance
+    assets:c24:freelancer                   1 100,00 €
+    income:betriebseinnahmen
+
+2026-02-18 Demo ETF savings
+    assets:scalable:etf                       1 200,00 €
+    assets:c24:joint
+
+2026-03-28 Demo salary person B
+    assets:c24:joint                        2 850,00 €
+    income:gehalt:person-b
+
+2026-03-24 Demo salary person A
+    assets:c24:joint                        3 250,00 €
+    income:gehalt:person-a
+
+2026-03-04 Demo kindergeld
+    assets:c24:joint                          450,00 €
+    income:kindergeld
+
+2026-03-02 Demo rent
+    assets:c24:joint                       -1 220,00 €
+    expenses:wohnen:miete                   1 220,00 €
+
+2026-03-05 Demo groceries
+    assets:c24:joint                         -520,00 €
+    expenses:essen:lebensmittel               520,00 €
+
+2026-03-08 Demo restaurant
+    assets:c24:joint                          -95,00 €
+    expenses:essen:restaurant                  95,00 €
+
+2026-03-10 Demo childcare
+    assets:c24:joint                         -620,00 €
+    expenses:kinder:betreuung:kind-a             290,00 €
+    expenses:kinder:betreuung:kind-b           330,00 €
+
+2026-03-12 Demo transport
+    assets:c24:joint                          -98,00 €
+    expenses:transport:auto:tankstelle         60,00 €
+    expenses:transport:öpnv                    38,00 €
+
+2026-03-15 Demo kitchen loan payment
+    liabilities:kueche:mescher                900,00 €  ; tilgung:1
+    assets:raisin
+
+2026-03-18 Demo ETF savings
+    assets:scalable:etf                       1 200,00 €
+    assets:c24:joint
+
+2026-03-22 Demo music course
+    assets:c24:joint                          -32,00 €
+    expenses:kinder:kurs:musik                 32,00 €
+
+2026-04-28 Demo salary person B
+    assets:c24:joint                        2 850,00 €
+    income:gehalt:person-b
+
+2026-04-24 Demo salary person A
+    assets:c24:joint                        3 250,00 €
+    income:gehalt:person-a
+
+2026-04-04 Demo kindergeld
+    assets:c24:joint                          450,00 €
+    income:kindergeld
+
+2026-04-02 Demo rent
+    assets:c24:joint                       -1 220,00 €
+    expenses:wohnen:miete                   1 220,00 €
+
+2026-04-05 Demo groceries
+    assets:c24:joint                         -510,00 €
+    expenses:essen:lebensmittel               510,00 €
+
+2026-04-08 Demo restaurant
+    assets:c24:joint                         -108,00 €
+    expenses:essen:restaurant                 108,00 €
+
+2026-04-10 Demo childcare
+    assets:c24:joint                         -620,00 €
+    expenses:kinder:betreuung:kind-a             290,00 €
+    expenses:kinder:betreuung:kind-b           330,00 €
+
+2026-04-12 Demo transport
+    assets:c24:joint                          -98,00 €
+    expenses:transport:auto:tankstelle         60,00 €
+    expenses:transport:öpnv                    38,00 €
+
+2026-04-15 Demo mortgage payment
+    liabilities:kredit:wohnung                930,00 €  ; tilgung:1
+    expenses:wohnen:kreditzinsen            1 170,00 €
+    assets:c24:joint                       -2 100,00 €
+
+2026-04-18 Demo ETF savings
+    assets:scalable:etf                       1 200,00 €
+    assets:c24:joint
+
+2026-05-28 Demo salary person B
+    assets:c24:joint                        2 850,00 €
+    income:gehalt:person-b
+
+2026-05-24 Demo salary person A
+    assets:c24:joint                        3 250,00 €
+    income:gehalt:person-a
+
+2026-05-04 Demo kindergeld
+    assets:c24:joint                          450,00 €
+    income:kindergeld
+
+2026-05-02 Demo rent
+    assets:c24:joint                       -1 220,00 €
+    expenses:wohnen:miete                   1 220,00 €
+
+2026-05-05 Demo groceries
+    assets:c24:joint                         -500,00 €
+    expenses:essen:lebensmittel               500,00 €
+
+2026-05-08 Demo restaurant
+    assets:c24:joint                          -90,00 €
+    expenses:essen:restaurant                  90,00 €
+
+2026-05-10 Demo childcare
+    assets:c24:joint                         -620,00 €
+    expenses:kinder:betreuung:kind-a             290,00 €
+    expenses:kinder:betreuung:kind-b           330,00 €
+
+2026-05-12 Demo transport
+    assets:c24:joint                          -98,00 €
+    expenses:transport:auto:tankstelle         60,00 €
+    expenses:transport:öpnv                    38,00 €
+
+2026-05-15 Demo wohngeld (Hauskauf transition)
+    assets:c24:joint                         -580,00 €
+    expenses:wohnen:wohngeld                  580,00 €
+
+2026-05-18 Demo ETF savings
+    assets:scalable:etf                       1 200,00 €
+    assets:c24:joint
+
+2026-06-28 Demo salary person B
+    assets:c24:joint                        2 850,00 €
+    income:gehalt:person-b
+
+2026-06-24 Demo salary person A
+    assets:c24:joint                        3 250,00 €
+    income:gehalt:person-a
+
+2026-06-04 Demo kindergeld
+    assets:c24:joint                          450,00 €
+    income:kindergeld
+
+2026-06-02 Demo rent
+    assets:c24:joint                       -1 220,00 €
+    expenses:wohnen:miete                   1 220,00 €
+
+2026-06-05 Demo groceries
+    assets:c24:joint                         -515,00 €
+    expenses:essen:lebensmittel               515,00 €
+
+2026-06-08 Demo restaurant
+    assets:c24:joint                         -112,00 €
+    expenses:essen:restaurant                 112,00 €
+
+2026-06-10 Demo childcare
+    assets:c24:joint                         -620,00 €
+    expenses:kinder:betreuung:kind-a             290,00 €
+    expenses:kinder:betreuung:kind-b           330,00 €
+
+2026-06-12 Demo transport
+    assets:c24:joint                          -98,00 €
+    expenses:transport:auto:tankstelle         60,00 €
+    expenses:transport:öpnv                    38,00 €
+
+2026-06-15 Demo mortgage payment
+    liabilities:kredit:wohnung                940,00 €  ; tilgung:1
+    expenses:wohnen:kreditzinsen            1 160,00 €
+    assets:c24:joint                       -2 100,00 €
+
+2026-06-18 Demo ETF savings
+    assets:scalable:etf                       1 200,00 €
+    assets:c24:joint
+
+2026-07-28 Demo salary person B
+    assets:c24:joint                        2 850,00 €
+    income:gehalt:person-b
+
+2026-07-24 Demo salary person A
+    assets:c24:joint                        3 350,00 €
+    income:gehalt:person-a
+
+2026-07-04 Demo kindergeld
+    assets:c24:joint                          450,00 €
+    income:kindergeld
+
+2026-07-02 Demo rent
+    assets:c24:joint                       -1 220,00 €
+    expenses:wohnen:miete                   1 220,00 €
+
+2026-07-05 Demo groceries
+    assets:c24:joint                         -508,00 €
+    expenses:essen:lebensmittel               508,00 €
+
+2026-07-08 Demo restaurant
+    assets:c24:joint                          -86,00 €
+    expenses:essen:restaurant                  86,00 €
+
+2026-07-10 Demo childcare
+    assets:c24:joint                         -620,00 €
+    expenses:kinder:betreuung:kind-a             290,00 €
+    expenses:kinder:betreuung:kind-b           330,00 €
+
+2026-07-12 Demo transport
+    assets:c24:joint                          -98,00 €
+    expenses:transport:auto:tankstelle         60,00 €
+    expenses:transport:öpnv                    38,00 €
+
+2026-07-15 Demo dentist
+    assets:c24:joint                         -165,00 €
+    expenses:gesundheit:zahnarzt              165,00 €
+
+2026-07-18 Demo ETF savings
+    assets:scalable:etf                       1 200,00 €
+    assets:c24:joint
+
+2026-08-28 Demo salary person B
+    assets:c24:joint                        2 850,00 €
+    income:gehalt:person-b
+
+2026-08-24 Demo salary person A
+    assets:c24:joint                        3 350,00 €
+    income:gehalt:person-a
+
+2026-08-04 Demo kindergeld
+    assets:c24:joint                          450,00 €
+    income:kindergeld
+
+2026-08-03 Demo wohngeld
+    assets:c24:joint                         -580,00 €
+    expenses:wohnen:wohngeld                  580,00 €
+
+2026-08-05 Demo groceries
+    assets:c24:joint                         -525,00 €
+    expenses:essen:lebensmittel               525,00 €
+
+2026-08-08 Demo restaurant
+    assets:c24:joint                          -94,00 €
+    expenses:essen:restaurant                  94,00 €
+
+2026-08-10 Demo childcare
+    assets:c24:joint                         -620,00 €
+    expenses:kinder:betreuung:kind-a             290,00 €
+    expenses:kinder:betreuung:kind-b           330,00 €
+
+2026-08-12 Demo transport
+    assets:c24:joint                          -98,00 €
+    expenses:transport:auto:tankstelle         60,00 €
+    expenses:transport:öpnv                    38,00 €
+
+2026-08-15 Demo mortgage payment
+    liabilities:kredit:wohnung                950,00 €  ; tilgung:1
+    expenses:wohnen:kreditzinsen            1 150,00 €
+    assets:c24:joint                       -2 100,00 €
+
+2026-08-18 Demo ETF savings
+    assets:scalable:etf                       1 200,00 €
+    assets:c24:joint
+
+2026-09-01 Demo salary person B
+    assets:c24:joint                        2 850,00 €
+    income:gehalt:person-b
+
+2026-09-01 Demo salary person A
+    assets:c24:joint                        3 350,00 €
+    income:gehalt:person-a
+
+2026-09-02 Demo kindergeld
+    assets:c24:joint                          450,00 €
+    income:kindergeld
+
+2026-09-02 Demo rent
+    assets:c24:joint                       -1 220,00 €
+    expenses:wohnen:miete                   1 220,00 €
+
+2026-09-03 Demo groceries
+    assets:c24:joint                         -498,00 €
+    expenses:essen:lebensmittel               498,00 €
+
+2026-09-03 Demo restaurant
+    assets:c24:joint                          -76,00 €
+    expenses:essen:restaurant                  76,00 €
+
+2026-09-03 Demo fuel
+    assets:c24:joint                          -58,00 €
+    expenses:transport:auto:tankstelle         58,00 €
+
+2026-09-03 Demo public transport
+    assets:c24:joint                          -38,00 €
+    expenses:transport:öpnv                    38,00 €
+
+2026-09-03 Demo YouTube Premium
+    assets:c24:joint                          -20,00 €
+    expenses:abos:youtube premium              20,00 €
+
+2026-09-03 Demo childcare
+    assets:c24:joint                         -620,00 €
+    expenses:kinder:betreuung:kind-a             290,00 €
+    expenses:kinder:betreuung:kind-b           330,00 €
+
+2026-09-03 Demo ETF savings
+    assets:scalable:etf                       1 200,00 €
+    assets:c24:joint

@@ -1,0 +1,576 @@
+; 2025 — opening balances + monthly household flow (all amounts fictional)
+
+2025-01-01 Opening balances (demo)
+    assets:c24:joint                     12 000,00 €
+    assets:c24:person-a                          3 500,00 €
+    assets:c24:haushalt                     800,00 €
+    assets:c24:freelancer                     600,00 €
+    assets:n26:joint                          450,00 €
+    assets:n26:person-a                            320,00 €
+    assets:n26:person-b                         280,00 €
+    assets:comdirect:joint                  1 800,00 €
+    assets:cash                               100,00 €
+    assets:raisin                           3 200,00 €
+    assets:scalable:etf                    38 000,00 €
+    assets:bitpanda                         5 500,00 €
+    assets:traderepublic                    4 200,00 €
+    assets:oskar:kind-a                            750,00 €
+    assets:oskar:kind-b                        2 800,00 €
+    assets:crypto:bitbox:btc              0,15000000 BTC
+    assets:crypto:bitvavo:eur               1 200,00 €
+    assets:crypto:bitvavo:ETH               1,00000000 ETH
+    assets:crypto:bitvavo:SOL              18,00000000 SOL
+    assets:crypto:bitvavo:LINK             80,00000000 LINK
+    assets:crypto:exodus:TON              500,00000000 TON
+    assets:immobilien:wohnung:kaufpreis   380 000,00 €
+    assets:haushalt:kaution                 2 800,00 €
+    liabilities:kredit:wohnung            -320 000,00 €
+    liabilities:kueche:mescher               -3 600,00 €
+    liabilities:macbook pro                    -180,00 €
+    equity:opening-balances
+
+2025-01-28 Demo salary person B
+    assets:c24:joint                        2 800,00 €
+    income:gehalt:person-b
+
+2025-01-24 Demo salary person A
+    assets:c24:joint                        3 200,00 €
+    income:gehalt:person-a
+
+2025-01-04 Demo kindergeld
+    assets:c24:joint                          450,00 €
+    income:kindergeld
+
+2025-01-02 Demo rent
+    assets:c24:joint                       -1 200,00 €
+    expenses:wohnen:miete                   1 200,00 €
+
+2025-01-05 Demo groceries
+    assets:c24:joint                         -520,00 €
+    expenses:essen:lebensmittel               520,00 €
+
+2025-01-06 Demo restaurant
+    assets:c24:joint                          -85,00 €
+    expenses:essen:restaurant                  85,00 €
+
+2025-01-08 Demo childcare kind A
+    assets:c24:joint                         -280,00 €
+    expenses:kinder:betreuung:kind-a             280,00 €
+
+2025-01-09 Demo childcare kind B
+    assets:c24:joint                         -320,00 €
+    expenses:kinder:betreuung:kind-b           320,00 €
+
+2025-01-10 Demo fuel
+    assets:c24:joint                          -55,00 €
+    expenses:transport:auto:tankstelle         55,00 €
+
+2025-01-11 Demo public transport
+    assets:c24:joint                          -38,00 €
+    expenses:transport:öpnv                    38,00 €
+
+2025-01-12 Demo utilities
+    assets:c24:joint                          -72,00 €
+    expenses:haushalt:strom                    72,00 €
+
+2025-01-13 Demo internet
+    assets:c24:joint                          -35,00 €
+    expenses:kommunikation:internet            35,00 €
+
+2025-01-14 Demo YouTube Premium
+    assets:c24:joint                          -20,00 €
+    expenses:abos:youtube premium              20,00 €
+
+2025-01-15 Demo freelance income
+    assets:c24:freelancer                     900,00 €
+    income:betriebseinnahmen
+
+2025-01-18 Demo ETF savings
+    assets:scalable:etf                       1 000,00 €
+    assets:c24:joint
+
+2025-01-20 Demo raisin transfer
+    assets:raisin                             400,00 €
+    assets:c24:joint
+
+2025-02-28 Demo salary person B
+    assets:c24:joint                        2 800,00 €
+    income:gehalt:person-b
+
+2025-02-24 Demo salary person A
+    assets:c24:joint                        3 200,00 €
+    income:gehalt:person-a
+
+2025-02-04 Demo kindergeld
+    assets:c24:joint                          450,00 €
+    income:kindergeld
+
+2025-02-02 Demo rent
+    assets:c24:joint                       -1 200,00 €
+    expenses:wohnen:miete                   1 200,00 €
+
+2025-02-05 Demo groceries
+    assets:c24:joint                         -480,00 €
+    expenses:essen:lebensmittel               480,00 €
+
+2025-02-07 Demo restaurant
+    assets:c24:joint                         -120,00 €
+    expenses:essen:restaurant                 120,00 €
+
+2025-02-08 Demo childcare
+    assets:c24:joint                         -600,00 €
+    expenses:kinder:betreuung:kind-a             280,00 €
+    expenses:kinder:betreuung:kind-b           320,00 €
+
+2025-02-10 Demo transport
+    assets:c24:joint                          -93,00 €
+    expenses:transport:auto:tankstelle         55,00 €
+    expenses:transport:öpnv                    38,00 €
+
+2025-02-12 Demo leisure
+    assets:c24:joint                         -140,00 €
+    expenses:freizeit:person-b                   70,00 €
+    expenses:freizeit:person-a                      70,00 €
+
+2025-02-15 Demo hygiene
+    assets:c24:joint                          -58,00 €
+    expenses:hygiene                           58,00 €
+
+2025-02-18 Demo ETF savings
+    assets:scalable:etf                       1 000,00 €
+    assets:c24:joint
+
+2025-03-28 Demo salary person B
+    assets:c24:joint                        2 800,00 €
+    income:gehalt:person-b
+
+2025-03-24 Demo salary person A
+    assets:c24:joint                        3 200,00 €
+    income:gehalt:person-a
+
+2025-03-04 Demo kindergeld
+    assets:c24:joint                          450,00 €
+    income:kindergeld
+
+2025-03-02 Demo rent
+    assets:c24:joint                       -1 200,00 €
+    expenses:wohnen:miete                   1 200,00 €
+
+2025-03-05 Demo groceries
+    assets:c24:joint                         -510,00 €
+    expenses:essen:lebensmittel               510,00 €
+
+2025-03-08 Demo restaurant
+    assets:c24:joint                          -95,00 €
+    expenses:essen:restaurant                  95,00 €
+
+2025-03-10 Demo childcare
+    assets:c24:joint                         -600,00 €
+    expenses:kinder:betreuung:kind-a             280,00 €
+    expenses:kinder:betreuung:kind-b           320,00 €
+
+2025-03-12 Demo transport
+    assets:c24:joint                          -93,00 €
+    expenses:transport:auto:tankstelle         55,00 €
+    expenses:transport:öpnv                    38,00 €
+
+2025-03-15 Demo health
+    assets:c24:joint                          -45,00 €
+    expenses:gesundheit:medikamente            45,00 €
+
+2025-03-18 Demo ETF savings
+    assets:scalable:etf                       1 000,00 €
+    assets:c24:joint
+
+2025-03-22 Demo buy BTC
+    assets:crypto:bitbox:btc              0,02000000 BTC @ 45 200,00 €
+    assets:c24:joint                         -904,00 €
+
+2025-04-28 Demo salary person B
+    assets:c24:joint                        2 800,00 €
+    income:gehalt:person-b
+
+2025-04-24 Demo salary person A
+    assets:c24:joint                        3 200,00 €
+    income:gehalt:person-a
+
+2025-04-04 Demo kindergeld
+    assets:c24:joint                          450,00 €
+    income:kindergeld
+
+2025-04-02 Demo rent
+    assets:c24:joint                       -1 200,00 €
+    expenses:wohnen:miete                   1 200,00 €
+
+2025-04-05 Demo groceries
+    assets:c24:joint                         -530,00 €
+    expenses:essen:lebensmittel               530,00 €
+
+2025-04-08 Demo restaurant
+    assets:c24:joint                         -110,00 €
+    expenses:essen:restaurant                 110,00 €
+
+2025-04-10 Demo childcare
+    assets:c24:joint                         -600,00 €
+    expenses:kinder:betreuung:kind-a             280,00 €
+    expenses:kinder:betreuung:kind-b           320,00 €
+
+2025-04-12 Demo transport
+    assets:c24:joint                          -93,00 €
+    expenses:transport:auto:tankstelle         55,00 €
+    expenses:transport:öpnv                    38,00 €
+
+2025-04-15 Demo holiday
+    assets:c24:joint                       -1 800,00 €
+    expenses:urlaub                         1 800,00 €
+
+2025-04-18 Demo ETF savings
+    assets:scalable:etf                       1 000,00 €
+    assets:c24:joint
+
+2025-05-28 Demo salary person B
+    assets:c24:joint                        2 800,00 €
+    income:gehalt:person-b
+
+2025-05-24 Demo salary person A
+    assets:c24:joint                        3 200,00 €
+    income:gehalt:person-a
+
+2025-05-04 Demo kindergeld
+    assets:c24:joint                          450,00 €
+    income:kindergeld
+
+2025-05-02 Demo rent
+    assets:c24:joint                       -1 200,00 €
+    expenses:wohnen:miete                   1 200,00 €
+
+2025-05-05 Demo groceries
+    assets:c24:joint                         -500,00 €
+    expenses:essen:lebensmittel               500,00 €
+
+2025-05-08 Demo restaurant
+    assets:c24:joint                          -90,00 €
+    expenses:essen:restaurant                  90,00 €
+
+2025-05-10 Demo childcare
+    assets:c24:joint                         -600,00 €
+    expenses:kinder:betreuung:kind-a             280,00 €
+    expenses:kinder:betreuung:kind-b           320,00 €
+
+2025-05-12 Demo transport
+    assets:c24:joint                          -93,00 €
+    expenses:transport:auto:tankstelle         55,00 €
+    expenses:transport:öpnv                    38,00 €
+
+2025-05-15 Demo freelance
+    assets:c24:freelancer                     750,00 €
+    income:betriebseinnahmen
+
+2025-05-18 Demo ETF savings
+    assets:scalable:etf                       1 000,00 €
+    assets:c24:joint
+
+2025-05-31 ETH staking reward (demo)
+    assets:crypto:bitvavo:ETH               0,01500000 ETH
+    income:crypto:staking:rewards
+
+2025-06-28 Demo salary person B
+    assets:c24:joint                        2 800,00 €
+    income:gehalt:person-b
+
+2025-06-24 Demo salary person A
+    assets:c24:joint                        3 200,00 €
+    income:gehalt:person-a
+
+2025-06-04 Demo kindergeld
+    assets:c24:joint                          450,00 €
+    income:kindergeld
+
+2025-06-02 Demo rent
+    assets:c24:joint                       -1 200,00 €
+    expenses:wohnen:miete                   1 200,00 €
+
+2025-06-05 Demo groceries
+    assets:c24:joint                         -515,00 €
+    expenses:essen:lebensmittel               515,00 €
+
+2025-06-08 Demo restaurant
+    assets:c24:joint                         -105,00 €
+    expenses:essen:restaurant                 105,00 €
+
+2025-06-10 Demo childcare
+    assets:c24:joint                         -600,00 €
+    expenses:kinder:betreuung:kind-a             280,00 €
+    expenses:kinder:betreuung:kind-b           320,00 €
+
+2025-06-12 Demo transport
+    assets:c24:joint                          -93,00 €
+    expenses:transport:auto:tankstelle         55,00 €
+    expenses:transport:öpnv                    38,00 €
+
+2025-06-15 Demo household
+    assets:c24:joint                         -120,00 €
+    expenses:haushalt:reinigung                70,00 €
+    expenses:haushalt:gez                      50,00 €
+
+2025-06-18 Demo ETF savings
+    assets:scalable:etf                       1 000,00 €
+    assets:c24:joint
+
+2025-07-28 Demo salary person B
+    assets:c24:joint                        2 800,00 €
+    income:gehalt:person-b
+
+2025-07-24 Demo salary person A
+    assets:c24:joint                        3 200,00 €
+    income:gehalt:person-a
+
+2025-07-04 Demo kindergeld
+    assets:c24:joint                          450,00 €
+    income:kindergeld
+
+2025-07-02 Demo rent
+    assets:c24:joint                       -1 200,00 €
+    expenses:wohnen:miete                   1 200,00 €
+
+2025-07-05 Demo groceries
+    assets:c24:joint                         -505,00 €
+    expenses:essen:lebensmittel               505,00 €
+
+2025-07-08 Demo restaurant
+    assets:c24:joint                         -100,00 €
+    expenses:essen:restaurant                 100,00 €
+
+2025-07-10 Demo childcare
+    assets:c24:joint                         -600,00 €
+    expenses:kinder:betreuung:kind-a             280,00 €
+    expenses:kinder:betreuung:kind-b           320,00 €
+
+2025-07-12 Demo transport
+    assets:c24:joint                          -93,00 €
+    expenses:transport:auto:tankstelle         55,00 €
+    expenses:transport:öpnv                    38,00 €
+
+2025-07-15 Demo kids clothes
+    assets:c24:joint                         -180,00 €
+    expenses:kleider:kinder                   180,00 €
+
+2025-07-18 Demo ETF savings
+    assets:scalable:etf                       1 000,00 €
+    assets:c24:joint
+
+2025-07-31 SOL staking reward (demo)
+    assets:crypto:bitvavo:SOL               0,50000000 SOL
+    income:crypto:staking:rewards
+
+2025-08-28 Demo salary person B
+    assets:c24:joint                        2 800,00 €
+    income:gehalt:person-b
+
+2025-08-24 Demo salary person A
+    assets:c24:joint                        3 200,00 €
+    income:gehalt:person-a
+
+2025-08-04 Demo kindergeld
+    assets:c24:joint                          450,00 €
+    income:kindergeld
+
+2025-08-02 Demo rent
+    assets:c24:joint                       -1 200,00 €
+    expenses:wohnen:miete                   1 200,00 €
+
+2025-08-05 Demo groceries
+    assets:c24:joint                         -525,00 €
+    expenses:essen:lebensmittel               525,00 €
+
+2025-08-08 Demo restaurant
+    assets:c24:joint                          -88,00 €
+    expenses:essen:restaurant                  88,00 €
+
+2025-08-10 Demo childcare
+    assets:c24:joint                         -600,00 €
+    expenses:kinder:betreuung:kind-a             280,00 €
+    expenses:kinder:betreuung:kind-b           320,00 €
+
+2025-08-12 Demo transport
+    assets:c24:joint                          -93,00 €
+    expenses:transport:auto:tankstelle         55,00 €
+    expenses:transport:öpnv                    38,00 €
+
+2025-08-15 Demo mortgage payment
+    liabilities:kredit:wohnung                900,00 €  ; tilgung:1
+    expenses:wohnen:kreditzinsen            1 200,00 €
+    assets:c24:joint                       -2 100,00 €
+
+2025-08-18 Demo ETF savings
+    assets:scalable:etf                       1 000,00 €
+    assets:c24:joint
+
+2025-09-28 Demo salary person B
+    assets:c24:joint                        2 800,00 €
+    income:gehalt:person-b
+
+2025-09-24 Demo salary person A
+    assets:c24:joint                        3 200,00 €
+    income:gehalt:person-a
+
+2025-09-04 Demo kindergeld
+    assets:c24:joint                          450,00 €
+    income:kindergeld
+
+2025-09-02 Demo rent
+    assets:c24:joint                       -1 200,00 €
+    expenses:wohnen:miete                   1 200,00 €
+
+2025-09-05 Demo groceries
+    assets:c24:joint                         -490,00 €
+    expenses:essen:lebensmittel               490,00 €
+
+2025-09-08 Demo restaurant
+    assets:c24:joint                          -92,00 €
+    expenses:essen:restaurant                  92,00 €
+
+2025-09-10 Demo childcare
+    assets:c24:joint                         -600,00 €
+    expenses:kinder:betreuung:kind-a             280,00 €
+    expenses:kinder:betreuung:kind-b           320,00 €
+
+2025-09-12 Demo transport
+    assets:c24:joint                          -93,00 €
+    expenses:transport:auto:tankstelle         55,00 €
+    expenses:transport:öpnv                    38,00 €
+
+2025-09-15 Demo donations
+    assets:c24:joint                           -6,71 €
+    expenses:spende:oss                           1,71 €
+    expenses:spende:signal                        5,00 €
+
+2025-09-18 Demo ETF savings
+    assets:scalable:etf                       1 000,00 €
+    assets:c24:joint
+
+2025-10-28 Demo salary person B
+    assets:c24:joint                        2 800,00 €
+    income:gehalt:person-b
+
+2025-10-24 Demo salary person A
+    assets:c24:joint                        3 200,00 €
+    income:gehalt:person-a
+
+2025-10-04 Demo kindergeld
+    assets:c24:joint                          450,00 €
+    income:kindergeld
+
+2025-10-02 Demo rent
+    assets:c24:joint                       -1 200,00 €
+    expenses:wohnen:miete                   1 200,00 €
+
+2025-10-05 Demo groceries
+    assets:c24:joint                         -510,00 €
+    expenses:essen:lebensmittel               510,00 €
+
+2025-10-08 Demo restaurant
+    assets:c24:joint                         -115,00 €
+    expenses:essen:restaurant                 115,00 €
+
+2025-10-10 Demo childcare
+    assets:c24:joint                         -600,00 €
+    expenses:kinder:betreuung:kind-a             280,00 €
+    expenses:kinder:betreuung:kind-b           320,00 €
+
+2025-10-12 Demo transport
+    assets:c24:joint                          -93,00 €
+    expenses:transport:auto:tankstelle         55,00 €
+    expenses:transport:öpnv                    38,00 €
+
+2025-10-18 Demo ETF savings
+    assets:scalable:etf                       1 000,00 €
+    assets:c24:joint
+
+2025-11-28 Demo salary person B
+    assets:c24:joint                        2 800,00 €
+    income:gehalt:person-b
+
+2025-11-24 Demo salary person A
+    assets:c24:joint                        3 200,00 €
+    income:gehalt:person-a
+
+2025-11-04 Demo kindergeld
+    assets:c24:joint                          450,00 €
+    income:kindergeld
+
+2025-11-02 Demo rent
+    assets:c24:joint                       -1 200,00 €
+    expenses:wohnen:miete                   1 200,00 €
+
+2025-11-05 Demo groceries
+    assets:c24:joint                         -535,00 €
+    expenses:essen:lebensmittel               535,00 €
+
+2025-11-08 Demo restaurant
+    assets:c24:joint                          -98,00 €
+    expenses:essen:restaurant                  98,00 €
+
+2025-11-10 Demo childcare
+    assets:c24:joint                         -600,00 €
+    expenses:kinder:betreuung:kind-a             280,00 €
+    expenses:kinder:betreuung:kind-b           320,00 €
+
+2025-11-12 Demo transport
+    assets:c24:joint                          -93,00 €
+    expenses:transport:auto:tankstelle         55,00 €
+    expenses:transport:öpnv                    38,00 €
+
+2025-11-15 Demo gifts
+    assets:c24:joint                         -250,00 €
+    expenses:kinder:spielzeug                 250,00 €
+
+2025-11-18 Demo ETF savings
+    assets:scalable:etf                       1 000,00 €
+    assets:c24:joint
+
+2025-12-28 Demo salary person B
+    assets:c24:joint                        2 800,00 €
+    income:gehalt:person-b
+
+2025-12-24 Demo salary person A
+    assets:c24:joint                        3 200,00 €
+    income:gehalt:person-a
+
+2025-12-04 Demo kindergeld
+    assets:c24:joint                          450,00 €
+    income:kindergeld
+
+2025-12-02 Demo rent
+    assets:c24:joint                       -1 200,00 €
+    expenses:wohnen:miete                   1 200,00 €
+
+2025-12-05 Demo groceries
+    assets:c24:joint                         -560,00 €
+    expenses:essen:lebensmittel               560,00 €
+
+2025-12-08 Demo restaurant
+    assets:c24:joint                         -130,00 €
+    expenses:essen:restaurant                 130,00 €
+
+2025-12-10 Demo childcare
+    assets:c24:joint                         -600,00 €
+    expenses:kinder:betreuung:kind-a             280,00 €
+    expenses:kinder:betreuung:kind-b           320,00 €
+
+2025-12-12 Demo transport
+    assets:c24:joint                          -93,00 €
+    expenses:transport:auto:tankstelle         55,00 €
+    expenses:transport:öpnv                    38,00 €
+
+2025-12-15 Demo year-end bonus
+    assets:c24:joint                        1 500,00 €
+    income:sonstiges
+
+2025-12-18 Demo ETF savings
+    assets:scalable:etf                       1 500,00 €
+    assets:c24:joint
+
+2025-12-31 ETH staking reward (demo)
+    assets:crypto:bitvavo:ETH               0,01800000 ETH
+    income:crypto:staking:rewards

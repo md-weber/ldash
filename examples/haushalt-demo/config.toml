@@ -1,0 +1,82 @@
+# ldash config for haushalt-demo
+# All amounts in the journal are fictional.
+
+journal = "examples/haushalt-demo/all.journal"
+default_tab = "dashboard"
+
+liquid_accounts = [
+  "assets:c24:freelancer",
+  "assets:c24:haushalt",
+  "assets:c24:joint",
+  "assets:c24:person-a",
+  "assets:n26:person-b",
+  "assets:n26:person-a",
+  "assets:n26:joint",
+  "assets:comdirect:joint",
+  "assets:cash",
+  "assets:raisin",
+]
+
+[theme]
+preset = "dark"
+
+[colors.income]
+gehalt = "green"
+kindergeld = "magenta"
+betriebseinnahmen = "cyan"
+
+[colors.expenses]
+"wohnen:miete" = "blue"
+essen = "yellow"
+kinder = "magenta"
+betriebsausgaben = "cyan"
+sonstiges = "darkgray"
+unknown = "darkgray"
+haushalt = "#BBFFCC"
+abos = "red"
+
+[budgets]
+"expenses:wohnen:miete" = 1220.0
+"expenses:Freizeit" = 200.0
+"expenses:transport" = 150.0
+"expenses:kinder:betreuung" = 620.0
+"expenses:essen:restaurant" = 150.0
+"expenses:essen:lebensmittel" = 700.0
+
+[[goals]]
+name = "ETF Portfolio 2036"
+target = 120000.0
+account = "assets:scalable:etf"
+
+[[goals]]
+name = "BTC Portfolio 2036"
+target = 50000.0
+account = "assets:crypto:bitbox"
+
+[[goals]]
+name = "Notgroschen"
+target = 10000.0
+account = "assets:raisin"
+
+[price_fetch]
+currency = "eur"
+
+[[price_fetch.tokens]]
+symbol = "BTC"
+id = "bitcoin"
+
+[[price_fetch.tokens]]
+symbol = "SOL"
+id = "solana"
+
+[[price_fetch.tokens]]
+symbol = "ETH"
+id = "ethereum"
+
+[[price_fetch.tokens]]
+symbol = "LINK"
+id = "chainlink"
+
+[[price_fetch.tokens]]
+symbol = "TON"
+id = "the-open-network"

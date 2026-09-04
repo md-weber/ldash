@@ -1,0 +1,25 @@
+; ldash demo journal — fake numbers, same account layout as a German household ledger
+; Run: ldash -f examples/haushalt-demo/all.journal -c examples/haushalt-demo/config.toml
+
+include accounts.journal
+
+alias tanken = expenses:transport:auto:tankstelle
+alias c24f = assets:c24:freelancer
+alias c24j = assets:c24:joint
+alias c24h = assets:c24:haushalt
+alias btc_vault = assets:crypto:bitbox:btc
+alias bitvavo_btc = assets:crypto:bitvavo:btc
+alias bitvavo_eur = assets:crypto:bitvavo:eur
+alias okind-b = assets:oskar:kind-b
+alias okind-a = assets:oskar:kind-a
+alias auto = expenses:transport:auto
+alias öffis = expenses:transport:öpnv
+
+include prices.journal
+include kredit_wohnung/kredit_forecast.journal
+include forecast.journal
+include 2025.journal
+include 2026.journal
+include 2026-crypto.journal
+include recurring.journal
+include kids.journal

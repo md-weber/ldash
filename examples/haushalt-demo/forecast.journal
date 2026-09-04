@@ -1,0 +1,29 @@
+; Income forecast (fictional amounts)
+
+~ monthly from 2026-01-28  * Demo person B salary forecast
+    assets:c24:joint                        2 850,00 €
+    income:gehalt:person-b
+
+~ monthly from 2026-01-24 to 2026-07-24  * Demo person A salary forecast (H1)
+    assets:c24:joint                        3 250,00 €
+    income:gehalt:person-a
+
+~ monthly from 2026-08-24  * Demo person A salary forecast (H2 raise)
+    assets:c24:joint                        3 350,00 €
+    income:gehalt:person-a
+
+~ monthly from 2026-02-04  * Demo kindergeld forecast
+    assets:c24:joint                          450,00 €
+    income:kindergeld
+
+~ 2026-10-05  Demo kitchen loan rate 4
+    liabilities:kueche:mescher                900,00 €  ; tilgung:1
+    assets:raisin
+
+~ 2026-11-05  Demo kitchen loan rate 5
+    liabilities:kueche:mescher                900,00 €  ; tilgung:1
+    assets:raisin
+
+~ 2026-12-05  Demo kitchen loan rate 6
+    liabilities:kueche:mescher                900,00 €  ; tilgung:1
+    assets:raisin

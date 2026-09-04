@@ -6,9 +6,13 @@ Built with [Ratatui](https://ratatui.rs) and Rust.
 
 ## Screenshots
 
-| Portfolio | Accounts | Monthly |
+| Dashboard | Accounts | Monthly |
 |:---------:|:--------:|:-------:|
-| ![Portfolio tab](screenshots/portfolio.png) | ![Accounts tab](screenshots/accounts.png) | ![Monthly tab](screenshots/monthly.png) |
+| ![Dashboard tab](screenshots/dashboard.png) | ![Accounts tab](screenshots/accounts.png) | ![Monthly tab](screenshots/monthly.png) |
+
+| Portfolio | Register |
+|:---------:|:--------:|
+| ![Portfolio tab](screenshots/portfolio.png) | ![Register tab](screenshots/register.png) |
 
 ## Features
 
@@ -64,6 +68,9 @@ ldash
 
 # Or run from a directory containing all.journal
 cd ~/Finance && ldash
+
+# Or try the anonymized demo journal (fake numbers)
+ldash -f examples/haushalt-demo/all.journal -c examples/haushalt-demo/config.toml
 ```
 
 ## Keybindings
@@ -76,10 +83,10 @@ cd ~/Finance && ldash
 | `PgUp` / `PgDn` | Page up / down |
 | `Home` / `End` | Jump to first / last row |
 | `←` `h` / `→` `l` | Month (Dashboard, Monthly, Register) / net worth range (Accounts) / chart range (Portfolio) |
-| `G` | Current month (Dashboard) / jump to latest entry (Monthly) |
+| `G` | Current month (Dashboard) / jump to latest entry (Monthly) / last transaction (Register) |
+| `gg` | First transaction (Register) |
 | `y` / `Y` | Previous / next year (Monthly tab) |
-| `G` | Jump to latest month (Monthly tab) |
-| `i` | Toggle income / expense focus (Monthly tab) |
+| `i` | Toggle income / expense focus (Monthly) / assets / liabilities (Accounts) |
 | `p` | Payee analytics (Monthly tab) |
 | `C` | Year-over-year chart (Monthly tab) |
 | `F` | Current-month forecast remainder (Monthly tab) |

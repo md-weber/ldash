@@ -7,6 +7,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [1.6.0] - 2026-09-04
+
 ### Added
 
 - **Dashboard tab** — Personal finance overview (`1` in the tab bar):
@@ -15,12 +17,29 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   chart for up to five accounts, and YTD totals. Uses hledger `--forecast`
   periodic rules. Month navigation via `h`/`l`. Opens by default
   (`default_tab = "dashboard"`).
+- **Register all-time drill** — Enter from Accounts loads full register
+  history for that account (newest first). Enter from Monthly keeps the
+  month scope.
+- **`gg` / `G` on Register** — Jump to first / last transaction
+  (vim-style).
+- **Accounts `i` toggle** — Switch assets/liabilities focus (same pattern
+  as Monthly income/expense focus).
+- **`examples/haushalt-demo/`** — Anonymized sample journal with fake
+  numbers that exercises Dashboard, Portfolio, Accounts, liquid cash,
+  forecast rules, and budgets.
 
 ### Changed
 
 - Tab number keys shifted by one: `1` Dashboard, `2` Accounts, `3` Monthly,
   `4` Register, `5` Portfolio (when visible).
 - Default startup tab is now **Dashboard** (was Accounts).
+- README screenshots updated for Dashboard and Register.
+
+### Fixed
+
+- **Esc from drilled Register** — Enter from Accounts or Monthly no longer
+  traps you on Register; Esc returns to the originating tab. Esc still
+  quits when Register was opened directly (`3` or Tab).
 
 ## [1.5.0] - 2026-08-20
 
@@ -181,7 +200,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Forgejo CI workflow (lint, build, test)
 - Forgejo release workflow with cross-compilation via `cargo-zigbuild`
 
-[Unreleased]: https://github.com/md-weber/ldash/compare/v1.5.0...HEAD
+[Unreleased]: https://github.com/md-weber/ldash/compare/v1.6.0...HEAD
+[1.6.0]: https://github.com/md-weber/ldash/compare/v1.5.0...v1.6.0
 [1.5.0]: https://github.com/md-weber/ldash/compare/v1.4.0...v1.5.0
 [1.4.0]: https://github.com/md-weber/ldash/compare/v1.3.1...v1.4.0
 [1.3.1]: https://github.com/md-weber/ldash/compare/v1.3.0...v1.3.1

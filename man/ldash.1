@@ -1,4 +1,4 @@
-.TH LDASH 1 "August 2026" "ldash 1.5.0" "User Commands"
+.TH LDASH 1 "September 2026" "ldash 1.6.0" "User Commands"
 .SH NAME
 ldash \- terminal dashboard for hledger journals
 .SH SYNOPSIS
@@ -10,11 +10,20 @@ ldash \- terminal dashboard for hledger journals
 is a real-time terminal dashboard (TUI) for
 .BR hledger (1)
 journals.
-It renders four interactive tabs:
+It renders five interactive tabs:
+.TP
+.B Dashboard
+Forecast-aware personal finance overview: monthly income/expense breakdown
+with recurring split, comparison bar chart, top expense categories, liquid
+cash line chart, and YTD totals. Month navigation via
+.BR h
+and
+.BR l .
+Shown by default.
 .TP
 .B Accounts
 All asset accounts with EUR valuations and visual bar indicators.
-Enter opens the Register tab for that account and the current month.
+Enter opens the Register tab for that account (all-time history).
 Savings goals are shown as progress bars.
 .TP
 .B Monthly
@@ -23,7 +32,7 @@ savings rate gauge, year-over-year comparison, and category sparklines.
 Enter on a category opens Register already filtered to that account.
 .TP
 .B Register
-Postings for one month, grouped by transaction.
+Postings grouped by transaction, newest first.
 The query bar filters by description.
 Enter opens the selected transaction's postings.
 .TP
@@ -60,6 +69,7 @@ Default:
 .B \-\-tab " \fITAB\fR"
 Start on the specified tab.
 Valid values:
+.BR dashboard ,
 .BR portfolio ,
 .BR accounts ,
 .BR monthly ,
@@ -106,9 +116,10 @@ Ignored when the file watcher detects a change.
 .TP
 .B default_tab
 Tab shown on startup:
-.BR portfolio ,
-.BR accounts
+.BR dashboard
 (default),
+.BR portfolio ,
+.BR accounts ,
 .BR monthly ,
 or
 .BR register .
@@ -217,19 +228,21 @@ This man page.
 .TS
 l l.
 \fBKey\fR	\fBAction\fR
-1 / 2 / 3 / 4	Accounts / Monthly / Register / Portfolio
+1 / 2 / 3 / 4 / 5	Dashboard / Accounts / Monthly / Register / Portfolio
 Tab / Shift-Tab	Next / previous tab
 \(ua k / \(da j	Scroll up / down; select row
 PgUp / PgDn	Page up / down
 Home / End	Jump to first / last row
-\(<- h / \(-> l	Month (Monthly, Register); net worth range (Accounts); chart range (Portfolio)
+\(<- h / \(-> l	Month (Dashboard, Monthly, Register); net worth range (Accounts); chart range (Portfolio)
+G	Current month (Dashboard); latest entry (Monthly); last transaction (Register)
+gg	First transaction (Register)
 Enter	Open Register from account/category; open transaction legs (Register)
-Esc	Back / close detail or filter
+Esc	Back to originating tab from drilled Register; close detail; quit on direct Register
 s	Toggle portfolio chart stacked / unstacked
 c	Toggle expense category colors
 r	Force data refresh
 /	Register query bar (description filter)
-i	Toggle income / expense focus (Monthly tab)
+i	Toggle income/expense focus (Monthly); assets/liabilities (Accounts)
 p	Payee analytics (Monthly tab)
 C	Year-over-year chart (Monthly tab)
 F	Current-month forecast remainder (Monthly tab)
@@ -270,6 +283,11 @@ ldash \-\-check
 Try the bundled sample journal:
 .EX
 ldash \-\-file "$(cargo locate-project \-\-message-format plain | xargs dirname)/examples/sample.journal"
+.EE
+.TP
+Try the anonymized household demo (fake numbers):
+.EX
+ldash \-\-file examples/haushalt-demo/all.journal \-\-config examples/haushalt-demo/config.toml
 .EE
 .SH BUGS
 Report bugs at <https://github.com/md-weber/ldash/issues>.

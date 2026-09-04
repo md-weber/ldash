@@ -1,0 +1,52 @@
+; 2026 crypto demo — transfers, trades, fees (fictional)
+
+2026-01-10 Demo BTC vault → Bitvavo
+    assets:crypto:bitvavo:btc             0,05000000 BTC
+    assets:crypto:bitbox:btc             -0,05000000 BTC
+
+2026-01-12 Demo BTC partial sell
+    assets:crypto:bitvavo:btc            -0,02000000 BTC @ 78 500,00 €
+    assets:crypto:bitvavo:eur                         1 566,08 €
+    expenses:crypto:fees:eur                              3,92 €
+
+2026-02-08 Demo buy SOL
+    assets:crypto:bitvavo:SOL             5,00000000 SOL @ 138,00 €
+    assets:crypto:bitvavo:eur                          -691,73 €
+    expenses:crypto:fees:eur                               1,73 €
+
+2026-03-05 Demo buy LINK
+    assets:crypto:bitvavo:LINK           40,00000000 LINK @ 15,40 €
+    assets:crypto:bitvavo:eur                          -617,54 €
+    expenses:crypto:fees:eur                               1,54 €
+
+2026-04-14 Demo BTC sell
+    assets:crypto:bitvavo:btc            -0,01500000 BTC @ 69 500,00 €
+    assets:crypto:bitvavo:eur                         1 039,89 €
+    expenses:crypto:fees:eur                              2,61 €
+
+2026-05-20 Demo buy ETH
+    assets:crypto:bitvavo:ETH             0,50000000 ETH @ 2 610,00 €
+    assets:crypto:bitvavo:eur                        -1 308,26 €
+    expenses:crypto:fees:eur                               3,26 €
+
+2026-06-18 Demo TON transfer to exodus
+    assets:crypto:exodus:TON            200,00000000 TON @ 3,80 €
+    assets:crypto:bitvavo:eur                          -762,00 €
+    expenses:crypto:fees:eur                               2,00 €
+
+2026-07-22 Demo SOL staking reward
+    assets:crypto:bitvavo:SOL             0,80000000 SOL
+    income:crypto:staking:rewards
+
+2026-08-05 Demo BTC DCA
+    assets:crypto:bitbox:btc              0,01000000 BTC @ 64 800,00 €
+    assets:c24:joint                                   -648,00 €
+
+2026-08-30 Demo ETH staking reward
+    assets:crypto:bitvavo:ETH             0,01200000 ETH
+    income:crypto:staking:rewards
+
+2026-09-01 Demo small BTC sell
+    assets:crypto:bitvavo:btc            -0,00500000 BTC @ 62 500,00 €
+    assets:crypto:bitvavo:eur                           311,72 €
+    expenses:crypto:fees:eur                                0,78 €

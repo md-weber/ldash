@@ -1,0 +1,105 @@
+; Recurring expense forecast (fictional — drives dashboard recurring split)
+
+~ monthly from 2026-02-02 to 2026-11-02  Demo kind A childcare city
+    assets:c24:joint                         -290,00 €
+    expenses:kinder:betreuung:kind-a
+
+~ monthly from 2026-02-05 to 2026-11-02  Demo kind A childcare subsidy
+    assets:c24:joint                         -165,00 €
+    expenses:kinder:betreuung:kind-a
+
+~ monthly from 2026-02-05  Demo kind A savings plan
+    assets:c24:joint                          -40,00 €
+    assets:oskar:kind-a
+
+~ monthly from 2026-02-05  Demo kind B savings plan
+    assets:c24:joint                          -40,00 €
+    assets:oskar:kind-b
+
+~ monthly from 2026-02-06 to 2026-09-30  Demo kind B church childcare
+    assets:c24:joint                         -330,00 €
+    expenses:kinder:betreuung:kind-b
+
+~ monthly from 2026-02-06 to 2027-01-06  Demo YouTube Premium
+    assets:c24:joint                          -20,00 €
+    expenses:abos:youtube premium
+
+~ monthly from 2026-02-17 to 2027-01-17  Demo mobile contract
+    assets:c24:joint                           -9,00 €
+    expenses:kommunikation:handy
+
+~ monthly from 2026-03-15  Demo music course
+    assets:c24:joint                          -32,00 €
+    expenses:kinder:kurs:musik
+
+~ monthly from 2026-02-17  Demo Amazon Prime
+    assets:c24:joint                           -9,00 €
+    expenses:abos:amazon prime
+
+~ monthly from 2026-01-02 to 2026-06-28  Demo rent (old lease)
+    assets:c24:joint                        -1 220,00 €
+    expenses:wohnen:miete
+
+~ monthly from 2026-03-15 to 2027-01-15  Demo electricity
+    assets:c24:joint                          -86,00 €
+    expenses:haushalt:strom
+
+~ monthly from 2026-03-27  Demo internet
+    assets:c24:joint                          -38,00 €
+    expenses:kommunikation:internet
+
+~ monthly from 2026-03-01  Demo dining out budget
+    assets:c24:joint                         -150,00 €
+    expenses:essen:restaurant
+
+~ monthly from 2026-03-01  Demo groceries budget
+    assets:c24:joint                         -700,00 €
+    expenses:essen:lebensmittel
+
+~ monthly from 2026-02-01  Demo leisure person B
+    assets:c24:joint                         -100,00 €
+    expenses:freizeit:person-b
+
+~ monthly from 2026-03-01  Demo drugstore
+    assets:c24:joint                          -60,00 €
+    expenses:hygiene
+
+~ monthly from 2026-03-01  Demo cleaning help
+    assets:c24:joint                          -70,00 €
+    expenses:haushalt:reinigung
+
+~ monthly from 2026-02-01  Demo OSS donation
+    assets:c24:joint                           -1,71 €
+    expenses:spende:oss
+
+~ monthly from 2026-02-01  Demo Signal donation
+    assets:c24:joint                           -5,00 €
+    expenses:spende:signal
+
+~ monthly from 2026-02-01  Demo server hosting
+    assets:c24:joint                           -6,27 €
+    expenses:betriebsausgaben:website
+
+~ monthly from 2026-02-01  Demo fuel budget
+    assets:c24:joint                          -60,00 €
+    expenses:transport:auto:tankstelle
+
+~ monthly from 2026-02-01  Demo public transport budget
+    assets:c24:joint                          -40,00 €
+    expenses:transport:öpnv
+
+~ monthly from 2026-02-01  Demo medication budget
+    assets:c24:joint                          -15,00 €
+    expenses:gesundheit:medikamente
+
+~ monthly from 2026-08-03  Demo wohngeld (owner association)
+    assets:c24:joint                         -580,00 €
+    expenses:wohnen:wohngeld
+
+~ monthly from 2026-11-02  Demo kind B childcare (reduced)
+    assets:c24:joint                          -95,00 €
+    expenses:kinder:betreuung:kind-b
+
+~ monthly from 2026-11-02  Demo kind A childcare (increased)
+    assets:c24:joint                         -378,00 €
+    expenses:kinder:betreuung:kind-a
