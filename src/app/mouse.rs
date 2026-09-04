@@ -68,7 +68,20 @@ impl App {
                     self.on_table_click(col, row);
                 }
             }
-            Tab::Accounts | Tab::Portfolio | Tab::Register => {
+            Tab::Accounts => {
+                if rect_contains(self.geometry.liability_table_area, col, row) {
+                    if !self.liability_focus {
+                        self.liability_focus = true;
+                    }
+                    self.on_table_click(col, row);
+                } else if rect_contains(self.geometry.table_area, col, row) {
+                    if self.liability_focus {
+                        self.liability_focus = false;
+                    }
+                    self.on_table_click(col, row);
+                }
+            }
+            Tab::Portfolio | Tab::Register => {
                 if rect_contains(self.geometry.table_area, col, row) {
                     self.on_table_click(col, row);
                 }
@@ -82,7 +95,14 @@ impl App {
                 MonthlyFocus::Income => self.geometry.income_table_area,
                 MonthlyFocus::Expenses => self.geometry.expense_table_area,
             },
-            Tab::Accounts | Tab::Portfolio | Tab::Register => self.geometry.table_area,
+            Tab::Accounts => {
+                if self.liability_focus {
+                    self.geometry.liability_table_area
+                } else {
+                    self.geometry.table_area
+                }
+            }
+            Tab::Portfolio | Tab::Register => self.geometry.table_area,
         };
         // border (1) + header row (1) + header bottom_margin (1) = 3 rows before data
         let content_y = area.y + 3;
@@ -92,11 +112,19 @@ impl App {
         let clicked_idx = (row - content_y) as usize;
         match self.tab {
             Tab::Accounts => {
-                let offset = self.account_state.offset();
-                let abs = clicked_idx + offset;
-                let filtered_len = self.filtered_accounts().len();
-                if abs < filtered_len {
-                    self.account_state.select(Some(abs));
+                if self.liability_focus {
+                    let offset = self.liability_state.offset();
+                    let abs = clicked_idx + offset;
+                    if abs < self.liabilities.len() {
+                        self.liability_state.select(Some(abs));
+                    }
+                } else {
+                    let offset = self.account_state.offset();
+                    let abs = clicked_idx + offset;
+                    let filtered_len = self.filtered_accounts().len();
+                    if abs < filtered_len {
+                        self.account_state.select(Some(abs));
+                    }
                 }
             }
             Tab::Monthly => match self.monthly_focus {

@@ -162,6 +162,7 @@ fn handle_normal_key(app: &mut App, key: KeyEvent) -> Action {
             Tab::Portfolio => {}
         },
         KeyCode::Char('i') if app.tab == Tab::Monthly => app.toggle_monthly_focus(),
+        KeyCode::Char('i') if app.tab == Tab::Accounts => app.toggle_accounts_focus(),
         KeyCode::Char('p') if app.tab == Tab::Monthly => {
             app.payee_view = !app.payee_view;
         }
@@ -252,6 +253,7 @@ fn handle_normal_key(app: &mut App, key: KeyEvent) -> Action {
                         | 'Y'
                         | 'e'
                         | 'P'
+                        | 'i'
                         | '1'
                         | '2'
                         | '3'

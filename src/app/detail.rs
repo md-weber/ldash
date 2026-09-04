@@ -95,4 +95,16 @@ impl App {
         self.account_filter_active = false;
         self.account_state.select(Some(0));
     }
+
+    pub fn toggle_accounts_focus(&mut self) {
+        if self.liabilities.is_empty() {
+            return;
+        }
+        self.liability_focus = !self.liability_focus;
+        if self.liability_focus {
+            self.liability_state.select(Some(0));
+        } else {
+            self.account_state.select(Some(0));
+        }
+    }
 }

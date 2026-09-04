@@ -382,6 +382,7 @@ fn render_accounts_table(f: &mut Frame, app: &mut App, area: Rect, theme: &Theme
         header.push(String::new());
     }
 
+    let assets_focused = !app.liability_focus;
     let table = Table::new(rows, widths)
         .header(
             Row::new(header)
@@ -393,12 +394,16 @@ fn render_accounts_table(f: &mut Frame, app: &mut App, area: Rect, theme: &Theme
         .block(
             Block::default()
                 .title(Span::styled(
-                    " Asset Balances  [Enter drill-down]  [type to filter] ",
+                    " Asset Balances  [i] focus  [Enter drill-down]  [type to filter] ",
                     Style::default().fg(theme.accent).bold(),
                 ))
                 .borders(Borders::ALL)
                 .border_type(BorderType::Rounded)
-                .border_style(Style::default().fg(theme.muted)),
+                .border_style(Style::default().fg(if assets_focused {
+                    theme.accent
+                } else {
+                    theme.muted
+                })),
         );
 
     app.geometry.table_area = table_area;
@@ -493,7 +498,7 @@ fn render_liabilities_table(f: &mut Frame, app: &mut App, area: Rect, theme: &Th
 
     let total_liab: f64 = app.liabilities.iter().map(|b| b.amount).sum();
     let title = format!(
-        " Liabilities  ({})  [↑/↓ navigate]  [Enter drill-down] ",
+        " Liabilities  ({})  [i] focus  [Enter drill-down] ",
         app.config.fmt_amount(total_liab, 2)
     );
 

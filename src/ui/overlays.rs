@@ -53,7 +53,7 @@ pub(super) fn render_help_popup(f: &mut Frame, area: Rect, theme: &Theme) {
         ("§", "Tab-specific"),
         ("y / Y", "Year back / forward  (Monthly)"),
         ("G", "Jump to last entry  (Monthly)"),
-        ("i", "Income/expense focus  (Monthly)"),
+        ("i", "Income/expense focus  (Monthly) · assets/liabilities  (Accounts)"),
         ("p", "Payee analytics  (Monthly)"),
         ("C", "YoY comparison  (Monthly)"),
         ("F", "Current-month forecast  (Monthly)"),
