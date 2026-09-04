@@ -171,10 +171,7 @@ fn parse_liquid_bare_csv(text: &str, currency_symbol: &str) -> Result<LiquidMont
                 .iter()
                 .enumerate()
                 .map(|(idx, &(_, date))| {
-                    (
-                        month_name(date.month() as usize).to_string(),
-                        amounts[idx],
-                    )
+                    (month_name(date.month() as usize).to_string(), amounts[idx])
                 })
                 .collect();
             (name, series)

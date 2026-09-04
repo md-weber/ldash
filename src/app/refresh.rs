@@ -140,10 +140,7 @@ fn split_liquid_tab_data(
             let msg = e.clone();
             (TabData::Err(msg.clone()), TabData::Err(msg))
         }
-        TabData::Ok(v) => (
-            TabData::Ok(v.total),
-            TabData::Ok(v.by_account),
-        ),
+        TabData::Ok(v) => (TabData::Ok(v.total), TabData::Ok(v.by_account)),
     }
 }
 

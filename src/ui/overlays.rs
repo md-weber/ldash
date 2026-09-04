@@ -54,7 +54,10 @@ pub(super) fn render_help_popup(f: &mut Frame, area: Rect, theme: &Theme) {
         ("←h / →l", "Month  (Dashboard, Monthly)"),
         ("y / Y", "Year back / forward  (Monthly)"),
         ("G", "Current month  (Dashboard) · last entry  (Monthly)"),
-        ("i", "Income/expense focus  (Monthly) · assets/liabilities  (Accounts)"),
+        (
+            "i",
+            "Income/expense focus  (Monthly) · assets/liabilities  (Accounts)",
+        ),
         ("p", "Payee analytics  (Monthly)"),
         ("C", "YoY comparison  (Monthly)"),
         ("F", "Current-month forecast  (Monthly)"),
@@ -74,7 +77,10 @@ pub(super) fn render_help_popup(f: &mut Frame, area: Rect, theme: &Theme) {
         ("", ""),
         ("§", "General"),
         ("? / q", "Toggle help / quit"),
-        ("Esc", "Close detail / back (Register via Enter returns to prior tab)"),
+        (
+            "Esc",
+            "Close detail / back (Register via Enter returns to prior tab)",
+        ),
         ("Mouse click", "Select tab / row"),
         ("Scroll wheel", "Scroll table"),
     ];

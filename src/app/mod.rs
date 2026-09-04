@@ -14,8 +14,8 @@ mod fixtures;
 #[cfg(test)]
 mod tests;
 
-pub use types::*;
 pub use dashboard::LiquidAccountChart;
+pub use types::*;
 
 use anyhow::Result;
 use ratatui::widgets::TableState;

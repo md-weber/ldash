@@ -4,7 +4,7 @@ use chrono::{Datelike, Local};
 
 use crate::data::SingleMonth;
 
-use super::{App, CategoryShare, CashOverview, MonthBreakdown, RecurringExpense};
+use super::{App, CashOverview, CategoryShare, MonthBreakdown, RecurringExpense};
 
 #[derive(Debug, Clone)]
 pub struct LiquidAccountChart {
@@ -42,9 +42,7 @@ impl App {
     /// Index of the selected month on the Jan–Dec axis (0–11).
     pub fn selected_month_index(&self) -> Option<usize> {
         let name = self.current_month()?.month_name.as_str();
-        crate::data::MONTH_NAMES
-            .iter()
-            .position(|m| *m == name)
+        crate::data::MONTH_NAMES.iter().position(|m| *m == name)
     }
 
     fn select_calendar_month(&mut self, month: u32) {
@@ -88,10 +86,7 @@ impl App {
         }
 
         let mut ranked: Vec<(String, f64)> = leaves;
-        ranked.sort_by(|a, b| {
-            b.1.partial_cmp(&a.1)
-                .unwrap_or(std::cmp::Ordering::Equal)
-        });
+        ranked.sort_by(|a, b| b.1.partial_cmp(&a.1).unwrap_or(std::cmp::Ordering::Equal));
         ranked.truncate(limit);
 
         ranked
@@ -223,10 +218,7 @@ impl App {
             })
             .collect();
 
-        out.sort_by(|a, b| {
-            b.1.partial_cmp(&a.1)
-                .unwrap_or(std::cmp::Ordering::Equal)
-        });
+        out.sort_by(|a, b| b.1.partial_cmp(&a.1).unwrap_or(std::cmp::Ordering::Equal));
         out
     }
 
@@ -261,9 +253,7 @@ fn find_account_monthly<'a>(
 ) -> Option<&'a [(String, f64)]> {
     by_account
         .iter()
-        .find(|(full, _)| {
-            config.strip_account_prefix(full, &config.assets_account) == short_name
-        })
+        .find(|(full, _)| config.strip_account_prefix(full, &config.assets_account) == short_name)
         .map(|(_, s)| s.as_slice())
 }
 
@@ -279,11 +269,9 @@ fn detect_recurring<'a>(
                 continue;
             }
             let name_lower = name.to_lowercase();
-            let has_child = entries.iter().any(|(other, _)| {
-                other
-                    .to_lowercase()
-                    .starts_with(&format!("{name_lower}:"))
-            });
+            let has_child = entries
+                .iter()
+                .any(|(other, _)| other.to_lowercase().starts_with(&format!("{name_lower}:")));
             if !has_child {
                 appearances.entry(name.as_str()).or_default().push(*amount);
             }
@@ -319,10 +307,7 @@ fn sum_matching(entries: &[(String, f64)], recurring: &[RecurringExpense]) -> f6
     if recurring.is_empty() {
         return 0.0;
     }
-    let keys: HashSet<String> = recurring
-        .iter()
-        .map(|r| r.name.to_lowercase())
-        .collect();
+    let keys: HashSet<String> = recurring.iter().map(|r| r.name.to_lowercase()).collect();
     entries
         .iter()
         .filter(|(name, _)| {
@@ -342,11 +327,9 @@ fn leaf_entries(entries: &[(String, f64)]) -> Vec<(String, f64)> {
                 return false;
             }
             let name_lower = name.to_lowercase();
-            !entries.iter().any(|(other, _)| {
-                other
-                    .to_lowercase()
-                    .starts_with(&format!("{name_lower}:"))
-            })
+            !entries
+                .iter()
+                .any(|(other, _)| other.to_lowercase().starts_with(&format!("{name_lower}:")))
         })
         .map(|(n, a)| (n.clone(), *a))
         .collect()
@@ -434,12 +417,11 @@ mod tests {
         app.jump_to_current_month();
         assert!(app.show_current_month_forecast);
         let cur = crate::data::month_name(Local::now().date_naive().month() as usize);
-        if app
-            .combined_months
-            .iter()
-            .any(|(m, _)| m.month_name == cur)
-        {
-            assert_eq!(app.selected_month_index(), Some(Local::now().date_naive().month() as usize - 1));
+        if app.combined_months.iter().any(|(m, _)| m.month_name == cur) {
+            assert_eq!(
+                app.selected_month_index(),
+                Some(Local::now().date_naive().month() as usize - 1)
+            );
         }
     }
 
@@ -451,11 +433,7 @@ mod tests {
         app.ensure_dashboard_view();
         assert!(app.show_current_month_forecast);
         let cur = crate::data::month_name(Local::now().date_naive().month() as usize);
-        if app
-            .combined_months
-            .iter()
-            .any(|(m, _)| m.month_name == cur)
-        {
+        if app.combined_months.iter().any(|(m, _)| m.month_name == cur) {
             assert_eq!(
                 app.current_month().map(|m| m.month_name.as_str()),
                 Some(cur)

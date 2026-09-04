@@ -7,11 +7,11 @@ use crate::config::Config;
 mod style_macros;
 
 mod accounts;
+mod dashboard;
 mod monthly;
 mod overlays;
 mod portfolio;
 mod register;
-mod dashboard;
 
 pub(crate) use monthly::MONTHLY_GROUP_WIDTH;
 

@@ -1,6 +1,9 @@
 use ratatui::style::Modifier;
 use ratatui::text::Span;
-use ratatui::widgets::{Axis, Bar, BarChart, BarGroup, Block, BorderType, Borders, Chart, Dataset, GraphType, Padding, Paragraph};
+use ratatui::widgets::{
+    Axis, Bar, BarChart, BarGroup, Block, BorderType, Borders, Chart, Dataset, GraphType, Padding,
+    Paragraph,
+};
 use ratatui::{prelude::*, symbols, Frame};
 
 use crate::app::{App, CategoryShare, MonthBreakdown};
@@ -168,12 +171,7 @@ fn render_summary(
     );
 }
 
-fn render_comparison_chart(
-    f: &mut Frame,
-    area: Rect,
-    theme: &Theme,
-    b: &MonthBreakdown,
-) {
+fn render_comparison_chart(f: &mut Frame, area: Rect, theme: &Theme, b: &MonthBreakdown) {
     let spacious = panel_spacious(area);
     let bars = [
         ("Income", b.total_income, theme.positive),
@@ -223,7 +221,11 @@ fn render_comparison_chart(
 
     let mut chart = BarChart::default()
         .style(Style::default().bg(theme.background))
-        .block(panel_block(" Month Overview ".to_string(), theme.accent, theme))
+        .block(panel_block(
+            " Month Overview ".to_string(),
+            theme.accent,
+            theme,
+        ))
         .bar_width(bar_w)
         .bar_gap(bar_gap)
         .group_gap(group_gap);
@@ -246,10 +248,7 @@ fn render_category_breakdown(
     let block = panel_block(" Top 5 Categories ".to_string(), theme.accent, theme);
 
     if categories.is_empty() {
-        f.render_widget(
-            Paragraph::new("No expenses this month").block(block),
-            area,
-        );
+        f.render_widget(Paragraph::new("No expenses this month").block(block), area);
         return;
     }
 
@@ -369,7 +368,9 @@ fn render_braille_donut(
                 spans.push(Span::raw(" "));
             } else {
                 spans.push(Span::styled(
-                    char::from_u32(0x2800 + bits as u32).unwrap_or(' ').to_string(),
+                    char::from_u32(0x2800 + bits as u32)
+                        .unwrap_or(' ')
+                        .to_string(),
                     Style::default().fg(color),
                 ));
             }
@@ -485,10 +486,7 @@ fn render_category_legend(
                     format!("{name:<name_w$}", name = truncate(&c.name, name_w)),
                     Style::default().fg(theme.fg),
                 ),
-                Span::styled(
-                    format!("{:>5.1}%", pct),
-                    Style::default().fg(theme.muted),
-                ),
+                Span::styled(format!("{:>5.1}%", pct), Style::default().fg(theme.muted)),
                 Span::raw("  "),
                 Span::styled(
                     cfg.fmt_amount(c.amount, 0),
@@ -508,10 +506,7 @@ fn render_category_legend(
             ]));
             lines.push(Line::from(vec![
                 Span::raw("   "),
-                Span::styled(
-                    format!("{:>5.1}%", pct),
-                    Style::default().fg(theme.muted),
-                ),
+                Span::styled(format!("{:>5.1}%", pct), Style::default().fg(theme.muted)),
                 Span::raw("  "),
                 Span::styled(
                     cfg.fmt_amount(c.amount, 0),
@@ -638,11 +633,7 @@ fn render_liquid_accounts_chart(
             Dataset::default()
                 .marker(symbols::Marker::Braille)
                 .graph_type(GraphType::Line)
-                .style(
-                    Style::default()
-                        .fg(theme.gold)
-                        .add_modifier(Modifier::DIM),
-                )
+                .style(Style::default().fg(theme.gold).add_modifier(Modifier::DIM))
                 .data(&marker_data),
         );
     }
@@ -669,11 +660,7 @@ fn render_liquid_accounts_chart(
             };
             Span::styled(
                 label,
-                Style::default().fg(if is_selected {
-                    theme.gold
-                } else {
-                    theme.muted
-                }),
+                Style::default().fg(if is_selected { theme.gold } else { theme.muted }),
             )
         })
         .collect();
@@ -715,10 +702,7 @@ fn render_account_chart_legend(
         .map(|(i, (name, _))| {
             Line::from(vec![
                 Span::styled("■ ", Style::default().fg(colors[i % colors.len()])),
-                Span::styled(
-                    truncate(name, name_w),
-                    Style::default().fg(theme.fg),
-                ),
+                Span::styled(truncate(name, name_w), Style::default().fg(theme.fg)),
             ])
         })
         .collect();

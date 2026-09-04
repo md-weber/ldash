@@ -296,7 +296,9 @@ impl App {
     }
 
     pub(super) fn register_select_first_txn(&mut self) {
-        if let Some(j) = (0..self.register_rows.len()).find(|&j| !self.register_rows[j].continuation) {
+        if let Some(j) =
+            (0..self.register_rows.len()).find(|&j| !self.register_rows[j].continuation)
+        {
             self.register_table.select(Some(j));
         }
     }
