@@ -273,6 +273,7 @@ fn load_register_page() {
         month: 1,
         account: None,
         description: None,
+        all_time: false,
     };
     let txns = ldash::data::load_register_page(&path, &query, "EUR").unwrap();
     assert!(

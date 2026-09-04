@@ -135,6 +135,16 @@ fn handle_filter_key(app: &mut App, key: KeyEvent) -> Action {
 }
 
 fn handle_normal_key(app: &mut App, key: KeyEvent) -> Action {
+    if app.tab == Tab::Register && app.register_detail.is_none() {
+        match key.code {
+            KeyCode::Char('g') => {
+                app.register_handle_g();
+                return Action::Continue;
+            }
+            _ => app.register_clear_g_pending(),
+        }
+    }
+
     match key.code {
         KeyCode::Char('q') => return Action::Quit,
         KeyCode::Esc => {
@@ -175,6 +185,7 @@ fn handle_normal_key(app: &mut App, key: KeyEvent) -> Action {
             app.rebuild_combined_months();
         }
         KeyCode::Char('G') if app.tab == Tab::Monthly => app.jump_to_last_entry(),
+        KeyCode::Char('G') if app.tab == Tab::Register => app.scroll_end(),
         KeyCode::Char('/') => {
             if app.tab == Tab::Register {
                 app.register_focus_query = true;

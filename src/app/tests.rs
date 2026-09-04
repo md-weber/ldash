@@ -715,6 +715,7 @@ fn register_enter_opens_transaction_legs_from_memory() {
         month: 1,
         account: None,
         description: None,
+        all_time: false,
     };
     let date = NaiveDate::from_ymd_opt(2026, 1, 15).unwrap();
     let postings = vec![
@@ -762,6 +763,7 @@ fn register_two_txns() -> App {
         month: 1,
         account: None,
         description: None,
+        all_time: false,
     };
     let jan15 = NaiveDate::from_ymd_opt(2026, 1, 15).unwrap();
     let jan20 = NaiveDate::from_ymd_opt(2026, 1, 20).unwrap();
@@ -839,6 +841,39 @@ fn register_end_selects_last_transaction_header() {
 }
 
 #[test]
+fn register_gg_selects_first_transaction_header() {
+    let mut app = register_two_txns();
+    app.scroll_end();
+    assert_eq!(app.register_table.selected(), Some(2));
+
+    app.register_handle_g();
+    assert!(app.register_g_pending);
+    app.register_handle_g();
+    assert!(!app.register_g_pending);
+    assert_eq!(app.register_table.selected(), Some(0));
+    assert!(!app.register_rows[0].continuation);
+}
+
+#[test]
+fn register_g_then_other_key_clears_pending_gg() {
+    let mut app = register_two_txns();
+    app.register_handle_g();
+    assert!(app.register_g_pending);
+    app.register_clear_g_pending();
+    assert!(!app.register_g_pending);
+}
+
+#[test]
+fn register_big_g_selects_last_transaction_header() {
+    let mut app = register_two_txns();
+    app.scroll_end();
+    app.scroll_home();
+    app.scroll_end();
+    assert_eq!(app.register_table.selected(), Some(2));
+    assert!(!app.register_rows[2].continuation);
+}
+
+#[test]
 fn register_click_on_leg_selects_transaction() {
     let mut app = register_two_txns();
     app.register_select_txn_at(1);
@@ -854,6 +889,8 @@ fn drilled_register_esc_returns_to_accounts() {
     app.open_selected_account_in_register();
     assert_eq!(app.tab, Tab::Register);
     assert_eq!(app.register_return_tab, Some(Tab::Accounts));
+    assert!(app.register_query.all_time);
+    assert_eq!(app.register_query.period_label(), "All");
 
     assert!(app.return_from_register());
     assert_eq!(app.tab, Tab::Accounts);
@@ -866,6 +903,7 @@ fn drilled_register_esc_returns_to_monthly() {
     app.open_selected_category_in_register();
     assert_eq!(app.tab, Tab::Register);
     assert_eq!(app.register_return_tab, Some(Tab::Monthly));
+    assert!(!app.register_query.all_time);
 
     assert!(app.return_from_register());
     assert_eq!(app.tab, Tab::Monthly);

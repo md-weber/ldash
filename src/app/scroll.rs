@@ -159,6 +159,10 @@ impl App {
     }
 
     pub fn scroll_home(&mut self) {
+        if self.tab == Tab::Register {
+            self.register_select_first_txn();
+            return;
+        }
         self.set_current_selected(0);
     }
 

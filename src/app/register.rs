@@ -1,6 +1,5 @@
 use std::sync::mpsc;
 
-use chrono::{Datelike, Local};
 use ratatui::widgets::TableState;
 
 use crate::data::{build_register_view, load_register_page, RegisterQuery};
@@ -28,13 +27,13 @@ impl App {
         return_tab: Option<Tab>,
     ) {
         self.register_draft = query.description.clone().unwrap_or_default();
-        let same_period = self.register_loaded_period == Some((query.year, query.month));
+        let same_scope = self.register_loaded_key == Some(query.load_key());
         self.register_query = query;
         self.register_focus_query = focus_query;
         self.register_detail = None;
         self.register_return_tab = return_tab;
         self.tab = Tab::Register;
-        if same_period && self.register_error.is_none() {
+        if same_scope && self.register_error.is_none() {
             self.rebuild_register_view();
         } else {
             self.register_error = None;
@@ -51,16 +50,14 @@ impl App {
         if self.register_rx.is_some() {
             return;
         }
-        if self.register_loaded_period
-            == Some((self.register_query.year, self.register_query.month))
-        {
+        if self.register_loaded_key == Some(self.register_query.load_key()) {
             return;
         }
         self.spawn_register_load();
     }
 
     pub(super) fn register_already_loaded(&self) -> bool {
-        self.register_loaded_period.is_some()
+        self.register_loaded_key.is_some()
     }
 
     fn spawn_register_load(&mut self) {
@@ -80,22 +77,19 @@ impl App {
             None => return,
         };
         self.register_rx = None;
-        if load.query.year != self.register_query.year
-            || load.query.month != self.register_query.month
-        {
+        if load.query.load_key() != self.register_query.load_key() {
             return;
         }
         match load.result {
             Ok(txns) => {
                 self.register_txns = txns;
                 self.register_error = None;
-                self.register_loaded_period =
-                    Some((self.register_query.year, self.register_query.month));
+                self.register_loaded_key = Some(self.register_query.load_key());
                 self.rebuild_register_view();
             }
             Err(e) => {
                 self.register_error = Some(e);
-                self.register_loaded_period = None;
+                self.register_loaded_key = None;
             }
         }
     }
@@ -146,14 +140,8 @@ impl App {
         let Some(name) = name else {
             return;
         };
-        let today = Local::now().date_naive();
         self.open_register(
-            RegisterQuery {
-                year: today.year(),
-                month: today.month() as u8,
-                account: Some(name),
-                description: None,
-            },
+            RegisterQuery::all_time_account(name),
             false,
             Some(Tab::Accounts),
         );
@@ -191,6 +179,7 @@ impl App {
                 month,
                 account: Some(cat),
                 description: None,
+                all_time: false,
             },
             false,
             Some(Tab::Monthly),
@@ -230,6 +219,19 @@ impl App {
 
     pub fn close_register_detail(&mut self) {
         self.register_detail = None;
+    }
+
+    pub fn register_handle_g(&mut self) {
+        if self.register_g_pending {
+            self.register_g_pending = false;
+            self.scroll_home();
+        } else {
+            self.register_g_pending = true;
+        }
+    }
+
+    pub fn register_clear_g_pending(&mut self) {
+        self.register_g_pending = false;
     }
 
     fn register_header_at(&self, idx: usize) -> Option<usize> {
@@ -289,6 +291,12 @@ impl App {
             .rev()
             .find(|&j| !self.register_rows[j].continuation)
         {
+            self.register_table.select(Some(j));
+        }
+    }
+
+    pub(super) fn register_select_first_txn(&mut self) {
+        if let Some(j) = (0..self.register_rows.len()).find(|&j| !self.register_rows[j].continuation) {
             self.register_table.select(Some(j));
         }
     }

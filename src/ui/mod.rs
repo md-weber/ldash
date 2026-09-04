@@ -481,6 +481,7 @@ mod tests {
             month: 8,
             account: None,
             description: None,
+            all_time: false,
         };
         insta::assert_snapshot!(render_to_string(&mut app));
     }
@@ -498,6 +499,7 @@ mod tests {
             month: 1,
             account: None,
             description: None,
+            all_time: false,
         };
         let date = NaiveDate::from_ymd_opt(2026, 1, 15).unwrap();
         let postings = vec![

@@ -47,7 +47,7 @@ fn render_query_bar(f: &mut Frame, app: &App, area: Rect, theme: &Theme) {
 }
 
 fn render_month_label(f: &mut Frame, app: &App, area: Rect, theme: &Theme) {
-    let period = app.register_query.period_arg();
+    let period = app.register_query.period_label();
     let account = app
         .register_query
         .account
@@ -68,7 +68,7 @@ fn render_month_label(f: &mut Frame, app: &App, area: Rect, theme: &Theme) {
         Span::styled(account, Style::default().fg(theme.fg)),
         Span::styled(desc, Style::default().fg(theme.muted)),
         Span::styled(
-            "  [h/l month]  [Enter txn]",
+            "  [h/l month]  [gg/G top/bottom]  [Enter txn]",
             Style::default().fg(theme.muted),
         ),
     ]);
@@ -89,7 +89,7 @@ fn render_register_table(f: &mut Frame, app: &mut App, area: Rect, theme: &Theme
     }
 
     if app.register_rows.is_empty() {
-        render_message(f, area, theme, " Register ", "No transactions this month");
+        render_message(f, area, theme, " Register ", "No transactions");
         return;
     }
 

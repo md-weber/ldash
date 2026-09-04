@@ -32,8 +32,8 @@ pub use price_fetch::{fetch_and_append_prices, today_prices_present};
 pub use prices::{latest_prices, load_price_history};
 #[allow(unused_imports)]
 pub use register::{
-    build_register_view, group_register_txns, load_register_page, RegisterPosting, RegisterQuery,
-    RegisterTxn, RegisterViewRow, TxnStatus,
+    build_register_view, group_register_txns, load_register_page, RegisterLoadKey, RegisterPosting,
+    RegisterQuery, RegisterTxn, RegisterViewRow, TxnStatus,
 };
 pub use transactions::load_recent_transactions;
 

@@ -11,6 +11,9 @@ pub struct RegisterQuery {
     pub month: u8, // 1..=12
     pub account: Option<String>,
     pub description: Option<String>,
+    /// When true, load the full register (no `-p` period). Used for Accounts
+    /// drill-down; Monthly drill-down keeps this false.
+    pub all_time: bool,
 }
 
 impl RegisterQuery {
@@ -21,6 +24,18 @@ impl RegisterQuery {
             month: today.month() as u8,
             account: None,
             description: None,
+            all_time: false,
+        }
+    }
+
+    pub fn all_time_account(account: String) -> Self {
+        let today = Local::now().date_naive();
+        Self {
+            year: today.year(),
+            month: today.month() as u8,
+            account: Some(account),
+            description: None,
+            all_time: true,
         }
     }
 
@@ -28,7 +43,24 @@ impl RegisterQuery {
         format!("{:04}-{:02}", self.year, self.month)
     }
 
+    pub fn period_label(&self) -> String {
+        if self.all_time {
+            "All".to_string()
+        } else {
+            self.period_arg()
+        }
+    }
+
+    pub fn load_key(&self) -> RegisterLoadKey {
+        RegisterLoadKey {
+            all_time: self.all_time,
+            year: self.year,
+            month: self.month,
+        }
+    }
+
     pub fn prev_month(&mut self) {
+        self.all_time = false;
         if self.month <= 1 {
             self.year -= 1;
             self.month = 12;
@@ -38,6 +70,7 @@ impl RegisterQuery {
     }
 
     pub fn next_month(&mut self) {
+        self.all_time = false;
         if self.month >= 12 {
             self.year += 1;
             self.month = 1;
@@ -45,6 +78,13 @@ impl RegisterQuery {
             self.month += 1;
         }
     }
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub struct RegisterLoadKey {
+    pub all_time: bool,
+    pub year: i32,
+    pub month: u8,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -107,21 +147,23 @@ pub fn load_register_page(
     currency_symbol: &str,
 ) -> Result<Vec<RegisterTxn>> {
     let jp = journal_path.to_str().unwrap_or("all.journal");
-    let period = query.period_arg();
     // Account and description are applied in memory so every loaded
     // transaction still has all of its legs for drill-down.
-    let args = [
-        "-f",
-        jp,
-        "register",
-        "-O",
-        "csv",
-        "-X",
-        currency_symbol,
-        "-p",
-        period.as_str(),
+    let mut args = vec![
+        "-f".to_string(),
+        jp.to_string(),
+        "register".to_string(),
+        "-O".to_string(),
+        "csv".to_string(),
+        "-X".to_string(),
+        currency_symbol.to_string(),
     ];
-    let text = run_hledger(&args)?;
+    if !query.all_time {
+        args.push("-p".to_string());
+        args.push(query.period_arg());
+    }
+    let arg_refs: Vec<&str> = args.iter().map(String::as_str).collect();
+    let text = run_hledger(&arg_refs)?;
     Ok(group_register_txns(&parse_register_csv(&text)))
 }
 
@@ -223,10 +265,31 @@ pub fn build_register_view(
         .filter(|s| !s.is_empty())
         .map(|s| s.to_string());
 
-    match acct {
+    let rows = match acct {
         Some(filter) => collapsed_account_rows(txns, &filter, desc.as_deref()),
         None => grouped_posting_rows(txns, desc.as_deref()),
+    };
+    reverse_txn_groups(rows)
+}
+
+fn reverse_txn_groups(mut rows: Vec<RegisterViewRow>) -> Vec<RegisterViewRow> {
+    if rows.is_empty() {
+        return rows;
     }
+    let mut groups: Vec<Vec<RegisterViewRow>> = Vec::new();
+    let mut current = Vec::new();
+    for row in rows.drain(..) {
+        if !row.continuation && !current.is_empty() {
+            groups.push(current);
+            current = Vec::new();
+        }
+        current.push(row);
+    }
+    if !current.is_empty() {
+        groups.push(current);
+    }
+    groups.reverse();
+    groups.into_iter().flatten().collect()
 }
 
 fn grouped_posting_rows(txns: &[RegisterTxn], desc: Option<&str>) -> Vec<RegisterViewRow> {
@@ -311,6 +374,7 @@ mod tests {
             month: 8,
             account: None,
             description: None,
+            all_time: false,
         };
         assert_eq!(q.period_arg(), "2026-08");
     }
@@ -322,6 +386,7 @@ mod tests {
             month: 12,
             account: None,
             description: None,
+            all_time: false,
         };
         assert_eq!(q.period_arg(), "1999-12");
     }
@@ -406,25 +471,29 @@ bad-row
         let rows = build_register_view(&fixture_txns(), None, None);
         assert_eq!(rows.len(), 5);
         assert!(!rows[0].continuation);
-        assert_eq!(rows[0].description, "Salary");
-        assert!(rows[1].continuation);
-        assert!(rows[1].description.is_empty());
-        assert_eq!(rows[1].account, "assets:bank:checking");
-        assert!(!rows[2].continuation);
-        assert_eq!(rows[2].description, "Groceries");
-        assert!(rows[3].continuation);
+        assert!(!rows[0].continuation);
+        assert_eq!(rows[0].description, "Rent");
+        assert!(!rows[1].continuation);
+        assert_eq!(rows[1].description, "Groceries");
+        assert!(rows[2].continuation);
+        assert!(rows[2].description.is_empty());
+        assert_eq!(rows[2].account, "assets:bank:checking");
+        assert!(!rows[3].continuation);
+        assert_eq!(rows[3].description, "Salary");
+        assert!(rows[4].continuation);
+        assert_eq!(rows[4].account, "assets:bank:checking");
     }
 
     #[test]
     fn account_filter_collapses_to_one_row_per_txn() {
         let rows = build_register_view(&fixture_txns(), Some("assets:bank:checking"), None);
         assert_eq!(rows.len(), 2);
-        assert_eq!(rows[0].description, "Salary");
-        assert!((rows[0].amount - 2000.0).abs() < 1e-9);
-        assert!((rows[0].running_total - 2000.0).abs() < 1e-9);
-        assert_eq!(rows[1].description, "Groceries");
-        assert!((rows[1].amount - (-150.0)).abs() < 1e-9);
-        assert!((rows[1].running_total - 1850.0).abs() < 1e-9);
+        assert_eq!(rows[0].description, "Groceries");
+        assert!((rows[0].amount - (-150.0)).abs() < 1e-9);
+        assert!((rows[0].running_total - 1850.0).abs() < 1e-9);
+        assert_eq!(rows[1].description, "Salary");
+        assert!((rows[1].amount - 2000.0).abs() < 1e-9);
+        assert!((rows[1].running_total - 2000.0).abs() < 1e-9);
         assert!(!rows.iter().any(|r| r.continuation));
     }
 
@@ -450,12 +519,24 @@ bad-row
     }
 
     #[test]
+    fn view_orders_newest_transaction_first() {
+        let rows = build_register_view(&fixture_txns(), None, None);
+        let headers: Vec<_> = rows
+            .iter()
+            .filter(|r| !r.continuation)
+            .map(|r| r.description.as_str())
+            .collect();
+        assert_eq!(headers, vec!["Rent", "Groceries", "Salary"]);
+    }
+
+    #[test]
     fn month_nav_rolls_year_without_invalid_months() {
         let mut q = RegisterQuery {
             year: 2026,
             month: 1,
             account: None,
             description: None,
+            all_time: false,
         };
         q.prev_month();
         assert_eq!(q.year, 2025);
@@ -468,5 +549,39 @@ bad-row
         q.next_month();
         assert_eq!(q.year, 2027);
         assert_eq!(q.month, 1);
+    }
+
+    #[test]
+    fn month_nav_exits_all_time() {
+        let mut q = RegisterQuery {
+            year: 2026,
+            month: 3,
+            account: Some("assets:bank".to_string()),
+            description: None,
+            all_time: true,
+        };
+        q.prev_month();
+        assert!(!q.all_time);
+        assert_eq!(q.year, 2026);
+        assert_eq!(q.month, 2);
+    }
+
+    #[test]
+    fn period_label_all_time() {
+        let q = RegisterQuery::all_time_account("assets:bank".to_string());
+        assert_eq!(q.period_label(), "All");
+    }
+
+    #[test]
+    fn load_key_distinguishes_all_time_from_month() {
+        let all = RegisterQuery::all_time_account("assets:bank".to_string());
+        let month = RegisterQuery {
+            year: all.year,
+            month: all.month,
+            account: all.account.clone(),
+            description: None,
+            all_time: false,
+        };
+        assert_ne!(all.load_key(), month.load_key());
     }
 }

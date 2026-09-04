@@ -58,6 +58,7 @@ pub(super) fn render_help_popup(f: &mut Frame, area: Rect, theme: &Theme) {
         ("C", "YoY comparison  (Monthly)"),
         ("F", "Current-month forecast  (Monthly)"),
         ("h / l", "Previous / next month  (Register)"),
+        ("gg / G", "First / last transaction  (Register)"),
         ("a–z  Backspace", "Filter · clear char  (Accounts)"),
         ("", ""),
         ("§", "Data & view"),

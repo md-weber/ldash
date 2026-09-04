@@ -117,12 +117,14 @@ pub struct App {
     pub register_focus_query: bool,
     pub register_error: Option<String>,
     pub register_detail: Option<crate::data::RegisterTxn>,
+    /// First `g` of a pending `gg` jump-to-top on the Register tab.
+    pub(super) register_g_pending: bool,
     /// When Register was opened via Enter from Accounts/Monthly, ESC returns
     /// here instead of quitting. Cleared by explicit tab navigation (`3`, Tab).
     pub register_return_tab: Option<Tab>,
-    /// Year/month of the last successful Register load. Account and
-    /// description filters are applied in memory against this page.
-    pub(super) register_loaded_period: Option<(i32, u8)>,
+    /// Scope of the last successful Register load. Account and description
+    /// filters are applied in memory against this page.
+    pub(super) register_loaded_key: Option<crate::data::RegisterLoadKey>,
     pub price_alerts: Vec<PriceAlert>,
     pub show_alerts: bool,
     pub alert_dismissed: bool,
@@ -246,8 +248,9 @@ impl Default for App {
             register_focus_query: false,
             register_error: None,
             register_detail: None,
+            register_g_pending: false,
             register_return_tab: None,
-            register_loaded_period: None,
+            register_loaded_key: None,
             price_alerts: Vec::new(),
             show_alerts: false,
             alert_dismissed: false,
@@ -356,8 +359,9 @@ impl App {
             register_focus_query: false,
             register_error: None,
             register_detail: None,
+            register_g_pending: false,
             register_return_tab: None,
-            register_loaded_period: None,
+            register_loaded_key: None,
             price_alerts: Vec::new(),
             show_alerts: false,
             alert_dismissed: false,
@@ -396,6 +400,8 @@ impl App {
         }
         if tab == Tab::Register {
             self.register_return_tab = None;
+        } else {
+            self.register_g_pending = false;
         }
         self.tab = tab;
         self.ensure_tab_loaded(tab);
