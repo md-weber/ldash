@@ -36,9 +36,13 @@ pub struct RefreshResult {
     /// Per-month net change in liquid cash (whitelisted accounts only) for
     /// the current calendar year. Empty when `liquid_accounts` is unset.
     pub liquid_cash_monthly: TabData<Vec<(String, f64)>>,
+    /// Per-account monthly net change for the same period as `liquid_cash_monthly`.
+    pub liquid_accounts_monthly: TabData<Vec<(String, Vec<(String, f64)>)>>,
     /// Same series with `--forecast`. Non-fatal if the journal has no
     /// periodic rules.
     pub liquid_cash_forecast: TabData<Vec<(String, f64)>>,
+    /// Per-account forecast monthly series.
+    pub liquid_accounts_forecast: TabData<Vec<(String, Vec<(String, f64)>)>>,
 }
 
 /// How the portfolio analysis chart layers price-growth and staking on top of
@@ -87,6 +91,7 @@ pub enum MonthlyFocus {
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum Tab {
+    Dashboard,
     Portfolio,
     Accounts,
     Monthly,
@@ -118,6 +123,7 @@ impl TabFlags {
 
     pub fn get(self, tab: Tab) -> bool {
         match tab {
+            Tab::Dashboard => self.accounts && self.monthly,
             Tab::Portfolio => self.portfolio,
             Tab::Accounts => self.accounts,
             Tab::Monthly => self.monthly,
@@ -127,6 +133,10 @@ impl TabFlags {
 
     pub fn set(&mut self, tab: Tab, value: bool) {
         match tab {
+            Tab::Dashboard => {
+                self.accounts = value;
+                self.monthly = value;
+            }
             Tab::Portfolio => self.portfolio = value,
             Tab::Accounts => self.accounts = value,
             Tab::Monthly => self.monthly = value,
@@ -270,9 +280,34 @@ pub struct PriceAlert {
     pub change_pct: f64,
 }
 
+#[derive(Debug)]
 pub struct RecurringExpense {
     pub name: String,
     pub monthly_avg: f64,
+}
+
+/// Income/expense split for the Dashboard tab month summary.
+#[derive(Debug, Clone, Copy, Default, PartialEq)]
+pub struct MonthBreakdown {
+    pub total_income: f64,
+    pub recurring_income: f64,
+    pub recurring_expenses: f64,
+    pub other_expenses: f64,
+    pub total_expenses: f64,
+}
+
+#[derive(Debug, Clone)]
+pub struct CategoryShare {
+    pub name: String,
+    pub amount: f64,
+    pub fraction: f64,
+}
+
+#[derive(Debug, Clone, Default)]
+pub struct CashOverview {
+    pub accounts: Vec<(String, f64)>,
+    pub total_balance: f64,
+    pub ytd_net_change: f64,
 }
 
 /// Render-pass geometry written by `ui::*` and read back by mouse hit-testing.

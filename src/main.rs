@@ -53,7 +53,7 @@ struct Cli {
     #[arg(short = 'c', long = "config", value_name = "PATH")]
     config: Option<PathBuf>,
 
-    /// Start on tab: portfolio, accounts, monthly, register (overrides config).
+    /// Start on tab: dashboard, portfolio, accounts, monthly, register (overrides config).
     #[arg(long = "tab", value_name = "TAB", value_parser = parse_tab)]
     tab: Option<String>,
 
@@ -65,9 +65,9 @@ struct Cli {
 fn parse_tab(s: &str) -> Result<String, String> {
     let lower = s.to_lowercase();
     match lower.as_str() {
-        "portfolio" | "accounts" | "monthly" | "register" => Ok(lower),
+        "dashboard" | "start" | "portfolio" | "accounts" | "monthly" | "register" => Ok(lower),
         _ => Err(format!(
-            "invalid tab '{s}' (expected: portfolio, accounts, monthly, register)"
+            "invalid tab '{s}' (expected: dashboard, portfolio, accounts, monthly, register)"
         )),
     }
 }

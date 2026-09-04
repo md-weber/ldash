@@ -12,6 +12,7 @@ Built with [Ratatui](https://ratatui.rs) and Rust.
 
 ## Features
 
+- **Dashboard** — Forecast-aware overview: monthly breakdown (recurring vs other), comparison bar chart, top-5 expense donut with legend, and liquid cash line chart (up to five accounts) with YTD totals
 - **Crypto Portfolio** — Holdings table with price, value, allocation %, and P/L tracking (invested vs price gain vs staking rewards)
 - **Portfolio Chart** — Per-coin analysis with two modes: *stacked* (invested / purchased value / total value) or *unstacked* (invested / price gain / staking gain). Toggle with `s`.
 - **Net Worth History** — Interactive chart with selectable time ranges (YTD / 1Y / 2Y / 5Y / All)
@@ -69,12 +70,13 @@ cd ~/Finance && ldash
 
 | Key | Action |
 |-----|--------|
-| `1` / `2` / `3` / `4` | Accounts / Monthly / Register / Portfolio |
+| `1` / `2` / `3` / `4` / `5` | Dashboard / Accounts / Monthly / Register / Portfolio |
 | `Tab` / `Shift-Tab` | Next / previous tab |
 | `↑` `k` / `↓` `j` | Scroll / select |
 | `PgUp` / `PgDn` | Page up / down |
 | `Home` / `End` | Jump to first / last row |
-| `←` `h` / `→` `l` | Month (Monthly, Register) / net worth range (Accounts) / chart range (Portfolio) |
+| `←` `h` / `→` `l` | Month (Dashboard, Monthly, Register) / net worth range (Accounts) / chart range (Portfolio) |
+| `G` | Current month (Dashboard) / jump to latest entry (Monthly) |
 | `y` / `Y` | Previous / next year (Monthly tab) |
 | `G` | Jump to latest month (Monthly tab) |
 | `i` | Toggle income / expense focus (Monthly tab) |
@@ -106,8 +108,8 @@ On first launch, ldash creates a config file at `~/.config/ldash/config.toml` wi
 # Auto-refresh interval in seconds (default: 300)
 # refresh_interval = 300
 
-# Default tab on startup: "portfolio", "accounts", "monthly", "register"
-# default_tab = "accounts"
+# Default tab on startup: "dashboard", "accounts", "monthly", "register", "portfolio"
+# default_tab = "dashboard"
 
 # Number format: "eu" (1.000,00) or "us" (1,000.00)
 # number_format = "eu"

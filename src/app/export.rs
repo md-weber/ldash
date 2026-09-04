@@ -40,6 +40,25 @@ impl App {
     pub fn export_current_view(&self) -> String {
         let sym = &self.config.currency_symbol;
         match self.tab {
+            Tab::Dashboard => {
+                let b = self.month_breakdown();
+                let mut wtr = csv::Writer::from_writer(vec![]);
+                let empty = data::SingleMonth::default();
+                let m = self.current_month().unwrap_or(&empty);
+                let _ = wtr.write_record([format!("# Dashboard — {}", m.month_name)]);
+                let _ = wtr.write_record(["Metric".to_string(), "Amount".to_string()]);
+                let rows = [
+                    ("Total Income", b.total_income),
+                    ("Recurring Income", b.recurring_income),
+                    ("Recurring Expenses", b.recurring_expenses),
+                    ("Other Expenses", b.other_expenses),
+                    ("Total Expenses", b.total_expenses),
+                ];
+                for (label, amount) in rows {
+                    let _ = wtr.write_record([label.to_string(), format!("{:.2}", amount)]);
+                }
+                finish_csv(wtr)
+            }
             Tab::Portfolio => {
                 let mut wtr = csv::Writer::from_writer(vec![]);
                 let _ = wtr.write_record([

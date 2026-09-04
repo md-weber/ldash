@@ -111,7 +111,7 @@ impl Default for Config {
         Self {
             journal: None,
             refresh_interval: 300,
-            default_tab: "accounts".to_string(),
+            default_tab: "dashboard".to_string(),
             number_format: "eu".to_string(),
             currency_symbol: "€".to_string(),
             chart_mode: "stacked".to_string(),
@@ -145,7 +145,7 @@ const DEFAULT_CONFIG: &str = r##"# ldash configuration
 # refresh_interval = 300
 
 # Default tab on startup: "portfolio", "accounts", "monthly", "register"
-# default_tab = "accounts"
+# default_tab = "dashboard"   # dashboard | accounts | monthly | register | portfolio
 
 # Number format: "eu" (1.000,00) or "us" (1,000.00)
 # number_format = "eu"

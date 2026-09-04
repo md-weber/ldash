@@ -12,7 +12,7 @@ use crate::data::{
     load_liquid_cash_monthly_with_forecast, load_monthly_data, load_monthly_with_forecast,
     load_net_worth_breakdown, load_net_worth_history, load_payee_analytics, load_price_history,
     today_prices_present, AccountBalance, CoinChartSeries, CryptoHolding, LiabilityProgress,
-    MonthlyData, NetWorthBreakdownSeries, NetWorthSeries, PayeeSummary,
+    LiquidMonthlyData, MonthlyData, NetWorthBreakdownSeries, NetWorthSeries, PayeeSummary,
 };
 
 use super::{App, RefreshResult, Tab, TabData, TabFlags};
@@ -44,8 +44,8 @@ struct LoadHandles {
     last_year: Option<Result<MonthlyData, anyhow::Error>>,
     forecast: Option<Result<MonthlyData, anyhow::Error>>,
     payee: Option<Result<Vec<PayeeSummary>, anyhow::Error>>,
-    liquid_cash_monthly: Option<Result<Vec<(String, f64)>, anyhow::Error>>,
-    liquid_cash_forecast: Option<Result<Vec<(String, f64)>, anyhow::Error>>,
+    liquid_cash_monthly: Option<Result<LiquidMonthlyData, anyhow::Error>>,
+    liquid_cash_forecast: Option<Result<LiquidMonthlyData, anyhow::Error>>,
 }
 
 fn spawn_all(journal_path: &Path, cfg: &LoadConfig, tabs: TabFlags) -> LoadHandles {
@@ -128,6 +128,25 @@ fn into_tab_data<T, E: std::fmt::Display>(opt: Option<Result<T, E>>) -> TabData<
     }
 }
 
+fn split_liquid_tab_data(
+    data: TabData<LiquidMonthlyData>,
+) -> (
+    TabData<Vec<(String, f64)>>,
+    TabData<Vec<(String, Vec<(String, f64)>)>>,
+) {
+    match data {
+        TabData::NotRequested => (TabData::NotRequested, TabData::NotRequested),
+        TabData::Err(e) => {
+            let msg = e.clone();
+            (TabData::Err(msg.clone()), TabData::Err(msg))
+        }
+        TabData::Ok(v) => (
+            TabData::Ok(v.total),
+            TabData::Ok(v.by_account),
+        ),
+    }
+}
+
 pub(super) fn load_all_data(
     journal_path: &Path,
     journal_dir: &Path,
@@ -184,8 +203,8 @@ pub(super) fn load_all_data(
     let last_year = into_tab_data(h.last_year);
     let monthly_forecast = into_tab_data(h.forecast);
     let payee_data: TabData<Vec<PayeeSummary>> = into_tab_data(h.payee);
-    let liquid_cash_monthly: TabData<Vec<(String, f64)>> = into_tab_data(h.liquid_cash_monthly);
-    let liquid_cash_forecast: TabData<Vec<(String, f64)>> = into_tab_data(h.liquid_cash_forecast);
+    let liquid_cash_monthly = split_liquid_tab_data(into_tab_data(h.liquid_cash_monthly));
+    let liquid_cash_forecast = split_liquid_tab_data(into_tab_data(h.liquid_cash_forecast));
 
     RefreshResult {
         tabs,
@@ -202,8 +221,10 @@ pub(super) fn load_all_data(
         last_year,
         monthly_forecast,
         payee_data,
-        liquid_cash_monthly,
-        liquid_cash_forecast,
+        liquid_cash_monthly: liquid_cash_monthly.0,
+        liquid_accounts_monthly: liquid_cash_monthly.1,
+        liquid_cash_forecast: liquid_cash_forecast.0,
+        liquid_accounts_forecast: liquid_cash_forecast.1,
     }
 }
 
@@ -344,6 +365,9 @@ impl App {
                         Ok(m) => {
                             self.monthly = m;
                             self.rebuild_combined_months();
+                            if self.tab == Tab::Dashboard {
+                                self.ensure_dashboard_view();
+                            }
                             self.status_msg.clear();
                         }
                         Err(e) => self.status_msg = format!("Error loading year data: {e}"),
@@ -529,8 +553,14 @@ impl App {
         // Liquid-cash errors are non-fatal: the summary line just omits
         // itself (e.g. user hasn't configured `liquid_accounts` yet).
         apply_field_silent!(self.liquid_cash_monthly, r.liquid_cash_monthly);
+        apply_field_silent!(self.liquid_accounts_monthly, r.liquid_accounts_monthly);
         apply_field_silent!(self.liquid_cash_forecast, r.liquid_cash_forecast);
+        apply_field_silent!(self.liquid_accounts_forecast, r.liquid_accounts_forecast);
         self.rebuild_combined_months();
+
+        if self.tab == Tab::Dashboard {
+            self.ensure_dashboard_view();
+        }
 
         // Current year has no data → jump to the last year with actual entries
         // so the Monthly tab doesn't open on a blank screen.

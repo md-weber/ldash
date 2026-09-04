@@ -81,7 +81,7 @@ impl App {
                     self.on_table_click(col, row);
                 }
             }
-            Tab::Portfolio | Tab::Register => {
+            Tab::Dashboard | Tab::Portfolio | Tab::Register => {
                 if rect_contains(self.geometry.table_area, col, row) {
                     self.on_table_click(col, row);
                 }
@@ -102,7 +102,7 @@ impl App {
                     self.geometry.table_area
                 }
             }
-            Tab::Portfolio | Tab::Register => self.geometry.table_area,
+            Tab::Dashboard | Tab::Portfolio | Tab::Register => self.geometry.table_area,
         };
         // border (1) + header row (1) + header bottom_margin (1) = 3 rows before data
         let content_y = area.y + 3;
@@ -111,6 +111,7 @@ impl App {
         }
         let clicked_idx = (row - content_y) as usize;
         match self.tab {
+            Tab::Dashboard => {}
             Tab::Accounts => {
                 if self.liability_focus {
                     let offset = self.liability_state.offset();
@@ -204,7 +205,7 @@ impl App {
                     self.reload_net_worth();
                 }
             }
-            Tab::Monthly | Tab::Register => {}
+            Tab::Dashboard | Tab::Monthly | Tab::Register => {}
         }
     }
 }

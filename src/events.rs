@@ -167,10 +167,10 @@ fn handle_normal_key(app: &mut App, key: KeyEvent) -> Action {
             }
         }
         KeyCode::Enter => match app.tab {
+            Tab::Dashboard | Tab::Portfolio => {}
             Tab::Accounts => app.open_selected_account_in_register(),
             Tab::Monthly => app.open_selected_category_in_register(),
             Tab::Register => app.open_register_row_detail(),
-            Tab::Portfolio => {}
         },
         KeyCode::Char('i') if app.tab == Tab::Monthly => app.toggle_monthly_focus(),
         KeyCode::Char('i') if app.tab == Tab::Accounts => app.toggle_accounts_focus(),
@@ -184,6 +184,7 @@ fn handle_normal_key(app: &mut App, key: KeyEvent) -> Action {
             app.show_current_month_forecast = !app.show_current_month_forecast;
             app.rebuild_combined_months();
         }
+        KeyCode::Char('G') if app.tab == Tab::Dashboard => app.jump_to_current_month(),
         KeyCode::Char('G') if app.tab == Tab::Monthly => app.jump_to_last_entry(),
         KeyCode::Char('G') if app.tab == Tab::Register => app.scroll_end(),
         KeyCode::Char('/') => {
@@ -201,6 +202,7 @@ fn handle_normal_key(app: &mut App, key: KeyEvent) -> Action {
         KeyCode::Char('2') => app.select_tab(1),
         KeyCode::Char('3') => app.select_tab(2),
         KeyCode::Char('4') => app.select_tab(3),
+        KeyCode::Char('5') => app.select_tab(4),
         KeyCode::Up | KeyCode::Char('k') => {
             if app.has_open_detail() {
                 app.detail_scroll_up();
@@ -222,13 +224,13 @@ fn handle_normal_key(app: &mut App, key: KeyEvent) -> Action {
         KeyCode::Left | KeyCode::Char('h') => match app.tab {
             Tab::Portfolio => app.portfolio_range_left(),
             Tab::Accounts => app.nw_range_left(),
-            Tab::Monthly => app.month_left(),
+            Tab::Dashboard | Tab::Monthly => app.month_left(),
             Tab::Register => app.register_month_prev(),
         },
         KeyCode::Right | KeyCode::Char('l') => match app.tab {
             Tab::Portfolio => app.portfolio_range_right(),
             Tab::Accounts => app.nw_range_right(),
-            Tab::Monthly => app.month_right(),
+            Tab::Dashboard | Tab::Monthly => app.month_right(),
             Tab::Register => app.register_month_next(),
         },
         KeyCode::Char('y') if app.tab == Tab::Monthly => {

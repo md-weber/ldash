@@ -11,6 +11,7 @@ mod monthly;
 mod overlays;
 mod portfolio;
 mod register;
+mod dashboard;
 
 pub(crate) use monthly::MONTHLY_GROUP_WIDTH;
 
@@ -375,6 +376,7 @@ fn render_tabs(f: &mut Frame, app: &mut App, area: Rect, theme: &Theme) {
     let labels: Vec<String> = visible
         .iter()
         .map(|t| match t {
+            Tab::Dashboard => "  Dashboard  ".to_string(),
             Tab::Accounts => "  Accounts  ".to_string(),
             Tab::Monthly => "  Monthly  ".to_string(),
             Tab::Register => "  Register  ".to_string(),
@@ -420,6 +422,7 @@ fn render_tabs(f: &mut Frame, app: &mut App, area: Rect, theme: &Theme) {
 
 fn render_content(f: &mut Frame, app: &mut App, area: Rect, theme: &Theme) {
     match app.tab {
+        Tab::Dashboard => dashboard::render_dashboard(f, app, area, theme),
         Tab::Portfolio => portfolio::render_portfolio(f, app, area, theme),
         Tab::Accounts => accounts::render_accounts(f, app, area, theme),
         Tab::Monthly => monthly::render_monthly(f, app, area, theme),
@@ -451,6 +454,33 @@ mod tests {
             rows.push(row.trim_end().to_string());
         }
         rows.join("\n")
+    }
+
+    #[test]
+    fn snapshot_dashboard_tab() {
+        let mut app = App::fixture_with_monthly();
+        app.tab = Tab::Dashboard;
+        app.show_current_month_forecast = true;
+        app.monthly_forecast = app.monthly.clone();
+        app.rebuild_combined_months();
+        app.config.liquid_accounts = vec!["assets:bank".to_string()];
+        app.account_balances = vec![crate::data::AccountBalance {
+            account: "assets:bank:checking".to_string(),
+            amount: 4200.0,
+            commodity: "€".to_string(),
+        }];
+        app.liquid_cash_monthly = vec![
+            ("January".to_string(), -300.0),
+            ("February".to_string(), 200.0),
+        ];
+        app.liquid_accounts_monthly = vec![(
+            "assets:bank:checking".to_string(),
+            vec![
+                ("January".to_string(), -300.0),
+                ("February".to_string(), 200.0),
+            ],
+        )];
+        insta::assert_snapshot!(render_to_string(&mut app));
     }
 
     #[test]

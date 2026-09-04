@@ -21,7 +21,9 @@ fn empty_refresh_result(tabs: TabFlags) -> RefreshResult {
         monthly_forecast: TabData::NotRequested,
         payee_data: TabData::NotRequested,
         liquid_cash_monthly: TabData::NotRequested,
+        liquid_accounts_monthly: TabData::NotRequested,
         liquid_cash_forecast: TabData::NotRequested,
+        liquid_accounts_forecast: TabData::NotRequested,
     }
 }
 
@@ -654,27 +656,35 @@ fn number_keys_follow_visible_tab_order() {
     app.config.show_portfolio = Some(true);
     assert_eq!(
         app.visible_tabs(),
-        vec![Tab::Accounts, Tab::Monthly, Tab::Register, Tab::Portfolio]
+        vec![
+            Tab::Dashboard,
+            Tab::Accounts,
+            Tab::Monthly,
+            Tab::Register,
+            Tab::Portfolio
+        ]
     );
     app.select_tab(0);
+    assert_eq!(app.tab, Tab::Dashboard);
+    app.select_tab(1);
     assert_eq!(app.tab, Tab::Accounts);
-    app.select_tab(2);
-    assert_eq!(app.tab, Tab::Register);
     app.select_tab(3);
+    assert_eq!(app.tab, Tab::Register);
+    app.select_tab(4);
     assert_eq!(app.tab, Tab::Portfolio);
 
     app.config.show_portfolio = Some(false);
     assert_eq!(
         app.visible_tabs(),
-        vec![Tab::Accounts, Tab::Monthly, Tab::Register]
+        vec![Tab::Dashboard, Tab::Accounts, Tab::Monthly, Tab::Register]
     );
-    app.select_tab(2);
-    assert_eq!(app.tab, Tab::Register);
     app.select_tab(3);
+    assert_eq!(app.tab, Tab::Register);
+    app.select_tab(4);
     assert_eq!(
         app.tab,
         Tab::Register,
-        "4 is a no-op when Portfolio is hidden"
+        "5 is a no-op when Portfolio is hidden"
     );
 }
 
@@ -912,7 +922,7 @@ fn drilled_register_esc_returns_to_monthly() {
 #[test]
 fn explicit_register_has_no_return_tab() {
     let mut app = App::fixture_empty();
-    app.select_tab(2);
+    app.select_tab(3);
     assert_eq!(app.tab, Tab::Register);
     assert!(app.register_return_tab.is_none());
     assert!(!app.return_from_register());
@@ -939,6 +949,6 @@ fn explicit_tab_to_register_clears_drill_return() {
     let mut app = App::fixture_with_accounts();
     app.open_selected_account_in_register();
     app.select_tab(0);
-    app.select_tab(2);
+    app.select_tab(3);
     assert!(app.register_return_tab.is_none());
 }

@@ -1,4 +1,5 @@
 mod combined;
+mod dashboard;
 mod detail;
 mod export;
 mod insights;
@@ -14,6 +15,7 @@ mod fixtures;
 mod tests;
 
 pub use types::*;
+pub use dashboard::LiquidAccountChart;
 
 use anyhow::Result;
 use ratatui::widgets::TableState;
@@ -105,10 +107,13 @@ pub struct App {
     /// the current calendar year, posted transactions only. Empty when
     /// `config.liquid_accounts` is unset or the load failed.
     pub liquid_cash_monthly: Vec<(String, f64)>,
+    /// Per-account monthly net change for liquid accounts.
+    pub liquid_accounts_monthly: Vec<(String, Vec<(String, f64)>)>,
     /// Same series with `--forecast` from today through year-end. Used when
     /// the selected month is a forecast month (`F` on the current month, or
     /// a future month).
     pub liquid_cash_forecast: Vec<(String, f64)>,
+    pub liquid_accounts_forecast: Vec<(String, Vec<(String, f64)>)>,
     pub register_query: RegisterQuery,
     pub register_draft: String,
     pub register_txns: Vec<crate::data::RegisterTxn>,
@@ -239,7 +244,9 @@ impl Default for App {
             payee_data: Vec::new(),
             payee_state: TableState::default(),
             liquid_cash_monthly: Vec::new(),
+            liquid_accounts_monthly: Vec::new(),
             liquid_cash_forecast: Vec::new(),
+            liquid_accounts_forecast: Vec::new(),
             register_query: RegisterQuery::current_month(),
             register_draft: String::new(),
             register_txns: Vec::new(),
@@ -288,12 +295,14 @@ impl App {
         }
 
         let default_tab = match config.default_tab.as_str() {
+            "start" | "dashboard" => Tab::Dashboard,
             "portfolio" => Tab::Portfolio,
             "monthly" => Tab::Monthly,
             "register" => Tab::Register,
             _ => Tab::Accounts,
         };
         let chart_mode = ChartMode::from_config(&config.chart_mode);
+        let forecast_on_dashboard = default_tab == Tab::Dashboard;
         Ok(Self {
             journal_path,
             journal_dir,
@@ -346,11 +355,13 @@ impl App {
             recent_journals: Vec::new(),
             payee_view: false,
             yoy_view: false,
-            show_current_month_forecast: false,
+            show_current_month_forecast: forecast_on_dashboard,
             payee_data: Vec::new(),
             payee_state: TableState::default(),
             liquid_cash_monthly: Vec::new(),
+            liquid_accounts_monthly: Vec::new(),
             liquid_cash_forecast: Vec::new(),
+            liquid_accounts_forecast: Vec::new(),
             register_query: RegisterQuery::current_month(),
             register_draft: String::new(),
             register_txns: Vec::new(),
@@ -386,7 +397,7 @@ impl App {
     }
 
     pub fn visible_tabs(&self) -> Vec<Tab> {
-        let mut v = vec![Tab::Accounts, Tab::Monthly, Tab::Register];
+        let mut v = vec![Tab::Dashboard, Tab::Accounts, Tab::Monthly, Tab::Register];
         if self.portfolio_tab_visible() {
             v.push(Tab::Portfolio);
         }
@@ -404,6 +415,9 @@ impl App {
             self.register_g_pending = false;
         }
         self.tab = tab;
+        if tab == Tab::Dashboard {
+            self.ensure_dashboard_view();
+        }
         self.ensure_tab_loaded(tab);
     }
 

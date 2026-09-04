@@ -18,6 +18,7 @@ enum FocusedList {
 impl App {
     fn focused_list(&self) -> FocusedList {
         match self.tab {
+            Tab::Dashboard => FocusedList::Register,
             Tab::Portfolio => FocusedList::Portfolio,
             Tab::Accounts => {
                 if self.liability_focus {
@@ -94,6 +95,9 @@ impl App {
     }
 
     pub fn scroll_up(&mut self) {
+        if self.tab == Tab::Dashboard {
+            return;
+        }
         // When at the first liability, pressing up transfers focus back to assets.
         if self.tab == Tab::Accounts && self.liability_focus {
             let i = self.liability_state.selected().unwrap_or(0);
@@ -113,6 +117,9 @@ impl App {
     }
 
     pub fn scroll_down(&mut self) {
+        if self.tab == Tab::Dashboard {
+            return;
+        }
         if self.tab == Tab::Register {
             self.register_select_next_txn();
             return;
@@ -131,6 +138,9 @@ impl App {
     }
 
     pub fn scroll_page_up(&mut self) {
+        if self.tab == Tab::Dashboard {
+            return;
+        }
         if self.tab == Tab::Register {
             let n = self.current_page_size();
             let i = self.register_table.selected().unwrap_or(0);
@@ -143,6 +153,9 @@ impl App {
     }
 
     pub fn scroll_page_down(&mut self) {
+        if self.tab == Tab::Dashboard {
+            return;
+        }
         if self.tab == Tab::Register {
             let n = self.current_page_size();
             let i = self.register_table.selected().unwrap_or(0);
@@ -159,6 +172,9 @@ impl App {
     }
 
     pub fn scroll_home(&mut self) {
+        if self.tab == Tab::Dashboard {
+            return;
+        }
         if self.tab == Tab::Register {
             self.register_select_first_txn();
             return;
@@ -167,6 +183,9 @@ impl App {
     }
 
     pub fn scroll_end(&mut self) {
+        if self.tab == Tab::Dashboard {
+            return;
+        }
         if self.tab == Tab::Register {
             self.register_select_last_txn();
             return;

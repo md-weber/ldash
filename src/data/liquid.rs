@@ -1,9 +1,19 @@
 use anyhow::{Context, Result};
 use chrono::{Datelike, Local, NaiveDate};
+use std::collections::HashMap;
 use std::path::Path;
 
 use super::parse::parse_eu_number;
 use super::{currency_matches, month_name, run_hledger};
+
+/// Per-month liquid-cash activity for the current calendar year.
+#[derive(Debug, Clone, Default, PartialEq)]
+pub struct LiquidMonthlyData {
+    /// Sum of all whitelisted accounts per month.
+    pub total: Vec<(String, f64)>,
+    /// Per-account monthly net change (same month names as `total`).
+    pub by_account: Vec<(String, Vec<(String, f64)>)>,
+}
 
 /// Per-month net change in liquid cash (whitelisted accounts only) for the
 /// current calendar year.
@@ -25,13 +35,13 @@ use super::{currency_matches, month_name, run_hledger};
 /// month carries actuals plus the projected remainder. When false, only
 /// posted transactions are included.
 ///
-/// Returns an empty `Vec` when `liquid_prefixes` is empty (feature off) or
+/// Returns empty vectors when `liquid_prefixes` is empty (feature off) or
 /// when no matching accounts have any activity this year.
 pub fn load_liquid_cash_monthly(
     journal_path: &Path,
     liquid_prefixes: &[String],
     currency_symbol: &str,
-) -> Result<Vec<(String, f64)>> {
+) -> Result<LiquidMonthlyData> {
     load_liquid_cash_monthly_inner(journal_path, liquid_prefixes, currency_symbol, false)
 }
 
@@ -40,7 +50,7 @@ pub fn load_liquid_cash_monthly_with_forecast(
     journal_path: &Path,
     liquid_prefixes: &[String],
     currency_symbol: &str,
-) -> Result<Vec<(String, f64)>> {
+) -> Result<LiquidMonthlyData> {
     load_liquid_cash_monthly_inner(journal_path, liquid_prefixes, currency_symbol, true)
 }
 
@@ -49,9 +59,9 @@ fn load_liquid_cash_monthly_inner(
     liquid_prefixes: &[String],
     currency_symbol: &str,
     with_forecast: bool,
-) -> Result<Vec<(String, f64)>> {
+) -> Result<LiquidMonthlyData> {
     if liquid_prefixes.is_empty() {
-        return Ok(Vec::new());
+        return Ok(LiquidMonthlyData::default());
     }
 
     let today = Local::now().date_naive();
@@ -93,7 +103,7 @@ fn load_liquid_cash_monthly_inner(
 /// month1, month2, …) into per-month sums, filtering rows by
 /// `currency_symbol` and mapping each `YYYY-MM` column header to its full
 /// English month name.
-fn parse_liquid_bare_csv(text: &str, currency_symbol: &str) -> Result<Vec<(String, f64)>> {
+fn parse_liquid_bare_csv(text: &str, currency_symbol: &str) -> Result<LiquidMonthlyData> {
     let mut rdr = csv::ReaderBuilder::new()
         .flexible(true)
         .from_reader(text.as_bytes());
@@ -115,10 +125,11 @@ fn parse_liquid_bare_csv(text: &str, currency_symbol: &str) -> Result<Vec<(Strin
         .collect();
 
     if month_cols.is_empty() {
-        return Ok(Vec::new());
+        return Ok(LiquidMonthlyData::default());
     }
 
     let mut sums = vec![0.0f64; month_cols.len()];
+    let mut accounts: HashMap<String, Vec<f64>> = HashMap::new();
 
     for row in rdr.records() {
         let fields = match row {
@@ -128,25 +139,50 @@ fn parse_liquid_bare_csv(text: &str, currency_symbol: &str) -> Result<Vec<(Strin
         if fields.len() < 2 {
             continue;
         }
+        let account = fields[0].trim().trim_matches('"').to_string();
         let commodity = fields.get(1).unwrap_or("").trim().trim_matches('"');
         if !currency_matches(currency_symbol, commodity) {
             continue;
         }
+        let entry = accounts
+            .entry(account)
+            .or_insert_with(|| vec![0.0; month_cols.len()]);
         for (idx, &(col, _)) in month_cols.iter().enumerate() {
             if col >= fields.len() {
                 continue;
             }
             if let Some(amount) = parse_eu_number(&fields[col]) {
+                entry[idx] += amount;
                 sums[idx] += amount;
             }
         }
     }
 
-    Ok(month_cols
+    let total = month_cols
         .iter()
         .enumerate()
         .map(|(idx, &(_, date))| (month_name(date.month() as usize).to_string(), sums[idx]))
-        .collect())
+        .collect();
+
+    let mut by_account: Vec<(String, Vec<(String, f64)>)> = accounts
+        .into_iter()
+        .map(|(name, amounts)| {
+            let series = month_cols
+                .iter()
+                .enumerate()
+                .map(|(idx, &(_, date))| {
+                    (
+                        month_name(date.month() as usize).to_string(),
+                        amounts[idx],
+                    )
+                })
+                .collect();
+            (name, series)
+        })
+        .collect();
+    by_account.sort_by(|a, b| a.0.cmp(&b.0));
+
+    Ok(LiquidMonthlyData { total, by_account })
 }
 
 #[cfg(test)]
@@ -157,7 +193,8 @@ mod tests {
     fn empty_prefixes_returns_empty() {
         let path = std::path::Path::new("/nonexistent.journal");
         let got = load_liquid_cash_monthly(path, &[], "€").unwrap();
-        assert!(got.is_empty(), "empty whitelist should disable feature");
+        assert!(got.total.is_empty());
+        assert!(got.by_account.is_empty());
     }
 
     #[test]
@@ -167,24 +204,32 @@ mod tests {
                    assets:raisin,€,\"100,00\",\"25,00\"\n\
                    assets:crypto:btc,BTC,\"0,01\",\"0,00\"\n";
         let result = parse_liquid_bare_csv(csv, "€").unwrap();
-        assert_eq!(result.len(), 2);
-        assert_eq!(result[0].0, "January");
-        assert!((result[0].1 - 300.0).abs() < 1e-9);
-        assert_eq!(result[1].0, "February");
-        assert!((result[1].1 - (-25.0)).abs() < 1e-9);
+        assert_eq!(result.total.len(), 2);
+        assert!((result.total[0].1 - 300.0).abs() < 1e-9);
+        assert_eq!(result.total[1].0, "February");
+        assert!((result.total[1].1 - (-25.0)).abs() < 1e-9);
+        assert_eq!(result.by_account.len(), 2);
+        let cash = result
+            .by_account
+            .iter()
+            .find(|(n, _)| n == "assets:cash")
+            .unwrap();
+        assert!((cash.1[0].1 - 200.0).abs() < 1e-9);
     }
 
     #[test]
     fn parses_bare_csv_ignores_wrong_currency() {
         let csv = "account,commodity,2026-01\nassets:cash,$,\"200,00\"\n";
         let result = parse_liquid_bare_csv(csv, "€").unwrap();
-        assert_eq!(result.len(), 1);
-        assert!((result[0].1 - 0.0).abs() < 1e-9);
+        assert_eq!(result.total.len(), 1);
+        assert!((result.total[0].1 - 0.0).abs() < 1e-9);
+        assert!(result.by_account.is_empty());
     }
 
     #[test]
     fn parses_bare_csv_empty_headers_returns_empty() {
         let result = parse_liquid_bare_csv("account,commodity\n", "€").unwrap();
-        assert!(result.is_empty());
+        assert!(result.total.is_empty());
+        assert!(result.by_account.is_empty());
     }
 }

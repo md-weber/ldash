@@ -152,6 +152,7 @@ fn integration_load_liquid_cash_monthly_reports_per_month_change() {
     // Fixture dates are Jan/Feb 2026; this test (like the other date-coupled
     // integration tests in this file) assumes it runs within calendar 2026.
     let jan = monthly
+        .total
         .iter()
         .find(|(m, _)| m == "January")
         .expect("January column present");
@@ -162,6 +163,7 @@ fn integration_load_liquid_cash_monthly_reports_per_month_change() {
     );
 
     let feb = monthly
+        .total
         .iter()
         .find(|(m, _)| m == "February")
         .expect("February column present");
@@ -230,7 +232,8 @@ fn integration_load_liquid_cash_monthly_empty_whitelist_returns_empty() {
     // need the availability guard.
     let path = fixture("simple.journal");
     let monthly = ldash::data::load_liquid_cash_monthly(&path, &[], "EUR").unwrap();
-    assert!(monthly.is_empty());
+    assert!(monthly.total.is_empty());
+    assert!(monthly.by_account.is_empty());
 }
 
 #[test]

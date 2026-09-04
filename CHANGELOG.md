@@ -7,6 +7,21 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+
+- **Dashboard tab** — Personal finance overview (`1` in the tab bar):
+  forecast-aware monthly income/expense breakdown with recurring split,
+  comparison bar chart, top-5 expense donut with legend, liquid cash line
+  chart for up to five accounts, and YTD totals. Uses hledger `--forecast`
+  periodic rules. Month navigation via `h`/`l`. Opens by default
+  (`default_tab = "dashboard"`).
+
+### Changed
+
+- Tab number keys shifted by one: `1` Dashboard, `2` Accounts, `3` Monthly,
+  `4` Register, `5` Portfolio (when visible).
+- Default startup tab is now **Dashboard** (was Accounts).
+
 ## [1.5.0] - 2026-08-20
 
 ### Added
