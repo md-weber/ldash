@@ -158,7 +158,7 @@ fn render_summary(
     }
     lines.push(Line::from(vec![
         Span::styled("Net Balance", Style::default().fg(theme.gold).bold()),
-        Span::raw(" ".repeat(label_w.saturating_sub(11) as usize)),
+        Span::raw(" ".repeat(label_w.saturating_sub(11))),
         Span::styled(
             format!("{:>16}", cfg.fmt_amount(net, 2)),
             Style::default().fg(net_color).bold(),
@@ -351,19 +351,19 @@ fn render_braille_donut(
         })
         .collect();
 
+    let geo = DonutGeometry {
+        cx,
+        cy,
+        outer,
+        inner_r,
+        slices: &slices,
+        bg: theme.background,
+    };
+
     for char_y in 0..rows {
         let mut spans: Vec<Span> = Vec::with_capacity(cols);
         for char_x in 0..cols {
-            let (bits, color) = braille_cell_bits(
-                char_x,
-                char_y,
-                cx,
-                cy,
-                outer,
-                inner_r,
-                &slices,
-                theme.background,
-            );
+            let (bits, color) = braille_cell_bits(&geo, char_x, char_y);
             if bits == 0 {
                 spans.push(Span::raw(" "));
             } else {
@@ -387,18 +387,18 @@ fn render_braille_donut(
     }
 }
 
-fn braille_cell_bits(
-    char_x: usize,
-    char_y: usize,
+struct DonutGeometry<'a> {
     cx: f64,
     cy: f64,
     outer: f64,
     inner_r: f64,
-    slices: &[(f64, f64, Color)],
+    slices: &'a [(f64, f64, Color)],
     bg: Color,
-) -> (u8, Color) {
+}
+
+fn braille_cell_bits(geo: &DonutGeometry<'_>, char_x: usize, char_y: usize) -> (u8, Color) {
     let mut bits = 0u8;
-    let mut color = bg;
+    let mut color = geo.bg;
     let mut color_hits = 0u8;
 
     for dy in 0..4u8 {
@@ -407,21 +407,21 @@ fn braille_cell_bits(
             let py = char_y * 4 + dy as usize;
             let dot_x = px as f64 + 0.5;
             let dot_y = py as f64 + 0.5;
-            let ddx = dot_x - cx;
-            let ddy = dot_y - cy;
+            let ddx = dot_x - geo.cx;
+            let ddy = dot_y - geo.cy;
             let dist = (ddx * ddx + ddy * ddy).sqrt();
-            if dist > outer || dist < inner_r {
+            if dist > geo.outer || dist < geo.inner_r {
                 continue;
             }
-            let mut angle = (dot_y - cy).atan2(dot_x - cx) / (2.0 * std::f64::consts::PI);
+            let mut angle = (dot_y - geo.cy).atan2(dot_x - geo.cx) / (2.0 * std::f64::consts::PI);
             if angle < 0.0 {
                 angle += 1.0;
             }
-            for (i, (start, end, col)) in slices.iter().enumerate() {
-                let last = i + 1 == slices.len();
+            for (i, (start, end, col)) in geo.slices.iter().enumerate() {
+                let last = i + 1 == geo.slices.len();
                 if angle >= *start && (angle < *end || (last && angle <= *end)) {
                     bits |= braille_dot_bit(dx, dy);
-                    if color == bg {
+                    if color == geo.bg {
                         color = *col;
                         color_hits = 1;
                     } else if color != *col {

@@ -12,7 +12,8 @@ use crate::data::{
     load_liquid_cash_monthly_with_forecast, load_monthly_data, load_monthly_with_forecast,
     load_net_worth_breakdown, load_net_worth_history, load_payee_analytics, load_price_history,
     today_prices_present, AccountBalance, CoinChartSeries, CryptoHolding, LiabilityProgress,
-    LiquidMonthlyData, MonthlyData, NetWorthBreakdownSeries, NetWorthSeries, PayeeSummary,
+    LiquidAccountsMonthly, LiquidCashMonthly, LiquidMonthlyData, MonthlyData,
+    NetWorthBreakdownSeries, NetWorthSeries, PayeeSummary,
 };
 
 use super::{App, RefreshResult, Tab, TabData, TabFlags};
@@ -130,10 +131,7 @@ fn into_tab_data<T, E: std::fmt::Display>(opt: Option<Result<T, E>>) -> TabData<
 
 fn split_liquid_tab_data(
     data: TabData<LiquidMonthlyData>,
-) -> (
-    TabData<Vec<(String, f64)>>,
-    TabData<Vec<(String, Vec<(String, f64)>)>>,
-) {
+) -> (TabData<LiquidCashMonthly>, TabData<LiquidAccountsMonthly>) {
     match data {
         TabData::NotRequested => (TabData::NotRequested, TabData::NotRequested),
         TabData::Err(e) => {

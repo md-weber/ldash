@@ -2,8 +2,9 @@ use chrono::{Datelike, Local, NaiveDate};
 use std::collections::HashMap;
 
 use crate::data::{
-    AccountBalance, CoinChartSeries, CryptoHolding, LiabilityProgress, MonthlyData,
-    NetWorthBreakdownSeries, NetWorthSeries, PayeeSummary, PriceEntry,
+    AccountBalance, CoinChartSeries, CryptoHolding, LiabilityProgress, LiquidAccountsMonthly,
+    LiquidCashMonthly, MonthlyData, NetWorthBreakdownSeries, NetWorthSeries, PayeeSummary,
+    PriceEntry,
 };
 
 /// Per-tab load result. Distinguishes "not requested", "ok data", and "errored
@@ -35,14 +36,14 @@ pub struct RefreshResult {
     pub payee_data: TabData<Vec<PayeeSummary>>,
     /// Per-month net change in liquid cash (whitelisted accounts only) for
     /// the current calendar year. Empty when `liquid_accounts` is unset.
-    pub liquid_cash_monthly: TabData<Vec<(String, f64)>>,
+    pub liquid_cash_monthly: TabData<LiquidCashMonthly>,
     /// Per-account monthly net change for the same period as `liquid_cash_monthly`.
-    pub liquid_accounts_monthly: TabData<Vec<(String, Vec<(String, f64)>)>>,
+    pub liquid_accounts_monthly: TabData<LiquidAccountsMonthly>,
     /// Same series with `--forecast`. Non-fatal if the journal has no
     /// periodic rules.
-    pub liquid_cash_forecast: TabData<Vec<(String, f64)>>,
+    pub liquid_cash_forecast: TabData<LiquidCashMonthly>,
     /// Per-account forecast monthly series.
-    pub liquid_accounts_forecast: TabData<Vec<(String, Vec<(String, f64)>)>>,
+    pub liquid_accounts_forecast: TabData<LiquidAccountsMonthly>,
 }
 
 /// How the portfolio analysis chart layers price-growth and staking on top of

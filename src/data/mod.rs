@@ -19,7 +19,8 @@ pub use balances::{
     load_liability_progress, load_net_worth_breakdown, load_net_worth_history, LiabilityProgress,
 };
 pub use liquid::{
-    load_liquid_cash_monthly, load_liquid_cash_monthly_with_forecast, LiquidMonthlyData,
+    load_liquid_cash_monthly, load_liquid_cash_monthly_with_forecast, LiquidAccountsMonthly,
+    LiquidCashMonthly, LiquidMonthlyData,
 };
 pub use monthly::{
     load_last_year_monthly, load_monthly_data, load_monthly_for_period, load_monthly_with_forecast,

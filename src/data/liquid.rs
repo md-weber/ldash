@@ -7,12 +7,16 @@ use super::parse::parse_eu_number;
 use super::{currency_matches, month_name, run_hledger};
 
 /// Per-month liquid-cash activity for the current calendar year.
+pub type LiquidCashMonthly = Vec<(String, f64)>;
+pub type LiquidAccountMonthly = Vec<(String, f64)>;
+pub type LiquidAccountsMonthly = Vec<(String, LiquidAccountMonthly)>;
+
 #[derive(Debug, Clone, Default, PartialEq)]
 pub struct LiquidMonthlyData {
     /// Sum of all whitelisted accounts per month.
-    pub total: Vec<(String, f64)>,
+    pub total: LiquidCashMonthly,
     /// Per-account monthly net change (same month names as `total`).
-    pub by_account: Vec<(String, Vec<(String, f64)>)>,
+    pub by_account: LiquidAccountsMonthly,
 }
 
 /// Per-month net change in liquid cash (whitelisted accounts only) for the
