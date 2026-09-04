@@ -151,6 +151,7 @@ fn handle_normal_key(app: &mut App, key: KeyEvent) -> Action {
                 app.liability_state.select(Some(0));
             } else if !app.account_filter.is_empty() {
                 app.close_account_filter();
+            } else if app.tab == Tab::Register && app.return_from_register() {
             } else {
                 return Action::Quit;
             }
@@ -178,7 +179,8 @@ fn handle_normal_key(app: &mut App, key: KeyEvent) -> Action {
             if app.tab == Tab::Register {
                 app.register_focus_query = true;
             } else {
-                app.open_register(RegisterQuery::current_month(), true);
+                let return_tab = app.tab;
+                app.open_register(RegisterQuery::current_month(), true, Some(return_tab));
             }
         }
         KeyCode::Char('?') => app.show_help = true,

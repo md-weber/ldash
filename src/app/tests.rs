@@ -846,3 +846,61 @@ fn register_click_on_leg_selects_transaction() {
     app.register_select_txn_at(3);
     assert_eq!(app.register_table.selected(), Some(2));
 }
+
+#[test]
+fn drilled_register_esc_returns_to_accounts() {
+    let mut app = App::fixture_with_accounts();
+    assert_eq!(app.tab, Tab::Accounts);
+    app.open_selected_account_in_register();
+    assert_eq!(app.tab, Tab::Register);
+    assert_eq!(app.register_return_tab, Some(Tab::Accounts));
+
+    assert!(app.return_from_register());
+    assert_eq!(app.tab, Tab::Accounts);
+    assert!(app.register_return_tab.is_none());
+}
+
+#[test]
+fn drilled_register_esc_returns_to_monthly() {
+    let mut app = App::fixture_with_monthly();
+    app.open_selected_category_in_register();
+    assert_eq!(app.tab, Tab::Register);
+    assert_eq!(app.register_return_tab, Some(Tab::Monthly));
+
+    assert!(app.return_from_register());
+    assert_eq!(app.tab, Tab::Monthly);
+}
+
+#[test]
+fn explicit_register_has_no_return_tab() {
+    let mut app = App::fixture_empty();
+    app.select_tab(2);
+    assert_eq!(app.tab, Tab::Register);
+    assert!(app.register_return_tab.is_none());
+    assert!(!app.return_from_register());
+}
+
+#[test]
+fn register_detail_closes_before_returning() {
+    let mut app = register_two_txns();
+    app.register_return_tab = Some(Tab::Accounts);
+    app.open_register_row_detail();
+    assert!(app.register_detail.is_some());
+
+    app.close_register_detail();
+    assert!(app.register_detail.is_none());
+    assert_eq!(app.tab, Tab::Register);
+    assert_eq!(app.register_return_tab, Some(Tab::Accounts));
+
+    assert!(app.return_from_register());
+    assert_eq!(app.tab, Tab::Accounts);
+}
+
+#[test]
+fn explicit_tab_to_register_clears_drill_return() {
+    let mut app = App::fixture_with_accounts();
+    app.open_selected_account_in_register();
+    app.select_tab(0);
+    app.select_tab(2);
+    assert!(app.register_return_tab.is_none());
+}

@@ -72,7 +72,7 @@ pub(super) fn render_help_popup(f: &mut Frame, area: Rect, theme: &Theme) {
         ("", ""),
         ("§", "General"),
         ("? / q", "Toggle help / quit"),
-        ("Esc", "Close detail / back"),
+        ("Esc", "Close detail / back (Register via Enter returns to prior tab)"),
         ("Mouse click", "Select tab / row"),
         ("Scroll wheel", "Scroll table"),
     ];

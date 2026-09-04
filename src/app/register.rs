@@ -21,12 +21,18 @@ fn spawn_register_load(
 }
 
 impl App {
-    pub fn open_register(&mut self, query: RegisterQuery, focus_query: bool) {
+    pub fn open_register(
+        &mut self,
+        query: RegisterQuery,
+        focus_query: bool,
+        return_tab: Option<Tab>,
+    ) {
         self.register_draft = query.description.clone().unwrap_or_default();
         let same_period = self.register_loaded_period == Some((query.year, query.month));
         self.register_query = query;
         self.register_focus_query = focus_query;
         self.register_detail = None;
+        self.register_return_tab = return_tab;
         self.tab = Tab::Register;
         if same_period && self.register_error.is_none() {
             self.rebuild_register_view();
@@ -149,6 +155,7 @@ impl App {
                 description: None,
             },
             false,
+            Some(Tab::Accounts),
         );
     }
 
@@ -186,7 +193,17 @@ impl App {
                 description: None,
             },
             false,
+            Some(Tab::Monthly),
         );
+    }
+
+    pub fn return_from_register(&mut self) -> bool {
+        let Some(tab) = self.register_return_tab.take() else {
+            return false;
+        };
+        self.register_focus_query = false;
+        self.switch_tab(tab);
+        true
     }
 
     pub fn open_register_row_detail(&mut self) {

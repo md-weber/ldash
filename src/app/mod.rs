@@ -117,6 +117,9 @@ pub struct App {
     pub register_focus_query: bool,
     pub register_error: Option<String>,
     pub register_detail: Option<crate::data::RegisterTxn>,
+    /// When Register was opened via Enter from Accounts/Monthly, ESC returns
+    /// here instead of quitting. Cleared by explicit tab navigation (`3`, Tab).
+    pub register_return_tab: Option<Tab>,
     /// Year/month of the last successful Register load. Account and
     /// description filters are applied in memory against this page.
     pub(super) register_loaded_period: Option<(i32, u8)>,
@@ -243,6 +246,7 @@ impl Default for App {
             register_focus_query: false,
             register_error: None,
             register_detail: None,
+            register_return_tab: None,
             register_loaded_period: None,
             price_alerts: Vec::new(),
             show_alerts: false,
@@ -352,6 +356,7 @@ impl App {
             register_focus_query: false,
             register_error: None,
             register_detail: None,
+            register_return_tab: None,
             register_loaded_period: None,
             price_alerts: Vec::new(),
             show_alerts: false,
@@ -388,6 +393,9 @@ impl App {
         if self.tab == Tab::Accounts {
             self.close_account_filter();
             self.liability_focus = false;
+        }
+        if tab == Tab::Register {
+            self.register_return_tab = None;
         }
         self.tab = tab;
         self.ensure_tab_loaded(tab);
