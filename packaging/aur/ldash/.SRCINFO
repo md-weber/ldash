@@ -6,6 +6,7 @@ pkgbase = ldash
 	arch = x86_64
 	arch = aarch64
 	license = GPL-3.0-or-later
+	depends = hledger
 	makedepends = rust
 	makedepends = cargo
 	provides = ldash

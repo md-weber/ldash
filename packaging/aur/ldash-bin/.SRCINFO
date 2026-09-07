@@ -6,6 +6,7 @@ pkgbase = ldash-bin
 	arch = x86_64
 	arch = aarch64
 	license = GPL-3.0-or-later
+	depends = hledger
 	provides = ldash
 	conflicts = ldash
 	source_x86_64 = ldash-bin-1.6.0-x86_64.tar.gz::https://github.com/md-weber/ldash/releases/download/v1.6.0/ldash-x86_64-unknown-linux-gnu.tar.gz

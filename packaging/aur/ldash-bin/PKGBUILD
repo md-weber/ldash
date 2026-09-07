@@ -5,6 +5,7 @@ pkgdesc="Terminal dashboard TUI for hledger — crypto portfolio, net worth, mon
 arch=('x86_64' 'aarch64')
 url="https://github.com/md-weber/ldash"
 license=('GPL-3.0-or-later')
+depends=('hledger')
 provides=('ldash')
 conflicts=('ldash')
 
